@@ -24,13 +24,18 @@ Manages physical locations/venues where workshops are held.
 | `name` | `VARCHAR` | `NOT NULL`, `UNIQUE` | Room name (e.g., "Auditorium A"). Holds all room names — no distinction between code and name. |
 | `capacity` | `INTEGER` | `NOT NULL`, `CHECK (capacity > 0)` | Maximum physical capacity of the room. |
 | `location` | `VARCHAR` | `NOT NULL` | Physical location (e.g., "Building B, Floor 3"). |
-| `active` | `BOOLEAN` | `NOT NULL` | Whether the room is currently available for booking. New rooms default to `true`. |
+| `state` | `VARCHAR(20)` | `NOT NULL` | Physical operational state: `ACTIVE`, `MAINTENANCE`, `DEACTIVATED`. |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
 | `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
 
 **Indexes & Constraints**:
 *   `uk_rooms_name`: Unique constraint on `name`.
 *   `chk_rooms_capacity`: CHECK constraint to ensure capacity is greater than 0.
+
+**Architectural Note on Room States (Static vs. Temporal):**
+To ensure high concurrency and prevent database locking, the `rooms` table ONLY stores the *Physical/Static State* of the venue (`ACTIVE`, `UNDER_MAINTENANCE`, `DEACTIVATED`).
+* **Temporal States** such as `AVAILABLE` or `OCCUPIED` are time-dependent and **NOT stored in the database**.
+* The system dynamic availability is computed at runtime by intersecting a room's physical `ACTIVE` state with the scheduled `workshops` timeline (`start_time`, `end_time`, and `state = 'PUBLISHED'`).
 
 ---
 
