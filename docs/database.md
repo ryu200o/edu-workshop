@@ -33,7 +33,7 @@ Manages physical locations/venues where workshops are held.
 *   `chk_rooms_capacity`: CHECK constraint to ensure capacity is greater than 0.
 
 **Architectural Note on Room States (Static vs. Temporal):**
-To ensure high concurrency and prevent database locking, the `rooms` table ONLY stores the *Physical/Static State* of the venue (`ACTIVE`, `UNDER_MAINTENANCE`, `DEACTIVATED`).
+To ensure high concurrency and prevent database locking, the `rooms` table ONLY stores the *Physical/Static State* of the venue (`ACTIVE`, `MAINTENANCE`, `DEACTIVATED`).
 * **Temporal States** such as `AVAILABLE` or `OCCUPIED` are time-dependent and **NOT stored in the database**.
 * The system dynamic availability is computed at runtime by intersecting a room's physical `ACTIVE` state with the scheduled `workshops` timeline (`start_time`, `end_time`, and `state = 'PUBLISHED'`).
 
