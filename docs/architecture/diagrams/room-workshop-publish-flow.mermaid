@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant A as Admin
+    participant W_App as WorkshopApplicationService (Workshop Module)
+    participant R_Expose as RoomExposeAPI (Room Module)
+    participant W_Repo as WorkshopRepository (Workshop Module)
+
+    A->>W_App: publish(workshopId)
+
+    %% Bước 1: Hỏi Room về thông tin vật lý (Giao tiếp 1 chiều từ Workshop sang Room)
+    W_App->>R_Expose: getPhysicalRoomInfo(roomId)
+    R_Expose-->>W_App: Trả về RoomPhysicalDTO (state=ACTIVE, capacity=50, name="Auditorium A")
+
+    %% Bước 2: Tự thân Workshop xử lý toàn bộ logic nghiệp vụ thời gian & sức chứa
+    alt State không phải ACTIVE HOẶC Workshop.capacity > Room.capacity
+        W_App-->>A: throw RoomNotReadyException / CapacityExceededException
+    end
+
+    W_App->>W_Repo: Quét lịch trùng (Exclude chính workshopId nếu là Edit)
+    W_Repo-->>W_App: Trả về kết quả trùng (Count)
+
+    alt Count == 0 (RoomAvailability == AVAILABLE)
+        W_App->>W_App: Lưu snapshot thông tin Room (Name, Capacity) vào Workshop
+        W_App->>W_Repo: Lưu workshop state = PUBLISHED
+        W_App-->>A: Success
+    else Count > 0 (RoomAvailability == OCCUPIED)
+        W_App-->>A: throw RoomConflictException
+    end
