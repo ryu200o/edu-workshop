@@ -63,7 +63,7 @@ DIRS=(
   "internal/application/event"
   "internal/adapter/driving/module_api"
   "internal/adapter/driving/http"
-  "internal/adapter/driven/entity"
+  "internal/adapter/driven/jpa"
 )
 
 MODULE_ROOT="$SRC_MAIN/${MOD_PKG//./\/}"
