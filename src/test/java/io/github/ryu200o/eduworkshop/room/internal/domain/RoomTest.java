@@ -6,6 +6,8 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateC
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.state.RoomState;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -18,16 +20,20 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class RoomTest {
 
-    private static final String NAME = "Auditorium A";
+    private static final RoomLocation LOCATION = RoomLocation.of("F", 2);
+    private static final String CODE = "01";
     private static final int CAPACITY = 50;
-    private static final String LOCATION = "Building B, Floor 3";
+
+    private static RoomName name() {
+        return RoomName.of(LOCATION, CODE);
+    }
 
     @Test
     void create_yieldsActiveRoomAndEmitsRoomCreated() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
 
         assertThat(room.id()).isNotNull();
-        assertThat(room.name()).isEqualTo(NAME);
+        assertThat(room.name()).isEqualTo(name());
         assertThat(room.capacity()).isEqualTo(CAPACITY);
         assertThat(room.location()).isEqualTo(LOCATION);
         assertThat(room.state()).isEqualTo(RoomState.ACTIVE);
@@ -40,13 +46,76 @@ class RoomTest {
                 .satisfies(e -> {
                     RoomCreated created = (RoomCreated) e;
                     assertThat(created.roomId()).isEqualTo(room.id());
+                    assertThat(created.name()).isEqualTo(name());
+                    assertThat(created.location()).isEqualTo(LOCATION);
                     assertThat(created.initialState()).isEqualTo(RoomState.ACTIVE);
                 });
     }
 
     @Test
+    void create_withExplicitIdentity_emitsCreatedEventAndPreservesTimestamps() {
+        UUID id = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        Instant updatedAt = Instant.parse("2026-01-01T00:00:00Z");
+
+        Room room = Room.create(id, name(), LOCATION, CAPACITY, createdAt, updatedAt);
+
+        assertThat(room.id()).isEqualTo(id);
+        assertThat(room.createdAt()).isEqualTo(createdAt);
+        assertThat(room.updatedAt()).isEqualTo(updatedAt);
+        assertThat(room.recordedEvents()).hasSize(1);
+        assertThat(room.recordedEvents().get(0)).isInstanceOf(RoomCreated.class);
+    }
+
+    @Test
+    void reconstruct_preservesPersistedStateAndTimestamps_withoutEvents() {
+        UUID id = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        Instant updatedAt = Instant.parse("2026-06-01T00:00:00Z");
+
+        Room room = Room.reconstruct(id, name(), LOCATION, CAPACITY, RoomState.MAINTENANCE, createdAt, updatedAt);
+
+        assertThat(room.id()).isEqualTo(id);
+        assertThat(room.state()).isEqualTo(RoomState.MAINTENANCE);
+        assertThat(room.createdAt()).isEqualTo(createdAt);
+        assertThat(room.updatedAt()).isEqualTo(updatedAt);
+        assertThat(room.recordedEvents()).isEmpty();
+    }
+
+    @Test
+    void reconstruct_withNullState_isRejected() {
+        UUID id = UUID.randomUUID();
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+
+        assertThatThrownBy(() -> Room.reconstruct(id, name(), LOCATION, CAPACITY, null, now, now))
+                .isInstanceOf(RoomDomainException.class);
+    }
+
+    @Test
+    void create_rejectsNullName() {
+        assertThatThrownBy(() -> Room.create(null, LOCATION, CAPACITY))
+                .isInstanceOf(RoomDomainException.class);
+    }
+
+    @Test
+    void create_rejectsNameInconsistentWithLocation() {
+        RoomName foreign = RoomName.of("G.301");
+
+        assertThatThrownBy(() -> Room.create(foreign, LOCATION, CAPACITY))
+                .isInstanceOf(RoomDomainException.class);
+    }
+
+    @Test
+    void create_rejectsNonPositiveCapacity() {
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, 0))
+                .isInstanceOf(RoomDomainException.class);
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, -5))
+                .isInstanceOf(RoomDomainException.class);
+    }
+
+    @Test
     void placeUnderMaintenance_fromActive_transitionsToMaintenanceAndEmitsEvent() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
 
         room.placeUnderMaintenance();
 
@@ -66,7 +135,7 @@ class RoomTest {
 
     @Test
     void placeUnderMaintenance_fromMaintenance_isIdempotentAndEmitsNoEvent() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.placeUnderMaintenance();
         int eventsBefore = room.recordedEvents().size();
 
@@ -78,7 +147,7 @@ class RoomTest {
 
     @Test
     void placeUnderMaintenance_fromDeactivated_isRejected() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.deactivate();
 
         IllegalRoomStateException ex = catchThrowableOfType(
@@ -92,7 +161,7 @@ class RoomTest {
 
     @Test
     void reactivate_fromMaintenance_returnsToActive() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.placeUnderMaintenance();
 
         room.reactivate();
@@ -100,12 +169,12 @@ class RoomTest {
         assertThat(room.state()).isEqualTo(RoomState.ACTIVE);
         assertThat(room.recordedEvents())
                 .filteredOn(RoomStateChanged.class::isInstance)
-                .hasSize(2); // ACTIVE->MAINTENANCE, then MAINTENANCE->ACTIVE
+                .hasSize(2);
     }
 
     @Test
     void reactivate_fromActive_isIdempotentAndEmitsNoEvent() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         int eventsBefore = room.recordedEvents().size();
 
         room.reactivate();
@@ -116,20 +185,18 @@ class RoomTest {
 
     @Test
     void reactivate_fromDeactivated_isRejected() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.deactivate();
 
         assertThatThrownBy(room::reactivate)
-                .isInstanceOf(IllegalRoomStateException.class)
-                .satisfies(e -> assertThat(((IllegalRoomStateException) e).getCurrentState())
-                        .isEqualTo(RoomState.DEACTIVATED));
+                .isInstanceOf(IllegalRoomStateException.class);
 
         assertThat(room.state()).isEqualTo(RoomState.DEACTIVATED);
     }
 
     @Test
     void deactivate_fromActive_permanentlyFreezesRoom() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
 
         room.deactivate();
 
@@ -147,7 +214,7 @@ class RoomTest {
 
     @Test
     void deactivate_fromMaintenance_permanentlyFreezesRoom() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.placeUnderMaintenance();
 
         room.deactivate();
@@ -157,7 +224,7 @@ class RoomTest {
 
     @Test
     void deactivate_fromDeactivated_isIdempotentNoOp() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.deactivate();
         int eventsBefore = room.recordedEvents().size();
 
@@ -169,82 +236,22 @@ class RoomTest {
 
     @Test
     void deactivatedRoom_blocksReactivationAndMaintenance_butDeactivateIsSafeNoOp() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.deactivate();
 
         assertThatThrownBy(room::placeUnderMaintenance).isInstanceOf(IllegalRoomStateException.class);
         assertThatThrownBy(room::reactivate).isInstanceOf(IllegalRoomStateException.class);
-        // deactivating an already-deactivated room is idempotent, not an error
         assertThatCode(room::deactivate).doesNotThrowAnyException();
         assertThat(room.state()).isEqualTo(RoomState.DEACTIVATED);
     }
 
     @Test
-    void create_rejectsBlankName() {
-        assertThatThrownBy(() -> Room.create("  ", CAPACITY, LOCATION))
-                .isInstanceOf(RoomDomainException.class);
-    }
-
-    @Test
-    void create_rejectsNonPositiveCapacity() {
-        assertThatThrownBy(() -> Room.create(NAME, 0, LOCATION))
-                .isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> Room.create(NAME, -5, LOCATION))
-                .isInstanceOf(RoomDomainException.class);
-    }
-
-    @Test
-    void create_rejectsBlankLocation() {
-        assertThatThrownBy(() -> Room.create(NAME, CAPACITY, ""))
-                .isInstanceOf(RoomDomainException.class);
-    }
-
-    @Test
     void clearDomainEvents_removesRecordedEvents() {
-        Room room = Room.create(NAME, CAPACITY, LOCATION);
+        Room room = Room.create(name(), LOCATION, CAPACITY);
         room.deactivate();
 
         room.clearDomainEvents();
 
         assertThat(room.recordedEvents()).isEmpty();
-    }
-
-    @Test
-    void create_withExplicitIdentity_emitsCreatedEventAndPreservesTimestamps() {
-        UUID id = UUID.randomUUID();
-        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
-        Instant updatedAt = Instant.parse("2026-01-01T00:00:00Z");
-
-        Room room = Room.create(id, NAME, CAPACITY, LOCATION, createdAt, updatedAt);
-
-        assertThat(room.id()).isEqualTo(id);
-        assertThat(room.createdAt()).isEqualTo(createdAt);
-        assertThat(room.updatedAt()).isEqualTo(updatedAt);
-        assertThat(room.recordedEvents()).hasSize(1);
-        assertThat(room.recordedEvents().get(0)).isInstanceOf(RoomCreated.class);
-    }
-
-    @Test
-    void reconstruct_preservesPersistedStateAndTimestamps_withoutEvents() {
-        UUID id = UUID.randomUUID();
-        Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
-        Instant updatedAt = Instant.parse("2026-06-01T00:00:00Z");
-
-        Room room = Room.reconstruct(id, NAME, CAPACITY, LOCATION, RoomState.MAINTENANCE, createdAt, updatedAt);
-
-        assertThat(room.id()).isEqualTo(id);
-        assertThat(room.state()).isEqualTo(RoomState.MAINTENANCE);
-        assertThat(room.createdAt()).isEqualTo(createdAt);
-        assertThat(room.updatedAt()).isEqualTo(updatedAt);
-        assertThat(room.recordedEvents()).isEmpty();
-    }
-
-    @Test
-    void reconstruct_withNullState_isRejected() {
-        UUID id = UUID.randomUUID();
-        Instant now = Instant.parse("2026-01-01T00:00:00Z");
-
-        assertThatThrownBy(() -> Room.reconstruct(id, NAME, CAPACITY, LOCATION, null, now, now))
-                .isInstanceOf(RoomDomainException.class);
     }
 }

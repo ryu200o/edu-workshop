@@ -1,6 +1,8 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.event;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.state.RoomState;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -10,9 +12,9 @@ import java.util.UUID;
  */
 public record RoomCreated(
         UUID roomId,
-        String name,
+        RoomName name,
         int capacity,
-        String location,
+        RoomLocation location,
         RoomState initialState,
         Instant occurredAt
 ) implements RoomDomainEvent {
