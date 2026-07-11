@@ -6,6 +6,10 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateC
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.state.RoomState;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import org.jetbrains.annotations.Contract;
+import org.jspecify.annotations.NonNull;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -27,16 +31,16 @@ import java.util.UUID;
 public class Room {
 
     private final UUID id;
-    private final String name;
+    private final RoomName name;
     private final int capacity;
-    private final String location;
+    private final RoomLocation location;
     private RoomState state;
     private final Instant createdAt;
     private Instant updatedAt;
 
     private final List<RoomDomainEvent> recordedEvents = new ArrayList<>();
 
-    private Room(UUID id, String name, int capacity, String location, RoomState state, Instant createdAt, Instant updatedAt) {
+    private Room(UUID id, RoomName name, int capacity, RoomLocation location, RoomState state, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.capacity = capacity;
@@ -48,21 +52,23 @@ public class Room {
 
     /**
      * Factory: creates a new room with the default physical state {@link RoomState#ACTIVE}
-     * and emits a {@link RoomCreated} event.
+     * and emits a {@link RoomCreated} event. The room name is generated from its location and a
+     * 2-digit code, then validated by the {@link RoomName} value object (self-defense).
      */
-    public static Room create(String name, int capacity, String location) {
+    public static @NonNull Room create(RoomName name, RoomLocation location, int capacity) {
         Instant now = Instant.now();
-        return create(UUID.randomUUID(), name, capacity, location, now, now);
+        return create(UUID.randomUUID(), name, location, capacity, now, now);
     }
 
     /**
      * Factory with explicit identity/timestamps — used when minting a new room from externally
      * supplied identifiers. Emits a {@link RoomCreated} event.
      */
-    public static Room create(UUID id, String name, int capacity, String location, Instant createdAt, Instant updatedAt) {
-        requireNonBlankName(name);
+    public static @NonNull Room create(UUID id, RoomName name, RoomLocation location, int capacity, Instant createdAt, Instant updatedAt) {
+        requireNonNullName(name);
+        requireNameConsistentWithLocation(name, location);
         requirePositiveCapacity(capacity);
-        requireNonBlankLocation(location);
+        requireNonNullLocation(location);
 
         Room room = new Room(id, name, capacity, location, RoomState.ACTIVE, createdAt, updatedAt);
         room.recordedEvents.add(new RoomCreated(
@@ -74,11 +80,12 @@ public class Room {
      * Reconstructs an existing aggregate from persisted state. Pure data mapping only:
      * it must NOT impose creation rules nor record any event (no historical event re-dispatch).
      */
-    public static Room reconstruct(UUID id, String name, int capacity, String location,
-                                   RoomState state, Instant createdAt, Instant updatedAt) {
-        requireNonBlankName(name);
+    @Contract("_, _, _, _, _, _, _ -> new")
+    public static @NonNull Room reconstruct(UUID id, RoomName name, RoomLocation location, int capacity,
+                                            RoomState state, Instant createdAt, Instant updatedAt) {
+        requireNonNullName(name);
+        requireNonNullLocation(location);
         requirePositiveCapacity(capacity);
-        requireNonBlankLocation(location);
         requireNonNullState(state);
 
         return new Room(id, name, capacity, location, state, createdAt, updatedAt);
@@ -135,21 +142,29 @@ public class Room {
         this.recordedEvents.add(new RoomStateChanged(this.id, previous, next, this.updatedAt));
     }
 
-    private static void requireNonBlankName(String name) {
-        if (name == null || name.isBlank()) {
-            throw new RoomDomainException("Room name must not be blank.");
+    private static void requireNonNullName(RoomName name) {
+        if (name == null) {
+            throw new RoomDomainException("Room name must not be null.");
+        }
+    }
+
+    private static void requireNonNullLocation(RoomLocation location) {
+        if (location == null) {
+            throw new RoomDomainException("Room location must not be null.");
+        }
+    }
+
+    private static void requireNameConsistentWithLocation(RoomName name, RoomLocation location) {
+        if (location != null && !name.matches(location)) {
+            throw new RoomDomainException(
+                    "Room name '" + name.asString() + "' is inconsistent with its location "
+                            + location.asString() + ".");
         }
     }
 
     private static void requirePositiveCapacity(int capacity) {
         if (capacity <= 0) {
             throw new RoomDomainException("Room capacity must be greater than zero.");
-        }
-    }
-
-    private static void requireNonBlankLocation(String location) {
-        if (location == null || location.isBlank()) {
-            throw new RoomDomainException("Room location must not be blank.");
         }
     }
 
@@ -163,7 +178,7 @@ public class Room {
         return id;
     }
 
-    public String name() {
+    public RoomName name() {
         return name;
     }
 
@@ -171,7 +186,7 @@ public class Room {
         return capacity;
     }
 
-    public String location() {
+    public RoomLocation location() {
         return location;
     }
 
