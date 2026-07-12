@@ -22,5 +22,13 @@ Public, version-controlled milestone log. Concise entries; newest at the bottom.
   `@Transactional(readOnly = true)`. Malformed names are blocked in RAM before hitting the port.
   Full CQS read/write vertical slice for Room complete on RAM. 42/42 tests green.
 
+- **Persistence: real JPA adapter + Flyway (H2/PostgreSQL)** — Flyway `V1__create_rooms.sql`
+  (`rooms` aligned to the aggregate: `id, name, building, floor, code, capacity, state, timestamps`;
+  composite unique `(building, floor, code)`). `JpaRoomAdapter` (+ `RoomJpaEntity`, `RoomJpaRepository`,
+  all package-private) implements the write/existence/read ports and replaces the in-memory adapter;
+  the global-uniqueness gate uses the composite key (`existsByBuildingAndFloorAndCode`). Integration
+  tested end-to-end via the ports over H2 (PostgreSQL mode) with `ddl-auto=none` (Flyway owns schema).
+  Module scaffold aligned to `driven/persistence`. 47/47 tests green.
+
 ## Next
-- Real persistence adapter (JPA/Flyway) replacing the in-memory store.
+- Driving adapter (REST controller / module_api) exposing the Room use cases.
