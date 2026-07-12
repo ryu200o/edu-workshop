@@ -64,7 +64,7 @@ DIRS=(
   "internal/application/mapper"
   "internal/adapter/driving/module_api"
   "internal/adapter/driving/http"
-  "internal/adapter/driven/jpa"
+  "internal/adapter/driven/persistence"
 )
 
 MODULE_ROOT="$SRC_MAIN/${MOD_PKG//./\/}"
