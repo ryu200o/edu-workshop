@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.domain;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
@@ -387,5 +388,58 @@ class RoomTest {
         assertThatThrownBy(() -> room.relocateTo(RoomLocation.of("G", 3)))
                 .isInstanceOf(IllegalRoomStateException.class);
         assertThat(room.location()).isEqualTo(LOCATION);
+    }
+
+    @Test
+    void changeCapacity_updatesCapacityAndEmitsRoomCapacityChanged() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+
+        room.changeCapacity(80);
+
+        assertThat(room.capacity()).isEqualTo(80);
+        assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
+        assertThat(room.recordedEvents())
+                .filteredOn(RoomCapacityChanged.class::isInstance)
+                .hasSize(1)
+                .first()
+                .satisfies(e -> {
+                    RoomCapacityChanged ev = (RoomCapacityChanged) e;
+                    assertThat(ev.roomId()).isEqualTo(room.id());
+                    assertThat(ev.oldCapacity()).isEqualTo(CAPACITY);
+                    assertThat(ev.newCapacity()).isEqualTo(80);
+                    assertThat(ev.occurredAt()).isEqualTo(room.updatedAt());
+                });
+    }
+
+    @Test
+    void changeCapacity_rejectsNonPositive() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+
+        assertThatThrownBy(() -> room.changeCapacity(0))
+                .isInstanceOf(RoomDomainException.class);
+        assertThatThrownBy(() -> room.changeCapacity(-5))
+                .isInstanceOf(RoomDomainException.class);
+        assertThat(room.capacity()).isEqualTo(CAPACITY);
+    }
+
+    @Test
+    void changeCapacity_sameCapacity_isIdempotentNoEvent() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+        int before = room.recordedEvents().size();
+
+        room.changeCapacity(CAPACITY);
+
+        assertThat(room.capacity()).isEqualTo(CAPACITY);
+        assertThat(room.recordedEvents()).hasSize(before);
+    }
+
+    @Test
+    void changeCapacity_fromDeactivated_isRejected() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+        room.deactivate();
+
+        assertThatThrownBy(() -> room.changeCapacity(80))
+                .isInstanceOf(IllegalRoomStateException.class);
+        assertThat(room.capacity()).isEqualTo(CAPACITY);
     }
 }

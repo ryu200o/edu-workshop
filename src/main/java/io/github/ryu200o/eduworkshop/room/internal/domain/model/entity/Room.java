@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.entity;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomainEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
@@ -34,7 +35,7 @@ public class Room {
 
     private final UUID id;
     private RoomName name;
-    private final int capacity;
+    private int capacity;
     private RoomLocation location;
     private RoomState state;
     private final Instant createdAt;
@@ -203,6 +204,36 @@ public class Room {
         this.recordedEvents.add(new RoomRenamedEvent(
                 id, RoomRenameReason.LOCATION_CHANGED, previousName, previousName.code(),
                 newName, newName.code(), newLocation, this.updatedAt));
+    }
+
+    /**
+     * Changes the room's physical {@code capacity}. The new value is validated by the same self-defense
+     * rule used at creation (must be a positive integer), enforced instantly in RAM. Emits a
+     * {@link RoomCapacityChanged} event capturing the full delta.
+     *
+     * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
+     * persistence layer, so the write path owns the full state transition before it is persisted.</p>
+     *
+     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
+     * @throws RoomDomainException       if the new capacity is not a valid positive integer
+     */
+    public void changeCapacity(int newCapacity) {
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(id, state, null,
+                    "A deactivated room's capacity cannot be changed; the deactivation is permanent.");
+        }
+        // RAM self-defense: reuse the exact creation rule for educational-space capacity boundaries.
+        requirePositiveCapacity(newCapacity);
+
+        // Idempotent no-op: same capacity means no change, no event, no persist.
+        if (newCapacity == this.capacity) {
+            return;
+        }
+
+        int previousCapacity = this.capacity;
+        this.capacity = newCapacity;
+        this.updatedAt = Instant.now();
+        this.recordedEvents.add(new RoomCapacityChanged(id, previousCapacity, newCapacity, this.updatedAt));
     }
 
     private static void requireNonNullName(RoomName name) {
