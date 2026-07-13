@@ -28,7 +28,7 @@ class RoomJpaEntity {
     @Column(nullable = false)
     private int floor;
 
-    @Column(nullable = false, length = 2)
+    @Column(nullable = false, length = 10)
     private String code;
 
     @Column(nullable = false)

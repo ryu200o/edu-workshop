@@ -40,7 +40,7 @@ class CreateRoomCommandHandlerTest {
     // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any DB call ──
     @Test
     void ramGuard_rejectsMalformedInput_withoutTouchingPorts() {
-        CreateRoomCommand badCode = new CreateRoomCommand("F", 2, 50, "1"); // code must be 2 digits
+        CreateRoomCommand badCode = new CreateRoomCommand("F", 2, 50, ""); // blank code is invalid
 
         assertThatThrownBy(() -> handler().handle(badCode))
                 .isInstanceOf(RoomDomainException.class);

@@ -5,66 +5,73 @@ import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Value Object enforcing the room naming rule: {@code [Building].[Floor][2-digit code]}.
+ * Value Object wrapping a room's canonical display name — a single, already-normalized string token.
  *
- * <p>Examples: building "F", floor 2, code "01" &rarr; {@code F.201}; code "15" &rarr; {@code F.215}.
- * The object self-normalizes and self-defends: any non-conforming input is rejected at construction,
- * so a {@code RoomName} instance is guaranteed to be valid everywhere it is used.</p>
+ * <p>The name is derived in ONE direction only, from the room coordinates ({@code RoomLocation + code});
+ * it is NEVER reverse-parsed into coordinates to drive any write or constraint logic. The previous
+ * regex that split a raw string back into {@code floor}/{@code code} has been removed entirely. A name
+ * built from a raw client string ({@link #ofRaw(String)}) is kept opaque (display-only) and is matched
+ * exactly against the database; only the coordinate factory populates the forward-known components.</p>
+ *
+ * <p>Display format: {@code building + "." + String.format("%02d", floor) + code}. The floor is
+ * zero-padded to a minimum of 2 digits, the code is a flexible 1&ndash;10 character alphanumeric block
+ * (case-insensitive, normalized to upper case). Examples: building "F", floor 5, code "LAB" &rarr;
+ * {@code F.05LAB}; floor 12, code "05" &rarr; {@code F.1205}; floor 105, code "205" &rarr; {@code F.105205}.</p>
  */
 public final class RoomName {
 
-    private static final Pattern FORMAT = Pattern.compile("^([A-Za-z0-9]+)\\.(\\d+)(\\d{2})$");
+    private static final Pattern DISPLAY_FORMAT =
+            Pattern.compile("^[A-Za-z0-9]+\\.\\d{2,}[A-Za-z0-9]{1,10}$");
 
+    private final String value;
+    // Forward-known components, populated ONLY by the coordinate factory (never reverse-parsed).
     private final String building;
     private final int floor;
     private final String code;
 
-    private RoomName(String building, int floor, String code) {
+    private RoomName(String value, String building, int floor, String code) {
+        this.value = value;
         this.building = building;
         this.floor = floor;
         this.code = code;
     }
 
     /**
-     * Composes a name from a (normalized) location and a 2-digit code — the system-generated path.
+     * Composes a name from a (normalized) location and a code — the system-generated, downward path.
+     * Equivalent to {@code fromCoordinate}; kept as {@code of} for idiom with the rest of the codebase.
      */
     public static @NonNull RoomName of(@NonNull RoomLocation location, String code) {
         String normalizedCode = normalizeCode(code);
-        return new RoomName(location.building(), location.floor(), normalizedCode);
+        String value = location.building() + "." + String.format("%02d", location.floor()) + normalizedCode;
+        return new RoomName(value, location.building(), location.floor(), normalizedCode);
     }
 
     /**
-     * Parses and validates a raw name string — the self-defense path against external input.
+     * Wraps a raw name string coming up from a client query — the upward path. This is a pure display
+     * token: it is format-gated (RAM self-defense) but NEVER reverse-parsed into coordinates.
      */
     @Contract("null -> fail")
-    public static @NonNull RoomName of(String raw) {
+    public static @NonNull RoomName ofRaw(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new RoomDomainException("Room name must not be blank.");
         }
-        Matcher matcher = FORMAT.matcher(raw.trim());
-        if (!matcher.matches()) {
+        String normalized = raw.trim().toUpperCase();
+        if (!DISPLAY_FORMAT.matcher(normalized).matches()) {
             throw new RoomDomainException(
-                    "Room name must follow the format [Building].[Floor][2-digit code], e.g. F.201.");
+                    "Room name must follow the format [Building].[Floor][code], e.g. F.0201.");
         }
-        String building = matcher.group(1).toUpperCase();
-        int floor = Integer.parseInt(matcher.group(2));
-        String code = matcher.group(3);
-        if (floor <= 0) {
-            throw new RoomDomainException("Room floor in the name must be a positive integer.");
-        }
-        return new RoomName(building, floor, code);
+        return new RoomName(normalized, null, 0, null);
     }
 
     @Contract("null -> fail")
     private static @NonNull String normalizeCode(String code) {
-        if (code == null || !code.trim().matches("\\d{2}")) {
-            throw new RoomDomainException("Room code must be exactly 2 digits.");
+        if (code == null || !code.trim().matches("^[A-Za-z0-9]{1,10}$")) {
+            throw new RoomDomainException("Room code must be 1–10 alphanumeric characters.");
         }
-        return code.trim();
+        return code.trim().toUpperCase();
     }
 
     public String building() {
@@ -81,14 +88,15 @@ public final class RoomName {
 
     @Contract(pure = true)
     public @NonNull String asString() {
-        return building + "." + floor + code;
+        return value;
     }
 
     /**
-     * True when this name's building and floor are consistent with the given location.
+     * True when this name was built from coordinates and its building/floor align with the given
+     * location. Raw (client-supplied) names are opaque and never match.
      */
     public boolean matches(RoomLocation location) {
-        return location != null
+        return location != null && building != null
                 && floor == location.floor()
                 && building.equals(location.building());
     }
@@ -98,19 +106,16 @@ public final class RoomName {
         if (this == o) {
             return true;
         }
-        return o instanceof RoomName that
-                && floor == that.floor
-                && building.equals(that.building)
-                && code.equals(that.code);
+        return o instanceof RoomName that && value.equals(that.value);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(building, floor, code);
+        return Objects.hash(value);
     }
 
     @Override
     public String toString() {
-        return asString();
+        return value;
     }
 }

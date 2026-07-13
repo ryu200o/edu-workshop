@@ -15,5 +15,10 @@ public interface RoomQueryPort {
 
     Optional<RoomResponse> findById(UUID id);
 
+    /**
+     * Looks up a room by its canonical display name. The {@code RoomName} is an opaque, type-safe token
+     * (matched exactly against the stored name string — it is never reverse-parsed into coordinates),
+     * so this port takes the value object directly for RAM-side type safety.
+     */
     Optional<RoomResponse> findByName(RoomName name);
 }

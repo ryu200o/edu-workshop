@@ -53,7 +53,7 @@ public class Room {
     /**
      * Factory: creates a new room with the default physical state {@link RoomState#ACTIVE}
      * and emits a {@link RoomCreated} event. The room name is generated from its location and a
-     * 2-digit code, then validated by the {@link RoomName} value object (self-defense).
+     * flexible alphanumeric code, then validated by the {@link RoomName} value object (self-defense).
      */
     public static @NonNull Room create(RoomName name, RoomLocation location, int capacity) {
         Instant now = Instant.now();

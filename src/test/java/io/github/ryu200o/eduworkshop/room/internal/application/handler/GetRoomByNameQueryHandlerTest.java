@@ -34,10 +34,10 @@ class GetRoomByNameQueryHandlerTest {
 
     @Test
     void happyPath_parsesNameThenReturnsProjection() {
-        RoomResponse expected = new RoomResponse(UUID.randomUUID(), "F.201", "F", 2, 50, "ACTIVE");
-        when(roomQueryPort.findByName(RoomName.of("F.201"))).thenReturn(Optional.of(expected));
+        RoomResponse expected = new RoomResponse(UUID.randomUUID(), "F.0201", "F", 2, 50, "ACTIVE");
+        when(roomQueryPort.findByName(RoomName.ofRaw("F.0201"))).thenReturn(Optional.of(expected));
 
-        RoomResponse result = handler().handle(new GetRoomByNameQuery("F.201"));
+        RoomResponse result = handler().handle(new GetRoomByNameQuery("F.0201"));
 
         assertThat(result).isEqualTo(expected);
     }
@@ -54,10 +54,10 @@ class GetRoomByNameQueryHandlerTest {
     void notFound_throwsRoomNotFoundException() {
         when(roomQueryPort.findByName(any())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F.201")))
+        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F.0201")))
                 .isInstanceOf(RoomNotFoundException.class);
 
-        verify(roomQueryPort).findByName(RoomName.of("F.201"));
+        verify(roomQueryPort).findByName(RoomName.ofRaw("F.0201"));
     }
 
     @Test

@@ -7,7 +7,7 @@ import java.util.UUID;
  * serialization-friendly view assembled directly by the read adapter, bypassing the domain.
  *
  * @param id       the room id
- * @param name     the canonical room name (e.g. "F.201")
+ * @param name     the canonical room name (e.g. "F.0201")
  * @param building the building/block
  * @param floor    the floor number
  * @param capacity the physical capacity
