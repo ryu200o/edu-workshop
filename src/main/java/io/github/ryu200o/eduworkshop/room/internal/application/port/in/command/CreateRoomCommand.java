@@ -11,7 +11,7 @@ import java.util.UUID;
  * @param building the building/block name (will be normalized by {@code RoomLocation})
  * @param floor    the floor number (positive; validated by {@code RoomLocation})
  * @param capacity the physical capacity (positive; validated by {@code Room})
- * @param roomCode the 2-digit room code (validated by {@code RoomName})
+ * @param roomCode the 1–10 character alphanumeric room code (validated by {@code RoomName})
  */
 public record CreateRoomCommand(
         String building,

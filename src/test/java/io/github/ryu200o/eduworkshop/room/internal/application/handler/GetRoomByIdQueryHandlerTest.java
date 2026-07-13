@@ -29,7 +29,7 @@ class GetRoomByIdQueryHandlerTest {
     @Test
     void happyPath_returnsProjectionFromPort() {
         UUID id = UUID.randomUUID();
-        RoomResponse expected = new RoomResponse(id, "F.201", "F", 2, 50, "ACTIVE");
+        RoomResponse expected = new RoomResponse(id, "F.0201", "F", 2, 50, "ACTIVE");
         when(roomQueryPort.findById(id)).thenReturn(Optional.of(expected));
 
         RoomResponse result = handler().handle(new GetRoomByIdQuery(id));

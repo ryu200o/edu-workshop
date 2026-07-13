@@ -27,7 +27,7 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
     @Override
     @Transactional(readOnly = true)
     public RoomResponse handle(@NonNull GetRoomByNameQuery query) {
-        RoomName name = RoomName.of(query.roomName()); // RAM validation; throws on malformed input
+        RoomName name = RoomName.ofRaw(query.roomName()); // RAM self-defense; opaque, no reverse-parse
         return roomQueryPort.findByName(name)
                 .orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));
     }

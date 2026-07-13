@@ -51,7 +51,7 @@ class JpaRoomAdapterTest {
         assertThat(found).isPresent();
         RoomResponse response = found.get();
         assertThat(response.id()).isEqualTo(room.id());
-        assertThat(response.name()).isEqualTo("F.201");
+        assertThat(response.name()).isEqualTo("F.0201");
         assertThat(response.building()).isEqualTo("F");
         assertThat(response.floor()).isEqualTo(2);
         assertThat(response.capacity()).isEqualTo(50);
@@ -63,7 +63,7 @@ class JpaRoomAdapterTest {
         Room room = newRoom();
         roomStateGateway.save(room);
 
-        Optional<RoomResponse> found = roomQueryPort.findByName(RoomName.of("F.201"));
+        Optional<RoomResponse> found = roomQueryPort.findByName(RoomName.ofRaw("F.0201"));
 
         assertThat(found).isPresent();
         assertThat(found.get().id()).isEqualTo(room.id());
@@ -91,6 +91,6 @@ class JpaRoomAdapterTest {
 
     @Test
     void findByName_whenAbsent_returnsEmpty() {
-        assertThat(roomQueryPort.findByName(RoomName.of("G.301"))).isEmpty();
+        assertThat(roomQueryPort.findByName(RoomName.ofRaw("G.0301"))).isEmpty();
     }
 }

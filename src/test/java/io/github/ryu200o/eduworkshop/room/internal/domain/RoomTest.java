@@ -99,7 +99,7 @@ class RoomTest {
 
     @Test
     void create_rejectsNameInconsistentWithLocation() {
-        RoomName foreign = RoomName.of("G.301");
+        RoomName foreign = RoomName.ofRaw("G.0301");
 
         assertThatThrownBy(() -> Room.create(foreign, LOCATION, CAPACITY))
                 .isInstanceOf(RoomDomainException.class);
