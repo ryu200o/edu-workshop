@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.in.command;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
 import io.github.ryu200o.eduworkshop.shared.cqs.Command;
 
 import java.util.UUID;
@@ -15,5 +14,5 @@ import java.util.UUID;
 public record RenameRoomCommand(
         UUID roomId,
         String newCode
-) implements Command<RoomResponse> {
+) implements Command<RoomRenamedResult> {
 }

@@ -7,5 +7,5 @@ import java.util.UUID;
 /**
  * Query to look up a single room by its identifier.
  */
-public record GetRoomByIdQuery(UUID roomId) implements Query<RoomResponse> {
+public record GetRoomByIdQuery(UUID roomId) implements Query<RoomDetailView> {
 }

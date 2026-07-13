@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByNameQuery;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
  * side-effect free.
  */
 @Component
-class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, RoomResponse> {
+class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, RoomSummaryView> {
 
     private final RoomQueryPort roomQueryPort;
 
@@ -26,7 +26,7 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
 
     @Override
     @Transactional(readOnly = true)
-    public RoomResponse handle(@NonNull GetRoomByNameQuery query) {
+    public RoomSummaryView handle(@NonNull GetRoomByNameQuery query) {
         RoomName name = RoomName.ofRaw(query.roomName()); // RAM self-defense; opaque, no reverse-parse
         return roomQueryPort.findByName(name)
                 .orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));

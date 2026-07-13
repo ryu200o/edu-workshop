@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByIdQuery;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -29,10 +29,10 @@ class GetRoomByIdQueryHandlerTest {
     @Test
     void happyPath_returnsProjectionFromPort() {
         UUID id = UUID.randomUUID();
-        RoomResponse expected = new RoomResponse(id, "F.0201", "F", 2, 50, "ACTIVE");
+        RoomDetailView expected = new RoomDetailView(id, "F.0201", "F", 2, 50, "ACTIVE");
         when(roomQueryPort.findById(id)).thenReturn(Optional.of(expected));
 
-        RoomResponse result = handler().handle(new GetRoomByIdQuery(id));
+        RoomDetailView result = handler().handle(new GetRoomByIdQuery(id));
 
         assertThat(result).isEqualTo(expected);
     }

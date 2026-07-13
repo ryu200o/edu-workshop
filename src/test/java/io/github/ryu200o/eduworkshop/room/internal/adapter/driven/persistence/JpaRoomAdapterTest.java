@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomDetailView;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
@@ -46,10 +47,10 @@ class JpaRoomAdapterTest {
         Room room = newRoom();
 
         roomStateGateway.save(room);
-        Optional<RoomResponse> found = roomQueryPort.findById(room.id());
+        Optional<RoomDetailView> found = roomQueryPort.findById(room.id());
 
         assertThat(found).isPresent();
-        RoomResponse response = found.get();
+        RoomDetailView response = found.get();
         assertThat(response.id()).isEqualTo(room.id());
         assertThat(response.name()).isEqualTo("F.0201");
         assertThat(response.building()).isEqualTo("F");
@@ -63,7 +64,7 @@ class JpaRoomAdapterTest {
         Room room = newRoom();
         roomStateGateway.save(room);
 
-        Optional<RoomResponse> found = roomQueryPort.findByName(RoomName.ofRaw("F.0201"));
+        Optional<RoomSummaryView> found = roomQueryPort.findByName(RoomName.ofRaw("F.0201"));
 
         assertThat(found).isPresent();
         assertThat(found.get().id()).isEqualTo(room.id());
@@ -109,7 +110,7 @@ class JpaRoomAdapterTest {
         room.changeCode("LAB");
         roomStateGateway.save(room);
 
-        Optional<RoomResponse> renamed = roomQueryPort.findById(saved.id());
+        Optional<RoomDetailView> renamed = roomQueryPort.findById(saved.id());
         assertThat(renamed).isPresent();
         assertThat(renamed.get().name()).isEqualTo("F.02LAB");
     }

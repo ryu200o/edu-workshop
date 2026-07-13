@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomRenamedResult;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
@@ -93,9 +93,11 @@ class RenameRoomCommandHandlerTest {
         Room room = existingRoom();
         when(roomStateGateway.loadById(room.id())).thenReturn(Optional.of(room));
 
-        RoomResponse response = handler().handle(new RenameRoomCommand(room.id(), "01"));
+        RoomRenamedResult response = handler().handle(new RenameRoomCommand(room.id(), "01"));
 
         assertThat(response.name()).isEqualTo(room.name().asString());
+        assertThat(response.oldCode()).isEqualTo("01");
+        assertThat(response.newCode()).isEqualTo("01");
         verify(roomExistencePort, never()).existsByBuildingAndFloorAndCode(any(), anyInt(), any());
         verify(roomStateGateway, never()).save(any());
     }
@@ -108,7 +110,7 @@ class RenameRoomCommandHandlerTest {
         when(roomExistencePort.existsByBuildingAndFloorAndCode(any(), anyInt(), any())).thenReturn(false);
         when(roomStateGateway.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RoomResponse response = handler().handle(new RenameRoomCommand(room.id(), "LAB"));
+        RoomRenamedResult response = handler().handle(new RenameRoomCommand(room.id(), "LAB"));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomStateGateway).save(captor.capture());
@@ -116,10 +118,10 @@ class RenameRoomCommandHandlerTest {
 
         assertThat(saved.name()).isEqualTo(RoomName.of(RoomLocation.of("F", 2), "LAB"));
         assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRenamedEvent);
+        assertThat(response.id()).isEqualTo(room.id());
+        assertThat(response.oldCode()).isEqualTo("01");
+        assertThat(response.newCode()).isEqualTo("LAB");
         assertThat(response.name()).isEqualTo("F.02LAB");
-        assertThat(response.building()).isEqualTo("F");
-        assertThat(response.floor()).isEqualTo(2);
-        assertThat(response.capacity()).isEqualTo(50);
     }
 
     @Test

@@ -18,5 +18,5 @@ public record CreateRoomCommand(
         int floor,
         int capacity,
         String roomCode
-) implements Command<UUID> {
+) implements Command<RoomCreatedResult> {
 }

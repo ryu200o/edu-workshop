@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomRenamedResult;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
@@ -22,7 +22,7 @@ import java.util.UUID;
  * the module {@code CommandBus}.
  */
 @Component
-class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RoomResponse> {
+class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RoomRenamedResult> {
 
     private final RoomStateGateway roomStateGateway;
     private final RoomExistencePort roomExistencePort;
@@ -34,7 +34,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Room
 
     @Override
     @Transactional
-    public RoomResponse handle(@NonNull RenameRoomCommand command) {
+    public RoomRenamedResult handle(@NonNull RenameRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
         Room room = roomStateGateway.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
@@ -44,7 +44,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Room
 
         // Step 3 — Idempotency: same code ⇒ no coordinate change, no gate, no persist.
         if (candidate.code().equals(room.name().code())) {
-            return toResponse(room);
+            return toResult(room, room.name().code());
         }
 
         // Step 4 — DB guard (global invariant): target coordinate must be free of *other* rooms.
@@ -54,18 +54,18 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Room
         }
 
         // Step 5 — Domain mutation (recomputes name, records RoomRenamedEvent) then persist.
+        String oldCode = room.name().code();
         room.changeCode(command.newCode());
         Room saved = roomStateGateway.save(room);
-        return toResponse(saved);
+        return toResult(saved, oldCode);
     }
 
-    private static RoomResponse toResponse(Room room) {
-        return new RoomResponse(
+    private static RoomRenamedResult toResult(Room room, String oldCode) {
+        return new RoomRenamedResult(
                 room.id(),
+                oldCode,
+                room.name().code(),
                 room.name().asString(),
-                room.location().building(),
-                room.location().floor(),
-                room.capacity(),
-                room.state().name());
+                room.updatedAt());
     }
 }

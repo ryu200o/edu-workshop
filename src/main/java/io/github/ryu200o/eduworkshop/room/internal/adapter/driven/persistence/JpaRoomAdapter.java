@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomDetailView;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
@@ -55,13 +56,13 @@ class JpaRoomAdapter implements RoomExistencePort, RoomStateGateway, RoomQueryPo
 
     // ── Read port (side-effect free) ─────────────────────────────────────────
     @Override
-    public Optional<RoomResponse> findById(UUID id) {
-        return repository.findById(id).map(JpaRoomAdapter::toResponse);
+    public Optional<RoomDetailView> findById(UUID id) {
+        return repository.findById(id).map(JpaRoomAdapter::toDetailView);
     }
 
     @Override
-    public Optional<RoomResponse> findByName(@NonNull RoomName name) {
-        return repository.findByName(name.asString()).map(JpaRoomAdapter::toResponse);
+    public Optional<RoomSummaryView> findByName(@NonNull RoomName name) {
+        return repository.findByName(name.asString()).map(JpaRoomAdapter::toSummaryView);
     }
 
     // ── Mapping (infrastructure only) ────────────────────────────────────────
@@ -90,14 +91,24 @@ class JpaRoomAdapter implements RoomExistencePort, RoomStateGateway, RoomQueryPo
     }
 
     @Contract("_ -> new")
-    private static @NonNull RoomResponse toResponse(@NonNull RoomJpaEntity entity) {
-        return new RoomResponse(
+    private static @NonNull RoomDetailView toDetailView(@NonNull RoomJpaEntity entity) {
+        return new RoomDetailView(
                 entity.getId(),
                 entity.getName(),
                 entity.getBuilding(),
                 entity.getFloor(),
                 entity.getCapacity(),
                 entity.getState()
+        );
+    }
+
+    @Contract("_ -> new")
+    private static @NonNull RoomSummaryView toSummaryView(@NonNull RoomJpaEntity entity) {
+        return new RoomSummaryView(
+                entity.getId(),
+                entity.getName(),
+                entity.getBuilding(),
+                entity.getFloor()
         );
     }
 }
