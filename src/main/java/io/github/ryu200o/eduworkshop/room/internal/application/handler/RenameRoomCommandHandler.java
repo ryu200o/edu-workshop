@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomRenamedResult;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
@@ -22,7 +21,7 @@ import java.util.UUID;
  * the module {@code CommandBus}.
  */
 @Component
-class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RoomRenamedResult> {
+class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RenameRoomCommand.Result> {
 
     private final RoomStateGateway roomStateGateway;
     private final RoomExistencePort roomExistencePort;
@@ -34,7 +33,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Room
 
     @Override
     @Transactional
-    public RoomRenamedResult handle(@NonNull RenameRoomCommand command) {
+    public RenameRoomCommand.Result handle(@NonNull RenameRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
         Room room = roomStateGateway.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
@@ -60,8 +59,8 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Room
         return toResult(saved, oldCode);
     }
 
-    private static RoomRenamedResult toResult(Room room, String oldCode) {
-        return new RoomRenamedResult(
+    private static RenameRoomCommand.Result toResult(Room room, String oldCode) {
+        return new RenameRoomCommand.Result(
                 room.id(),
                 oldCode,
                 room.name().code(),

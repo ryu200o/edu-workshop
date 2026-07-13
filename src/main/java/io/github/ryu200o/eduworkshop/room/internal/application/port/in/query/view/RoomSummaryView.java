@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.room.internal.application.port.in.query;
+package io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view;
 
 import java.util.UUID;
 

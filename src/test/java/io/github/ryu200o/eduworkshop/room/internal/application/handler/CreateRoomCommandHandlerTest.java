@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomCreatedResult;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
@@ -77,7 +76,7 @@ class CreateRoomCommandHandlerTest {
         when(roomExistencePort.existsByNameAndLocation(any(), any())).thenReturn(false);
         when(roomStateGateway.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RoomCreatedResult result = handler().handle(command);
+        CreateRoomCommand.Result result = handler().handle(command);
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomStateGateway).save(captor.capture());

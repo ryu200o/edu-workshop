@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomRenamedResult;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
@@ -93,7 +92,7 @@ class RenameRoomCommandHandlerTest {
         Room room = existingRoom();
         when(roomStateGateway.loadById(room.id())).thenReturn(Optional.of(room));
 
-        RoomRenamedResult response = handler().handle(new RenameRoomCommand(room.id(), "01"));
+        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id(), "01"));
 
         assertThat(response.name()).isEqualTo(room.name().asString());
         assertThat(response.oldCode()).isEqualTo("01");
@@ -110,7 +109,7 @@ class RenameRoomCommandHandlerTest {
         when(roomExistencePort.existsByBuildingAndFloorAndCode(any(), anyInt(), any())).thenReturn(false);
         when(roomStateGateway.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RoomRenamedResult response = handler().handle(new RenameRoomCommand(room.id(), "LAB"));
+        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id(), "LAB"));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomStateGateway).save(captor.capture());

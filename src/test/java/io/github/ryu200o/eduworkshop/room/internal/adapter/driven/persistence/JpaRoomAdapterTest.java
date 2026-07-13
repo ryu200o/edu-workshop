@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomDetailView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomSummaryView;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;

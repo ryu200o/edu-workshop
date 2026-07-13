@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomDetailView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomSummaryView;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
@@ -18,7 +18,7 @@ import java.util.UUID;
 
 /**
  * JPA-backed driven adapter implementing all Room outbound ports (write, existence, read). Replaces
- * the earlier in-memory adapter. Domain &harr; entity mapping and domain &rarr; {@link RoomResponse}
+ * the earlier in-memory adapter. Domain &harr; entity mapping and domain &rarr; {@code RoomDetailView}
  * projection are performed entirely here, keeping the domain framework-free (CQRS bypass on reads).
  * Package-private; hidden inside the module's {@code internal} boundary.
  */

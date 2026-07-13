@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomCreatedResult;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
@@ -22,7 +21,7 @@ import java.util.UUID;
  * <p>Package-private: only reachable through the module's {@code CommandBus}.</p>
  */
 @Component
-class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, RoomCreatedResult> {
+class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, CreateRoomCommand.Result> {
 
     private final RoomExistencePort roomExistencePort;
     private final RoomStateGateway roomStateGateway;
@@ -34,7 +33,7 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Room
 
     @Override
     @Transactional
-    public RoomCreatedResult handle(@NonNull CreateRoomCommand command) {
+    public CreateRoomCommand.Result handle(@NonNull CreateRoomCommand command) {
         // Step 1 — RAM guard (Local invariants): value objects self-validate & normalize, no IO.
         RoomLocation location = RoomLocation.of(command.building(), command.floor());
         RoomName name = RoomName.of(location, command.roomCode());
@@ -47,6 +46,6 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Room
         // Step 3 — Build the aggregate via the domain, then persist.
         Room room = Room.create(name, location, command.capacity());
         Room saved = roomStateGateway.save(room);
-        return new RoomCreatedResult(saved.id(), saved.name().asString());
+        return new CreateRoomCommand.Result(saved.id(), saved.name().asString());
     }
 }

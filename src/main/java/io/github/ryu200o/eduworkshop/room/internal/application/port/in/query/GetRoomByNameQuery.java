@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.in.query;
 
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.shared.cqs.Query;
 
 /**

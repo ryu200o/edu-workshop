@@ -1,6 +1,6 @@
 -- V1: Create the rooms table (Room module).
 -- Portable DDL that runs on both H2 (PostgreSQL mode, tests) and PostgreSQL (runtime).
--- Schema aligned to the Room aggregate / RoomResponse: name + (building, floor, code) + capacity + state.
+-- Schema aligned to the Room aggregate: name + (building, floor, code) + capacity + state.
 
 CREATE TABLE rooms (
     id         UUID                     NOT NULL,

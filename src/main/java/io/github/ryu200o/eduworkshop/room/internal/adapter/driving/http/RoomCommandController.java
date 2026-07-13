@@ -3,8 +3,6 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CommandBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomCreatedResult;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RoomRenamedResult;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,16 +30,16 @@ class RoomCommandController {
     }
 
     @PostMapping
-    ResponseEntity<RoomCreatedResult> create(@RequestBody CreateRoomRequest request) {
+    ResponseEntity<CreateRoomCommand.Result> create(@RequestBody CreateRoomRequest request) {
         var command = new CreateRoomCommand(request.building(), request.floor(), request.capacity(), request.roomCode());
-        RoomCreatedResult result = commandBus.execute(command);
+        CreateRoomCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
     @PutMapping("/{id}/rename")
-    ResponseEntity<RoomRenamedResult> rename(@PathVariable UUID id, @RequestBody RenameRoomRequest request) {
+    ResponseEntity<RenameRoomCommand.Result> rename(@PathVariable UUID id, @RequestBody RenameRoomRequest request) {
         var command = new RenameRoomCommand(id, request.newCode());
-        RoomRenamedResult result = commandBus.execute(command);
+        RenameRoomCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
