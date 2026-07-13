@@ -35,7 +35,7 @@ public class Room {
     private final UUID id;
     private RoomName name;
     private final int capacity;
-    private final RoomLocation location;
+    private RoomLocation location;
     private RoomState state;
     private final Instant createdAt;
     private Instant updatedAt;
@@ -171,6 +171,38 @@ public class Room {
         this.recordedEvents.add(new RoomRenamedEvent(
                 id, RoomRenameReason.CODE_CHANGED, previousName, previousCode,
                 candidate, candidate.code(), location, this.updatedAt));
+    }
+
+    /**
+     * Relocates the room by changing its physical {@code location} (building and/or floor); the
+     * {@code code} is preserved. The name is recomputed from the new location and the (unchanged) code
+     * — preserving the one-way derivation (coordinates {@literal ->} name). Emits a
+     * {@link RoomRenamedEvent} with {@link RoomRenameReason#LOCATION_CHANGED}.
+     *
+     * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
+     * persistence layer, so the write path owns the full state transition before it is persisted.</p>
+     *
+     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
+     * @throws RoomDomainException       if the new location is malformed (validated by {@link RoomLocation})
+     */
+    public void relocateTo(@NonNull RoomLocation newLocation) {
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(id, state, null,
+                    "A deactivated room cannot be relocated; the deactivation is permanent.");
+        }
+        // Idempotent no-op: same location means no change, no event, no persist.
+        if (newLocation.equals(this.location)) {
+            return;
+        }
+        RoomName previousName = this.name;
+        RoomLocation previousLocation = this.location;
+        RoomName newName = RoomName.of(newLocation, this.name.code());
+        this.location = newLocation;
+        this.name = newName;
+        this.updatedAt = Instant.now();
+        this.recordedEvents.add(new RoomRenamedEvent(
+                id, RoomRenameReason.LOCATION_CHANGED, previousName, previousName.code(),
+                newName, newName.code(), newLocation, this.updatedAt));
     }
 
     private static void requireNonNullName(RoomName name) {

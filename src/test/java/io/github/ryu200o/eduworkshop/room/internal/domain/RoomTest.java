@@ -322,4 +322,70 @@ class RoomTest {
 
         assertThat(room.recordedEvents()).isEmpty();
     }
+
+    @Test
+    void relocateTo_recomputesNameKeepsCodeAndEmitsLocationChanged() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+        RoomLocation newLocation = RoomLocation.of("G", 3);
+
+        room.relocateTo(newLocation);
+
+        assertThat(room.location()).isEqualTo(newLocation);
+        assertThat(room.name()).isEqualTo(RoomName.of(newLocation, CODE));
+        assertThat(room.name().code()).isEqualTo(CODE);
+        assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
+        assertThat(room.recordedEvents())
+                .filteredOn(RoomRenamedEvent.class::isInstance)
+                .hasSize(1)
+                .first()
+                .satisfies(e -> {
+                    RoomRenamedEvent ev = (RoomRenamedEvent) e;
+                    assertThat(ev.roomId()).isEqualTo(room.id());
+                    assertThat(ev.reason()).isEqualTo(RoomRenameReason.LOCATION_CHANGED);
+                    assertThat(ev.oldName()).isEqualTo(name());
+                    assertThat(ev.oldCode()).isEqualTo(CODE);
+                    assertThat(ev.newName()).isEqualTo(RoomName.of(newLocation, CODE));
+                    assertThat(ev.newCode()).isEqualTo(CODE);
+                    assertThat(ev.location()).isEqualTo(newLocation);
+                });
+    }
+
+    @Test
+    void relocateTo_preservesCode() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+
+        room.relocateTo(RoomLocation.of("G", 3));
+
+        assertThat(room.name().code()).isEqualTo(CODE);
+        assertThat(room.name().asString()).isEqualTo("G.0301");
+    }
+
+    @Test
+    void relocateTo_rejectsInvalidLocation() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+
+        assertThatThrownBy(() -> room.relocateTo(RoomLocation.of("G", 0)))
+                .isInstanceOf(RoomDomainException.class);
+    }
+
+    @Test
+    void relocateTo_sameLocation_isIdempotentNoEvent() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+        int before = room.recordedEvents().size();
+
+        room.relocateTo(LOCATION);
+
+        assertThat(room.location()).isEqualTo(LOCATION);
+        assertThat(room.recordedEvents()).hasSize(before);
+    }
+
+    @Test
+    void relocateTo_fromDeactivated_isRejected() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+        room.deactivate();
+
+        assertThatThrownBy(() -> room.relocateTo(RoomLocation.of("G", 3)))
+                .isInstanceOf(IllegalRoomStateException.class);
+        assertThat(room.location()).isEqualTo(LOCATION);
+    }
 }

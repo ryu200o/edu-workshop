@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CommandBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,9 +44,19 @@ class RoomCommandController {
         return ResponseEntity.ok(result);
     }
 
+    @PutMapping("/{id}/relocate")
+    ResponseEntity<RelocateRoomCommand.Result> relocate(@PathVariable UUID id, @RequestBody RelocateRoomRequest request) {
+        var command = new RelocateRoomCommand(id, request.newBuilding(), request.newFloor());
+        RelocateRoomCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
     record CreateRoomRequest(String building, int floor, int capacity, String roomCode) {
     }
 
     record RenameRoomRequest(String newCode) {
+    }
+
+    record RelocateRoomRequest(String newBuilding, int newFloor) {
     }
 }

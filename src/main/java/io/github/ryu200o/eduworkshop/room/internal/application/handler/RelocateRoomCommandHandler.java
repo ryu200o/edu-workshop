@@ -1,0 +1,68 @@
+package io.github.ryu200o.eduworkshop.room.internal.application.handler;
+
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
+import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
+import org.jspecify.annotations.NonNull;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+/**
+ * Use-case handler for relocating a room (changing its building/floor; code unchanged). Enforces the
+ * multi-tier duplicate guard in performance order: load (write side) → RAM (VO self-validation) →
+ * idempotency → DB (target-coordinate uniqueness) → domain mutation → persist. Package-private:
+ * reachable only via the module {@code CommandBus}.
+ */
+@Component
+class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, RelocateRoomCommand.Result> {
+
+    private final RoomStateGateway roomStateGateway;
+    private final RoomExistencePort roomExistencePort;
+
+    RelocateRoomCommandHandler(RoomStateGateway roomStateGateway, RoomExistencePort roomExistencePort) {
+        this.roomStateGateway = roomStateGateway;
+        this.roomExistencePort = roomExistencePort;
+    }
+
+    @Override
+    @Transactional
+    public RelocateRoomCommand.Result handle(@NonNull RelocateRoomCommand command) {
+        // Step 1 — Load the aggregate (write side).
+        Room room = roomStateGateway.loadById(command.roomId())
+                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
+
+        // Step 2 — RAM guard (local invariant): the VO validates/normalizes the new location.
+        RoomLocation newLocation = RoomLocation.of(command.newBuilding(), command.newFloor());
+
+        // Step 3 — Idempotency: same location ⇒ no change, no gate, no persist.
+        //         Returns the current entity's updatedAt (NOT Instant.now()) — nothing changed.
+        if (newLocation.equals(room.location())) {
+            return toResult(room, room.location());
+        }
+
+        // Step 4 — DB guard (global invariant): target coordinate (new location + same code) must be free
+        //         of *other* rooms.
+        if (roomExistencePort.existsByBuildingAndFloorAndCode(
+                newLocation.building(), newLocation.floor(), room.name().code())) {
+            throw new DuplicateRoomException(room.name(), newLocation);
+        }
+
+        // Step 5 — Domain mutation (recomputes name, records RoomRenamedEvent) then persist.
+        RoomLocation oldLocation = room.location();
+        room.relocateTo(newLocation);
+        Room saved = roomStateGateway.save(room);
+        return toResult(saved, oldLocation);
+    }
+
+    private static RelocateRoomCommand.Result toResult(Room room, RoomLocation oldLocation) {
+        return new RelocateRoomCommand.Result(
+                room.id(), oldLocation, room.location(), room.name().asString(), room.updatedAt());
+    }
+}
