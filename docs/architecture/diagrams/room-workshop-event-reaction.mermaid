@@ -1,0 +1,20 @@
+graph TD
+    A[Module Room] -->|RoomRenamed| B[Workshop Module]
+    A -->|RoomLocationChanged| B
+    A -->|RoomDeactivated| B
+
+    B --> C{Workshop State?}
+
+    C -->|DRAFT| D[KHÔNG LÀM GÌ]
+    C -->|PUBLISHED| E[Reschedule + WorkshopEvents + Notify]
+    C -->|IN_PROGRESS| F[Emergency Alert + WorkshopEvents]
+    C -->|COMPLETED| G[KHÔNG LÀM GÌ]
+    C -->|CANCELLED| H[KHÔNG LÀM GÌ]
+    C -->|RESCHEDULED| I[KHÔNG LÀM GÌ]
+
+    E --> J[workshops UPDATE]
+    E --> K[workshop_events INSERT]
+    E --> L[Thông báo qua registrations]
+
+    F --> M[workshop_events INSERT]
+    F --> N[Thông báo khẩn cấp qua registrations]

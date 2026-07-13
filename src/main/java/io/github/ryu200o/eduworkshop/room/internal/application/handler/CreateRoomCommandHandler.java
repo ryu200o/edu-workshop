@@ -21,7 +21,7 @@ import java.util.UUID;
  * <p>Package-private: only reachable through the module's {@code CommandBus}.</p>
  */
 @Component
-class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, UUID> {
+class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, CreateRoomCommand.Result> {
 
     private final RoomExistencePort roomExistencePort;
     private final RoomStateGateway roomStateGateway;
@@ -33,7 +33,7 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, UUID
 
     @Override
     @Transactional
-    public UUID handle(@NonNull CreateRoomCommand command) {
+    public CreateRoomCommand.Result handle(@NonNull CreateRoomCommand command) {
         // Step 1 — RAM guard (Local invariants): value objects self-validate & normalize, no IO.
         RoomLocation location = RoomLocation.of(command.building(), command.floor());
         RoomName name = RoomName.of(location, command.roomCode());
@@ -46,6 +46,6 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, UUID
         // Step 3 — Build the aggregate via the domain, then persist.
         Room room = Room.create(name, location, command.capacity());
         Room saved = roomStateGateway.save(room);
-        return saved.id();
+        return new CreateRoomCommand.Result(saved.id(), saved.name().asString());
     }
 }

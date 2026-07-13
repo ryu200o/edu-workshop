@@ -1,10 +1,11 @@
-package io.github.ryu200o.eduworkshop.room.internal.application.port.in.query;
+package io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view;
 
 import java.util.UUID;
 
 /**
- * Read projection DTO for a room (CQRS read model). This is NOT the domain aggregate — it is a flat,
- * serialization-friendly view assembled directly by the read adapter, bypassing the domain.
+ * Read projection (View) for a single room's full detail. Lives on the Query side and is allowed to
+ * aggregate/flatten data freely for the consumer, without any coupling to the write flow. Assembled
+ * directly by the read adapter (CQRS bypass — no domain aggregate reconstruction).
  *
  * @param id       the room id
  * @param name     the canonical room name (e.g. "F.0201")
@@ -13,7 +14,7 @@ import java.util.UUID;
  * @param capacity the physical capacity
  * @param state    the physical operating state as a string (ACTIVE / MAINTENANCE / DEACTIVATED)
  */
-public record RoomResponse(
+public record RoomDetailView(
         UUID id,
         String name,
         String building,

@@ -1,273 +1,299 @@
-application/
-├── port/
-│   ├── in/
-│   │   ├── command/     <-- Chứa DTO Lệnh Ghi (Records) và Bus Interface
-│   │   └── query/       <-- Chứa DTO Lệnh Đọc (Records) và Bus Interface
-│   └── out/             <-- Chứa ALL Outbound Ports (UserStateGateway, UserQueryGateway,...)
-├── handler/             <-- PHẲNG HÓA hoàn toàn (Không chia package con)
-├── event/               <-- Chứa Application Events
-└── mapper/              <-- Chứa các bộ chuyển đổi DTO <-> Domain
+# Development Guidelines — Quick Reference (CQS + Hexagonal + Spring Modulith)
 
-Code gợi ý:
-Dưới đây là mã nguồn cụ thể, hoàn chỉnh cho CreateUserCommandHandler và các thành phần liên quan theo đúng cấu trúc Cách 3 (phẳng hóa tầng handler, giấu kín bằng package-private) kết hợp với CommandBus bằng Spring Context.
-Tôi sẽ viết code theo chuẩn Java hiện đại (sử dụng Java Records) để bạn áp dụng trực tiếp vào dự án thực tế.
-------------------------------
-## 1. Thành phần dùng chung (Shared Interfaces)
-Hai interface này bạn định nghĩa một lần duy nhất ở package core/shared của hệ thống để làm khung.
+> **Cách dùng:** Tài liệu này là *cheat-sheet* — đọc để nắm công thức chuẩn trước khi code. Mỗi module
+> (Room, Workshop, ...) bắt buộc tuân thủ layout vàng bên dưới. Module **Room** hiện là
+> *reference implementation* (đã chạy thực tế, 62/62 test xanh): copy pattern từ đó khi tạo module mới.
+
+---
+
+## 1. Cấu trúc thư mục chuẩn (Golden Layout)
+
+```
+<module>/
+├── internal/
+│   ├── domain/
+│   │   ├── model/
+│   │   │   ├── entity/        # Room, Workshop... (aggregate root, package-private)
+│   │   │   ├── vo/            # RoomCode, RoomName, RoomLocation (immutable, tự validate)
+│   │   │   └── event/         # RoomRenamedEvent, RoomCreatedEvent (sealed RoomDomainEvent)
+│   │   ├── service/           # domain service (nếu cần)
+│   │   └── policy/            # business rule / spec
+│   ├── application/
+│   │   ├── port/
+│   │   │   ├── in/
+│   │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
+│   │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
+│   │   │   └── out/           # RoomStateGateway, RoomExistencePort, RoomQueryPort
+│   │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
+│   └── adapter/
+│       ├── driving/
+│       │   ├── http/          # *CommandController, *QueryController, *ExceptionAdvice
+│       │   └── event/         # Event Bus consumer (tương lai)
+│       └── driven/            # jpa/ (Jpa*Adapter), persistence entity/mapper
+└── RoomExposeAPI.java         # public API (cross-module surface, để trống nếu chưa công bố)
+```
+
+**Quy tắc bất di bất dịch (ADR 0001 + 0002):**
+- `internal/` là package-private. Lớp ngoài `internal/` **không được** import class trong `internal/`
+  (trừ `RoomExposeAPI` đã được whitelist). `@ApplicationModule` tự động kiểm tra.
+- Bất kỳ class nào expose ra ngoài module **phải** là `public` & `final`.
+- Một chiều: `internal → outside` được; `outside → internal` không được (trừ API whitelist).
+
+---
+
+## 2. Luồng Ghi (Command) — Command/Write Side
+
+### 2.1 Shared contract (dùng chung, nằm trong Shared Kernel)
 ```java
-// Khung định nghĩa một Lệnh có kiểu dữ liệu trả về là R
 public interface Command<R> {}
-// Khung định nghĩa một bộ xử lý Lệnh tương ứng
 public interface CommandHandler<C extends Command<R>, R> {
     R handle(C command);
 }
 ```
-------------------------------
-## 2. Tầng port/in/command/ (Bề mặt tiếp xúc của Module)
-Đây là phần duy nhất mà Controller (Driving Adapter) nhìn thấy và có quyền truy cập.
-```java
-package com.example.module.application.port.in.command;
-import com.example.module.application.core.Command;
-import java.util.UUID;
-// DTO đầu vào, dùng Record để tự động có getter, equals, hashCode, toString
-public record CreateUserCommand(
-    String email,
-    String password,
-    String fullName
-) implements Command<UUID> {} // Trả về UUID của User sau khi tạo thành công
-```
-------------------------------
-## 3. Tầng port/out/ (SPI - Outgoing Port)
-Interface định nghĩa cách thức lưu trữ dữ liệu. Tầng Application chỉ gọi Interface này. Việc lưu vào MySQL, PostgreSQL hay MongoDB do tầng Adapter bên ngoài tự triển khai.
-```java
-package com.example.module.application.port.out;
-import com.example.module.domain.User; // Domain Model thuần túy của bạn
 
-public interface UserStateGateway {
-    User save(User user);
-    boolean existsByEmail(String email);
+### 2.2 Command DTO = record + nested `Result` (Hybrid CQS — ADR 0004)
+> **Pattern thực chiến:** `Result` là `public static record` **nested trong** Command (không tạo file
+> `*Result.java` riêng). Một Command ↔ một Result (1-1), giữ contract trong cùng 1 file.
+
+```java
+// port.in.command.RenameRoomCommand — chỉ chứa raw input, validation để ở domain VO bên trong handler
+public record RenameRoomCommand(
+        UUID roomId,
+        String newCode
+) implements Command<RenameRoomCommand.Result> {
+
+    // Kết quả ghi nhẹ: chỉ mang trường bị ảnh hưởng trực tiếp (id, old/new code, name tái tính, thời điểm)
+    public record Result(UUID id, String oldCode, String newCode, String name, Instant updatedAt) {}
+}
+
+// port.in.command.CreateRoomCommand — lưu ý có trường capacity
+public record CreateRoomCommand(String building, int floor, int capacity, String roomCode)
+        implements Command<CreateRoomCommand.Result> {
+    public record Result(UUID id, String name) {}
 }
 ```
-------------------------------
-## 4. Tầng handler/ (Logic xử lý đóng gói kín)
-Lưu ý quan trọng: Class CreateUserCommandHandler KHÔNG có từ khóa public. Nó ở dạng package-private để không một module nào khác bên ngoài có thể can thiệp hoặc import trực tiếp.
+
+### 2.3 Out Port (State / Existence) — ghi
 ```java
-package com.example.module.application.handler;
-import com.example.module.application.core.CommandHandler;import com.example.module.application.port.in.command.CreateUserCommand;import com.example.module.application.port.out.UserStateGateway;import com.example.module.domain.User;import org.springframework.stereotype.Component;import org.springframework.transaction.annotation.Transactional;import java.util.UUID;
+// port.out.RoomStateGateway — write port, trả domain entity
+public interface RoomStateGateway {
+    Optional<Room> loadById(UUID id);
+    Room save(Room room);
+}
 
-@Component // Đăng ký với Spring Context để CommandBus tự động tìm thấy
-class CreateUserCommandHandler implements CommandHandler<CreateUserCommand, UUID> {
-
-    private final UserStateGateway userStateGateway; // Gọi Output Port
-    // private final ApplicationEventPublisher eventPublisher; // Nếu bạn dùng Spring Modulith Events
-
-    // Spring tự động Inject dependency qua Constructor class
-    CreateUserCommandHandler(UserStateGateway userStateGateway) {
-        this.userStateGateway = userStateGateway;
-    }
-
-    @Override
-    @Transactional // Quản lý Transaction được đặt chính xác tại UseCase/Handler này
-    public UUID handle(CreateUserCommand command) {
-        
-        // 1. Kiểm tra quy tắc nghiệp vụ (Business Rule Validation)
-        if (userStateGateway.existsByEmail(command.email())) {
-            throw new IllegalArgumentException("Email already registered!");
-        }
-
-        // 2. Gọi Domain Model để thực hiện nghiệp vụ (Hoặc map từ DTO sang Domain)
-        // Giả sử class User là Rich Domain Model chứa logic mã hóa password...
-        User newUser = User.createNew(
-            command.email(), 
-            command.password(), 
-            command.fullName()
-        );
-
-        // 3. Lưu xuống Database thông qua Output Port
-        User savedUser = userStateGateway.save(newUser);
-
-        // 4. (Tùy chọn) Phát đi một Event cho Spring Modulith nếu cần các module khác lắng nghe
-        // eventPublisher.publishEvent(new UserCreatedEvent(savedUser.getId()));
-
-        // 5. Trả về kết quả cho CommandBus -> trả về cho Controller
-        return savedUser.getId();
-    }
+// port.out.RoomExistencePort — DB gate (kiểm tra coordinate target đã bị room KHÁC chiếm chưa)
+public interface RoomExistencePort {
+    boolean existsByBuildingAndFloorAndCode(String building, int floor, String code);
 }
 ```
-------------------------------
-## 5. Mã nguồn cho SimpleCommandBus chạy bằng Spring Context
-Để đoạn code trên hoạt động tự động thông qua CommandBus, đây là cách viết lớp triển khai của Bus sử dụng ResolvableType (rất an toàn về kiểu dữ liệu trong Spring):
-```java
-package com.example.module.application.handler;
-import com.example.module.application.core.Command;import com.example.module.application.core.CommandHandler;import com.example.module.application.port.in.CommandBus;import org.springframework.context.ApplicationContext;import org.springframework.core.ResolvableType;import org.springframework.stereotype.Component;
 
+### 2.4 Handler (package-private, nằm trong `application/handler`)
+```java
+@Transactional
 @Component
-class SimpleCommandBus implements CommandBus {
+class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RenameRoomCommand.Result> {
 
-    private final ApplicationContext context;
-
-    public SimpleCommandBus(ApplicationContext context) {
-        this.context = context;
-    }
+    private final RoomStateGateway gateway;
+    private final RoomExistencePort existencePort;
 
     @Override
-    @SuppressWarnings("unchecked")
-    public <R, C extends Command<R>> R execute(C command) {
-        // Tự động tìm bean phù hợp với CommandHandler<TênCommand, TênKếtQuả>
-        ResolvableType type = ResolvableType.forClassWithGenerics(CommandHandler.class, command.getClass(), Object.class);
-        String[] beanNames = context.getBeanNamesForType(type);
+    public RenameRoomCommand.Result handle(RenameRoomCommand command) {
+        // 1. Load aggregate (write port)
+        Room room = gateway.loadById(command.roomId())
+                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
-        if (beanNames.length == 0) {
-            throw new IllegalStateException("Không tìm thấy Handler nào cho lệnh: " + command.getClass().getSimpleName());
+        // 2. RAM guard: RoomName VO tự validate/normalize newCode
+        RoomName candidate = RoomName.of(room.location(), command.newCode());
+
+        // 3. Idempotency: cùng code => no-op, không gate/persist
+        if (candidate.code().equals(room.name().code())) {
+            return toResult(room, room.name().code());
         }
 
-        CommandHandler<C, R> handler = (CommandHandler<C, R>) context.getBean(beanNames[0]);
-        return handler.handle(command);
+        // 4. DB guard: chặn room KHÁC chiếm target coordinate
+        if (existencePort.existsByBuildingAndFloorAndCode(
+                room.location().building(), room.location().floor(), candidate.code())) {
+            throw new DuplicateRoomException(candidate, room.location());
+        }
+
+        // 5. Domain mutation (changeCode tái tính name + ghi RoomRenamedEvent) rồi persist
+        String oldCode = room.name().code();
+        room.changeCode(command.newCode());
+        Room saved = gateway.save(room);
+        return toResult(saved, oldCode);
+    }
+
+    private static RenameRoomCommand.Result toResult(Room room, String oldCode) {
+        return new RenameRoomCommand.Result(
+                room.id(), oldCode, room.name().code(), room.name().asString(), room.updatedAt());
     }
 }
 ```
-Dưới đây là mã nguồn hoàn chỉnh cho phần Query (Đọc dữ liệu) của thực thể User.
-Điểm khác biệt cốt lõi của Query so với Command trong mô hình CQS kết hợp Hexagonal là: Query không đi qua Domain Model. Nó đi "tắt" (Bypass) từ Output Port thẳng ra DTO để tối ưu tốc độ đọc dữ liệu, sử dụng @Transactional(readOnly = true).
-------------------------------
-## 1. Thành phần dùng chung (Shared Interfaces)
-Định nghĩa một lần duy nhất tại package core/shared.
+- Handler `@Transactional`, **package-private**, `@Component` — được gọi qua `CommandBus` (Spring bean
+  tìm bằng generic type), không gọi trực tiếp từ ngoài.
+- Idempotency nằm trước DB gate để tránh *false-positive self-collision* (đổi sang cùng code cũ).
+
+### 2.5 CommandBus (giữ nguyên, Shared Kernel)
+`CommandBus.execute(C command)` resolve handler qua `ResolvableType` (generic chính xác). Gọi:
 ```java
-// Khung định nghĩa một Truy vấn có kiểu dữ liệu trả về là R
+RenameRoomCommand.Result result = commandBus.execute(command);
+```
+
+---
+
+## 3. Luồng Đọc (Query) — Query/Read Side
+
+### 3.1 Shared contract
+```java
 public interface Query<R> {}
-// Khung định nghĩa một bộ xử lý Truy vấn tương ứng
 public interface QueryHandler<Q extends Query<R>, R> {
     R handle(Q query);
 }
 ```
-------------------------------
-## 2. Tầng port/in/query/ (Bề mặt tiếp xúc phần Đọc)
-Đây là DTO đầu vào của truy vấn và DTO kết quả trả ra cho Controller.
-```java
-package com.example.module.application.port.in.query;
-import com.example.module.application.core.Query;import java.util.UUID;
-// 1. DTO Truy vấn: Chứa các tiêu chí tìm kiếm (Dùng Record)
-public record GetUserQuery(UUID userId) implements Query<UserResponse> {}
-// 2. DTO Kết quả: Chỉ chứa các trường cần hiển thị ra giao diện (Projection)
-public record UserResponse(
-    UUID id,
-    String email,
-    String fullName,
-    String status
-) {}
-```
-------------------------------
-## 3. Tầng port/out/ (SPI - Outgoing Port cho Query)
-Trong CQS chuẩn, bạn nên tách biệt Output Port của Lệnh Đọc (UserQueryGateway) ra khỏi Lệnh Ghi (UserStateGateway).
 
-* UserQueryGateway sẽ trả thẳng về UserResponse (DTO) chứ không trả về User (Domain Model). Điều này giúp Spring Data JPA / JDBC / jOOQ chạy projection cực nhanh, giảm tải cho bộ nhớ.
+### 3.2 Query DTO = record (ở `port.in.query`) + View (ở `port.in.query.view`)
+> **Pattern thực chiến:** Query record nhẹ, chỉ chứa tham số. Kết quả trả về là các `View` nằm trong
+> sub-package **`view/`** (`RoomDetailView`, `RoomSummaryView`). Một View phục vụ nhiều Query
+> (multi-1, global) nên tách riêng để tiến hóa độc lập với write flow (CQRS bypass, không reconstruct domain).
+
 ```java
-package com.example.module.application.port.out;
-import com.example.module.application.port.in.query.UserResponse;import java.util.Optional;import java.util.UUID;
-public interface UserQueryGateway {
-    Optional<UserResponse> findById(UUID userId);
+// port.in.query.GetRoomByIdQuery
+public record GetRoomByIdQuery(UUID roomId) implements Query<RoomDetailView> {}
+
+// port.in.query.GetRoomByNameQuery — raw name, handler sẽ parse thành RoomName (RAM self-defense)
+public record GetRoomByNameQuery(String roomName) implements Query<RoomSummaryView> {}
+
+// port.in.query.view.RoomDetailView — projection đầy đủ (state là String: ACTIVE/MAINTENANCE/DEACTIVATED)
+public record RoomDetailView(UUID id, String name, String building, int floor, int capacity, String state) {}
+
+// port.in.query.view.RoomSummaryView — projection gọn (subset của Detail)
+public record RoomSummaryView(UUID id, String name, String building, int floor) {}
+```
+
+### 3.3 Out Port (Query Port) — đọc
+```java
+public interface RoomQueryPort {
+    Optional<RoomDetailView> findById(UUID id);          // CQRS bypass: trả View trực tiếp
+    Optional<RoomSummaryView> findByName(RoomName name); // RoomName là opaque VO, không reverse-parse
 }
 ```
-------------------------------
-## 4. Tầng handler/ (Logic truy vấn xếp phẳng, đóng gói kín)
-Class này cũng để ở dạng package-private (không có chữ public) để giấu kín bên trong module.
+
+### 3.4 Handler (package-private, @Component, readOnly)
 ```java
-package com.example.module.application.handler;
-import com.example.module.application.core.QueryHandler;import com.example.module.application.port.in.query.GetUserQuery;import com.example.module.application.port.in.query.UserResponse;import com.example.module.application.port.out.UserQueryGateway;import org.springframework.stereotype.Component;import org.springframework.transaction.annotation.Transactional;
-
-@Component // Đăng ký để QueryBus tự động tìm thấy
-class GetUserQueryHandler implements QueryHandler<GetUserQuery, UserResponse> {
-
-    private final UserQueryGateway userQueryGateway; // Gọi Output Port chuyên Đọc
-
-    // Inject qua Constructor
-    class GetUserQueryHandler(UserQueryGateway userQueryGateway) {
-        this.userQueryGateway = userQueryGateway;
-    }
-
-    @Override
-    @Transactional(readOnly = true) // Tối ưu hóa hiệu năng Database (Bỏ Dirty Checking của Hibernate)
-    public UserResponse handle(GetUserQuery query) {
-        
-        // Gọi thẳng Output Port và trả về DTO, không qua xử lý nghiệp vụ Domain
-        return userQueryGateway.findById(query.userId())
-            .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + query.userId()));
-    }
-}
-```
-------------------------------
-## 5. Bổ sung QueryBus vào tầng handler/
-Tương tự như CommandBus, bạn tạo thêm một bộ điều phối dành riêng cho Query để Controller sử dụng.
-```java
-// Interface đặt tại port/in/
-package com.example.module.application.port.in;
-public interface QueryBus {
-    <R, Q extends Query<R>> R execute(Q query);
-}
-```
-```java
-// Lớp hiện thực đặt phẳng tại handler/ (package-private)
-package com.example.module.application.handler;
-import com.example.module.application.core.Query;import com.example.module.application.core.QueryHandler;import com.example.module.application.port.in.QueryBus;import org.springframework.context.ApplicationContext;import org.springframework.core.ResolvableType;import org.springframework.stereotype.Component;
-
+@Transactional(readOnly = true)
 @Component
-class SimpleQueryBus implements QueryBus {
-
-    private final ApplicationContext context;
-
-    public SimpleQueryBus(ApplicationContext context) {
-        this.context = context;
+class GetRoomByIdQueryHandler implements QueryHandler<GetRoomByIdQuery, RoomDetailView> {
+    private final RoomQueryPort port;
+    @Override public RoomDetailView handle(GetRoomByIdQuery q) {
+        return port.findById(q.roomId()).orElseThrow(() -> new RoomNotFoundException("id=" + q.roomId()));
     }
+}
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public <R, Q extends Query<R>> R execute(Q query) {
-        ResolvableType type = ResolvableType.forClassWithGenerics(QueryHandler.class, query.getClass(), Object.class);
-        String[] beanNames = context.getBeanNamesForType(type);
-
-        if (beanNames.length == 0) {
-            throw new IllegalStateException("Không tìm thấy Handler nào cho truy vấn: " + query.getClass().getSimpleName());
-        }
-
-        QueryHandler<Q, R> handler = (QueryHandler<Q, R>) context.getBean(beanNames);
-        return handler.handle(query);
+@Transactional(readOnly = true)
+@Component
+class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, RoomSummaryView> {
+    private final RoomQueryPort port;
+    @Override public RoomSummaryView handle(GetRoomByNameQuery q) {
+        RoomName name = RoomName.ofRaw(q.roomName());  // RAM self-defense; opaque, không parse ngược
+        return port.findByName(name).orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));
     }
 }
 ```
-------------------------------
-## Kết quả cuối cùng tại Controller (Driving Adapter)
-Sau khi có cả Command và Query Bus, lớp Controller của bạn sẽ đạt đến độ tối giản và hoàn hảo về mặt kiến trúc:
+
+### 3.5 QueryBus — tương tự CommandBus, resolve qua `ResolvableType`.
+
+---
+
+## 4. Driving HTTP Adapter — tách rõ C/Q + Advice scoped (ADR 0004)
+
+### 4.1 Tách 2 controller, mỗi cái chỉ cầm 1 bus
 ```java
-package com.example.module.adapter.in.rest;
-import com.example.module.application.port.in.CommandBus;import com.example.module.application.port.in.QueryBus;import com.example.module.application.port.in.command.CreateUserCommand;import com.example.module.application.port.in.query.GetUserQuery;import com.example.module.application.port.in.query.UserResponse;import org.springframework.web.bind.annotation.*;import java.util.UUID;
+@RestController
+@RequestMapping("/api/v1/rooms")
+class RoomCommandController {
+    private final CommandBus commandBus;                 // CHỈ CommandBus
+    @PostMapping
+    ResponseEntity<CreateRoomCommand.Result> create(@RequestBody CreateRoomRequest request) {
+        var command = new CreateRoomCommand(            // var RÕ RÀNG, không new() trong execute()
+                request.building(), request.floor(), request.capacity(), request.roomCode());
+        CreateRoomCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+    @PutMapping("/{id}/rename")
+    ResponseEntity<RenameRoomCommand.Result> rename(@PathVariable UUID id, @RequestBody RenameRoomRequest request) {
+        var command = new RenameRoomCommand(id, request.newCode());
+        return ResponseEntity.ok(commandBus.execute(command));
+    }
+    record CreateRoomRequest(String building, int floor, int capacity, String roomCode) {}
+    record RenameRoomRequest(String newCode) {}
+}
 
 @RestController
-@RequestMapping("/users")
-class UserController {
-
-    private final CommandBus commandBus;
-    private final QueryBus queryBus;
-
-    // Inject cả 2 Bus thông qua Port Interface công khai
-    public UserController(CommandBus commandBus, QueryBus queryBus) {
-        this.commandBus = commandBus;
-        this.queryBus = queryBus;
-    }
-
-    // LỆNH GHI (COMMAND)
-    @PostMapping
-    public UUID createUser(@RequestBody CreateUserCommand command) {
-        return commandBus.execute(command);
-    }
-
-    // LỆNH ĐỌC (QUERY)
+@RequestMapping("/api/v1/rooms")
+class RoomQueryController {
+    private final QueryBus queryBus;                    // CHỈ QueryBus
     @GetMapping("/{id}")
-    public UserResponse getUserById(@PathVariable UUID id) {
-        return queryBus.execute(new GetUserQuery(id));
+    RoomDetailView getById(@PathVariable UUID id) {
+        var query = new GetRoomByIdQuery(id);
+        return queryBus.execute(query);
+    }
+    @GetMapping("/by-name/{name}")
+    RoomSummaryView getByName(@PathVariable String name) {
+        var query = new GetRoomByNameQuery(name);
+        return queryBus.execute(query);
     }
 }
 ```
-## Điểm cộng lớn của thiết kế này cho dự án thực tế:
+- **Luật:** controller ghi chỉ `POST/PUT/DELETE` + `CommandBus`; controller đọc chỉ `GET` + `QueryBus`.
+  Không trộn lẫn.
+- **Luật:** luôn `var command = new XCommand(...)` trước `bus.execute(...)` — dễ breakpoint/debug.
+- Request body dùng nested `XxxRequest` record trong controller; Command chỉ nhận raw param.
 
-* Tách biệt Database (Read/Write Splitting): Vì ở tầng handler, CreateUserCommandHandler dùng UserStateGateway còn GetUserQueryHandler dùng UserQueryGateway. Sau này nếu dự án phình to, bạn có thể dễ dàng cấu hình cho UserQueryGateway đọc từ một Database Replica (Read-only), còn UserStateGateway ghi vào Master Database mà không cần sửa một dòng code nào trong tầng Application.
+### 4.2 Centralized Exception Advice (scoped, in-module)
+> Nằm trong module Room (`adapter/driving/http/RoomExceptionAdvice.java`), **không** đẩy lên Shared
+> Kernel — giữ encapsulation module (Spring Modulith).
 
+```java
+@RestControllerAdvice(assignableTypes = {RoomCommandController.class, RoomQueryController.class})
+class RoomExceptionAdvice {
+    @ExceptionHandler(RoomNotFoundException.class)   // 404
+    public ResponseEntity<ErrorResponse> notFound(RoomNotFoundException e) {...}
+    @ExceptionHandler(DuplicateRoomException.class)   // 409
+    public ResponseEntity<ErrorResponse> duplicate(DuplicateRoomException e) {...}
+    @ExceptionHandler(RoomDomainException.class)     // 400
+    public ResponseEntity<ErrorResponse> badRequest(RoomDomainException e) {...}
+}
+```
+- Dùng `assignableTypes` để advice **chỉ** áp dụng cho 2 controller của module này, không ảnh hưởng module
+  khác. Exception nghiệp vụ (`RoomDomainException` và subclass) không rò rỉ ra Shared Kernel.
 
+---
+
+## 5. Domain Modeling — Value Object một chiều (nhắc lại, ADR 0003)
+
+- `RoomName` được **sinh ra TỪ** `RoomLocation` + `RoomCode` (`RoomName.of(location, code)`). Nguyên tắc
+  một chiều: chỉ `coordinate → name`. Chuỗi `name` raw (vd `"F.02LAB"`) chỉ để **hiển thị** và để
+  **match chính xác** khi truy vấn (`findByName(RoomName)` so khớp chuỗi, **không** parse ngược thành
+  tọa độ). Khi đổi `code`, gọi `location` cũ + `code` mới để `RoomName.of` tái tính `name`.
+- `RoomLocation` (`building`, `floor`) **immutable** — rename không thay đổi tọa độ. Relocation
+  (`relocateTo`) là use case khác, tương lai (phát sinh `RoomRenamedEvent(LOCATION_CHANGED)`).
+- Aggregate **ghi nhận event** thay vì publish trực tiếp: `RoomRenamedEvent` (record, `implements
+  RoomDomainEvent`, thuộc sealed `RoomDomainEvent permits ...`). Event chứa đủ context cũ/mới
+  (`oldCode/newCode`, `reason`, `location`, `occurredAt`) để module khác (Workshop) phản ứng sau này mà
+  không cần gọi ngược. Xem `docs/architecture/diagrams/room-workshop-event-reaction.mermaid`.
+- `changeCode(String)` trong `Room`: preserve building/floor, tái tính name, **idempotent** khi code
+  không đổi (no-op, không event/không bump `updatedAt`), **reject** room `DEACTIVATED`
+  (`IllegalRoomStateException`). Validate code qua `RoomName`/`RoomCode` VO.
+
+---
+
+## 6. Checklist trước khi tạo PR
+
+- [ ] Mọi class trong `internal/` là package-private (handler, port impl, mapper...), chỉ API công khai là `public final`.
+- [ ] Command có nested `Result`; Query View nằm trong `port.in.query.view`. **Không còn** `XResponse` chung.
+- [ ] Driving adapter: `RoomCommandController` (CommandBus) + `RoomQueryController` (QueryBus) tách rõ;
+      `var x = new XCommand(...)` trước `execute`; request body qua nested `XxxRequest`.
+- [ ] Exception nghiệp vụ tập trung ở `*ExceptionAdvice` scoped `assignableTypes`, nằm trong module.
+- [ ] `internal/` không bị outside import (chạy build/ArchitectureTest xanh).
+- [ ] Không đổi schema nếu dùng chung unique index `(building, floor, code)` làm DB gate.
+- [ ] `./mvnw test` xanh toàn bộ, không regression.

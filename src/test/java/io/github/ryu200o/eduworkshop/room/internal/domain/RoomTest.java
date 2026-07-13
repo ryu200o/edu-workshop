@@ -2,6 +2,8 @@ package io.github.ryu200o.eduworkshop.room.internal.domain;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -243,6 +245,72 @@ class RoomTest {
         assertThatThrownBy(room::reactivate).isInstanceOf(IllegalRoomStateException.class);
         assertThatCode(room::deactivate).doesNotThrowAnyException();
         assertThat(room.state()).isEqualTo(RoomState.DEACTIVATED);
+    }
+
+    @Test
+    void changeCode_recomputesNameAndEmitsRoomRenamedEvent() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+
+        room.changeCode("LAB");
+
+        assertThat(room.name()).isEqualTo(RoomName.of(LOCATION, "LAB"));
+        assertThat(room.location()).isEqualTo(LOCATION);
+        assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
+        assertThat(room.recordedEvents())
+                .filteredOn(RoomRenamedEvent.class::isInstance)
+                .hasSize(1)
+                .first()
+                .satisfies(e -> {
+                    RoomRenamedEvent ev = (RoomRenamedEvent) e;
+                    assertThat(ev.roomId()).isEqualTo(room.id());
+                    assertThat(ev.reason()).isEqualTo(RoomRenameReason.CODE_CHANGED);
+                    assertThat(ev.oldName()).isEqualTo(name());
+                    assertThat(ev.oldCode()).isEqualTo(CODE);
+                    assertThat(ev.newName()).isEqualTo(RoomName.of(LOCATION, "LAB"));
+                    assertThat(ev.newCode()).isEqualTo("LAB");
+                    assertThat(ev.location()).isEqualTo(LOCATION);
+                });
+    }
+
+    @Test
+    void changeCode_preservesBuildingAndFloor() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+
+        room.changeCode("A1");
+
+        assertThat(room.location().building()).isEqualTo("F");
+        assertThat(room.location().floor()).isEqualTo(2);
+        assertThat(room.name().asString()).isEqualTo("F.02A1");
+    }
+
+    @Test
+    void changeCode_rejectsInvalidCode() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+
+        assertThatThrownBy(() -> room.changeCode("")).isInstanceOf(RoomDomainException.class);
+        assertThatThrownBy(() -> room.changeCode("A-B")).isInstanceOf(RoomDomainException.class);
+        assertThatThrownBy(() -> room.changeCode("ABCDEFGHIJK")).isInstanceOf(RoomDomainException.class);
+    }
+
+    @Test
+    void changeCode_sameCode_isIdempotentNoEvent() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+        int before = room.recordedEvents().size();
+
+        room.changeCode(CODE);
+
+        assertThat(room.name()).isEqualTo(name());
+        assertThat(room.recordedEvents()).hasSize(before);
+    }
+
+    @Test
+    void changeCode_fromDeactivated_isRejected() {
+        Room room = Room.create(name(), LOCATION, CAPACITY);
+        room.deactivate();
+
+        assertThatThrownBy(() -> room.changeCode("LAB"))
+                .isInstanceOf(IllegalRoomStateException.class);
+        assertThat(room.name()).isEqualTo(name());
     }
 
     @Test

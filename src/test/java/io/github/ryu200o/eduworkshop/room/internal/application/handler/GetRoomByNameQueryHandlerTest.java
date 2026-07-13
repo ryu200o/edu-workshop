@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByNameQuery;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.RoomResponse;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
@@ -34,10 +34,10 @@ class GetRoomByNameQueryHandlerTest {
 
     @Test
     void happyPath_parsesNameThenReturnsProjection() {
-        RoomResponse expected = new RoomResponse(UUID.randomUUID(), "F.0201", "F", 2, 50, "ACTIVE");
+        RoomSummaryView expected = new RoomSummaryView(UUID.randomUUID(), "F.0201", "F", 2);
         when(roomQueryPort.findByName(RoomName.ofRaw("F.0201"))).thenReturn(Optional.of(expected));
 
-        RoomResponse result = handler().handle(new GetRoomByNameQuery("F.0201"));
+        RoomSummaryView result = handler().handle(new GetRoomByNameQuery("F.0201"));
 
         assertThat(result).isEqualTo(expected);
     }

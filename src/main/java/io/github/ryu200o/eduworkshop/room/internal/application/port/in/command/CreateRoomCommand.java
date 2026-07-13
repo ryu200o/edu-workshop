@@ -18,5 +18,15 @@ public record CreateRoomCommand(
         int floor,
         int capacity,
         String roomCode
-) implements Command<UUID> {
+) implements Command<CreateRoomCommand.Result> {
+
+    /**
+     * Lightweight write-side result for this command — carries only the fields directly affected
+     * (the new room's id and canonical name) to keep the write flow minimal.
+     *
+     * @param id   the id minted for the created room
+     * @param name the canonical room name (e.g. "F.0201")
+     */
+    public record Result(UUID id, String name) {
+    }
 }
