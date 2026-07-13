@@ -2,6 +2,8 @@ package io.github.ryu200o.eduworkshop.room.internal.domain.model.entity;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomainEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -31,7 +33,7 @@ import java.util.UUID;
 public class Room {
 
     private final UUID id;
-    private final RoomName name;
+    private RoomName name;
     private final int capacity;
     private final RoomLocation location;
     private RoomState state;
@@ -140,6 +142,35 @@ public class Room {
         this.state = next;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomStateChanged(this.id, previous, next, this.updatedAt));
+    }
+
+    /**
+     * Renames the room by changing only its {@code code}; the building and floor are preserved. The
+     * name is recomputed from the (unchanged) location and the new code — preserving the one-way
+     * derivation (coordinates {@literal ->} name). Emits a {@link RoomRenamedEvent}.
+     *
+     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
+     * @throws RoomDomainException       if the new code is malformed (validated by {@link RoomName})
+     */
+    public void changeCode(@NonNull String newCode) {
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(id, state, null,
+                    "A deactivated room's code cannot be changed; the deactivation is permanent.");
+        }
+        RoomName candidate = RoomName.of(location, newCode);
+
+        // Idempotent no-op: same code means no coordinate change, no event, no persist.
+        if (candidate.code().equals(this.name.code())) {
+            return;
+        }
+
+        RoomName previousName = this.name;
+        String previousCode = this.name.code();
+        this.name = candidate;
+        this.updatedAt = Instant.now();
+        this.recordedEvents.add(new RoomRenamedEvent(
+                id, RoomRenameReason.CODE_CHANGED, previousName, previousCode,
+                candidate, candidate.code(), location, this.updatedAt));
     }
 
     private static void requireNonNullName(RoomName name) {

@@ -5,6 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExis
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.state.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
 import org.jetbrains.annotations.Contract;
@@ -34,6 +35,16 @@ class JpaRoomAdapter implements RoomExistencePort, RoomStateGateway, RoomQueryPo
     public boolean existsByNameAndLocation(@NonNull RoomName name, @NonNull RoomLocation location) {
         return repository.existsByBuildingAndFloorAndCode(
                 location.building(), location.floor(), name.code());
+    }
+
+    @Override
+    public boolean existsByBuildingAndFloorAndCode(String building, int floor, String code) {
+        return repository.existsByBuildingAndFloorAndCode(building, floor, code);
+    }
+
+    @Override
+    public Optional<Room> loadById(UUID id) {
+        return repository.findById(id).map(JpaRoomAdapter::toRoom);
     }
 
     @Override
@@ -67,6 +78,15 @@ class JpaRoomAdapter implements RoomExistencePort, RoomStateGateway, RoomQueryPo
                 room.createdAt(),
                 room.updatedAt()
         );
+    }
+
+    @Contract("_ -> new")
+    private static @NonNull Room toRoom(@NonNull RoomJpaEntity entity) {
+        RoomLocation location = RoomLocation.reconstruct(entity.getBuilding(), entity.getFloor());
+        RoomName name = RoomName.of(location, entity.getCode());
+        RoomState state = RoomState.valueOf(entity.getState());
+        return Room.reconstruct(entity.getId(), name, location, entity.getCapacity(), state,
+                entity.getCreatedAt(), entity.getUpdatedAt());
     }
 
     @Contract("_ -> new")
