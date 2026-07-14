@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CommandBus;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
@@ -51,6 +52,13 @@ class RoomCommandController {
         return ResponseEntity.ok(result);
     }
 
+    @PutMapping("/{id}/capacity")
+    ResponseEntity<ChangeRoomCapacityCommand.Result> changeCapacity(@PathVariable UUID id, @RequestBody ChangeRoomCapacityRequest request) {
+        var command = new ChangeRoomCapacityCommand(id, request.newCapacity());
+        ChangeRoomCapacityCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
     record CreateRoomRequest(String building, int floor, int capacity, String roomCode) {
     }
 
@@ -58,5 +66,8 @@ class RoomCommandController {
     }
 
     record RelocateRoomRequest(String newBuilding, int newFloor) {
+    }
+
+    record ChangeRoomCapacityRequest(int newCapacity) {
     }
 }

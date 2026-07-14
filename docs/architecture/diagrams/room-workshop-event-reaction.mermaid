@@ -1,20 +1,27 @@
 graph TD
-    A[Module Room] -->|RoomRenamed| B[Workshop Module]
-    A -->|RoomLocationChanged| B
+    A[Module Room] -->|RoomRenamed <br>CODE_CHANGED / LOCATION_CHANGED| B[Workshop Module]
     A -->|RoomDeactivated| B
+    A -->|RoomCapacityChanged <br>EVENT MỚI| B
 
     B --> C{Workshop State?}
 
-    C -->|DRAFT| D[KHÔNG LÀM GÌ]
-    C -->|PUBLISHED| E[Reschedule + WorkshopEvents + Notify]
-    C -->|IN_PROGRESS| F[Emergency Alert + WorkshopEvents]
-    C -->|COMPLETED| G[KHÔNG LÀM GÌ]
-    C -->|CANCELLED| H[KHÔNG LÀM GÌ]
-    C -->|RESCHEDULED| I[KHÔNG LÀM GÌ]
+    C -->|DRAFT| D[KHÔNG LÀM GÌ / CẬP NHẬT METADATA]
+    C -->|IN_PROGRESS| D
+    C -->|COMPLETED / CANCELLED / RESCHEDULED| D
 
-    E --> J[workshops UPDATE]
-    E --> K[workshop_events INSERT]
-    E --> L[Thông báo qua registrations]
+    C -->|PUBLISHED| E[Process Business Reactions]
 
-    F --> M[workshop_events INSERT]
-    F --> N[Thông báo khẩn cấp qua registrations]
+    %% Tiêu điểm xử lý tại nhánh PUBLISHED
+    E --> E1{Loại Event là gì?}
+
+    E1 -->|RoomRenamed / LocationChanged| E_Loc[Reschedule + Insert Event + Notify]
+    E_Loc --> J1[workshops UPDATE vị trí/tên]
+    E_Loc --> K1[workshop_events INSERT]
+    E_Loc --> L1[Thông báo đổi địa điểm qua registrations]
+
+    E1 -->|RoomDeactivated| E_Deact[Chuyển trạng thái sang <br>ROOM_DEACTIVATED_PENDING + Báo Admin]
+
+    E1 -->|RoomCapacityChanged| E_Cap[Capacity Delta Check]
+    E_Cap --> E_Cap_Check{Học viên hiện tại > Capacity mới?}
+    E_Cap_Check -->|Thỏa mãn / Nhỏ hơn| E_Cap_OK[Cập nhật max_capacity ngầm <br> Không làm gì thêm]
+    E_Cap_Check -->|VƯỢT QUÁ| E_Cap_Crisis[Kích hoạt luồng khủng hoảng <br>Chuyển sang OVER_CAPACITY_PENDING + Báo Admin]
