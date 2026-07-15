@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-12
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** `docs/architecture/development-guidelines.md`, ADR 0001, `.AGENTS.md`
+- **Related:** `docs/architecture/development-guidelines.md`, ADR 0001, ADR 0005, `.AGENTS.md`
 
 ## Context
 
@@ -67,3 +67,12 @@ application internals, and the buses resolve handlers only within the owning mod
 ## Notes
 This branch only restructures packaging and documentation — **no business logic** is added. Handlers,
 buses, DTOs and gateways will be implemented in the following feature branch.
+
+## Refinement Note (ADR 0005)
+
+ADR 0005 (Domain Factory Gateway & Global Invariant via Domain Policy Interface) refines the layering decided
+here. It does **not** overturn §2 (reject `domain/spi`): outbound SPI ports still live in `application/port/out/`.
+ADR 0005 introduces a *domain-owned Policy interface* (`RoomUniquenessPolicy`) for set-based invariants — a
+distinct concept from an outbound SPI port — plus a Domain `RoomFactory` construction gateway. The application
+`RoomExistencePort` (an SPI port that merely wrapped the uniqueness query) is retired in favor of the domain
+policy. See ADR 0005 for the full rationale.
