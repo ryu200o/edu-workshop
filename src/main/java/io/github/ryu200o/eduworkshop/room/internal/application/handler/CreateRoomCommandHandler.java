@@ -1,8 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
@@ -21,12 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, CreateRoomCommand.Result> {
 
-    private final RoomExistencePort roomExistencePort;
-    private final RoomStateGateway roomStateGateway;
+    private final RoomRepository roomRepository;
 
-    CreateRoomCommandHandler(RoomExistencePort roomExistencePort, RoomStateGateway roomStateGateway) {
-        this.roomExistencePort = roomExistencePort;
-        this.roomStateGateway = roomStateGateway;
+    CreateRoomCommandHandler(RoomRepository roomRepository) {
+        this.roomRepository = roomRepository;
     }
 
     @Override
@@ -36,14 +33,14 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
         RoomLocation location = RoomLocation.of(command.building(), command.floor());
         RoomName name = RoomName.of(location, command.roomCode());
 
-        // Step 2 — DB guard (Global invariant): single existence check.
-        if (roomExistencePort.existsByNameAndLocation(name, location)) {
+        // Step 2 — DB guard (Global invariant): single coordinate existence check.
+        if (roomRepository.existsByCoordinate(location.building(), location.floor(), name.code())) {
             throw new DuplicateRoomException(name, location);
         }
 
         // Step 3 — Build the aggregate via the domain, then persist.
         Room room = Room.create(name, location, command.capacity());
-        Room saved = roomStateGateway.save(room);
+        Room saved = roomRepository.save(room);
         return new CreateRoomCommand.Result(saved.id(), saved.name().asString());
     }
 }

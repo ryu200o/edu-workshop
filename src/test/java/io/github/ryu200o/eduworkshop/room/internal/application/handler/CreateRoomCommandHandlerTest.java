@@ -1,8 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -17,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -26,13 +26,10 @@ import static org.mockito.Mockito.when;
 class CreateRoomCommandHandlerTest {
 
     @Mock
-    private RoomExistencePort roomExistencePort;
-
-    @Mock
-    private RoomStateGateway roomStateGateway;
+    private RoomRepository roomRepository;
 
     private CreateRoomCommandHandler handler() {
-        return new CreateRoomCommandHandler(roomExistencePort, roomStateGateway);
+        return new CreateRoomCommandHandler(roomRepository);
     }
 
     // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any DB call ──
@@ -43,7 +40,7 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badCode))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomExistencePort, roomStateGateway);
+        verifyNoInteractions(roomRepository);
     }
 
     @Test
@@ -53,33 +50,33 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badFloor))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomExistencePort, roomStateGateway);
+        verifyNoInteractions(roomRepository);
     }
 
     // ── Step 2: DB guard (Global invariant) blocks duplicates, never persists ──
     @Test
     void dbGuard_rejectsDuplicate_andDoesNotSave() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 50, "01");
-        when(roomExistencePort.existsByNameAndLocation(any(), any())).thenReturn(true);
+        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomExistencePort).existsByNameAndLocation(any(), any());
-        verify(roomStateGateway, never()).save(any());
+        verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
+        verify(roomRepository, never()).save(any());
     }
 
     // ── Step 3: Happy path — passes both guards, persists, returns id ──
     @Test
     void happyPath_passesGuards_persists_andReturnsId() {
         CreateRoomCommand command = new CreateRoomCommand("f", 2, 50, "01"); // lowercase building
-        when(roomExistencePort.existsByNameAndLocation(any(), any())).thenReturn(false);
-        when(roomStateGateway.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
+        when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CreateRoomCommand.Result result = handler().handle(command);
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
-        verify(roomStateGateway).save(captor.capture());
+        verify(roomRepository).save(captor.capture());
         Room persisted = captor.getValue();
 
         assertThat(result.id()).isEqualTo(persisted.id());
@@ -92,13 +89,13 @@ class CreateRoomCommandHandlerTest {
     @Test
     void guardsRunInOrder_existenceCheckedBeforeSave() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 50, "01");
-        when(roomExistencePort.existsByNameAndLocation(any(), any())).thenReturn(false);
-        when(roomStateGateway.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
+        when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(command);
 
-        var inOrder = org.mockito.Mockito.inOrder(roomExistencePort, roomStateGateway);
-        inOrder.verify(roomExistencePort).existsByNameAndLocation(any(), any());
-        inOrder.verify(roomStateGateway).save(any());
+        var inOrder = org.mockito.Mockito.inOrder(roomRepository);
+        inOrder.verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
+        inOrder.verify(roomRepository).save(any());
     }
 }

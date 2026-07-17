@@ -1,12 +1,9 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,38 +16,32 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapacityCommand, ChangeRoomCapacityCommand.Result> {
 
-    private final RoomStateGateway roomStateGateway;
+    private final RoomRepository roomRepository;
 
-    ChangeRoomCapacityCommandHandler(RoomStateGateway roomStateGateway) {
-        this.roomStateGateway = roomStateGateway;
+    ChangeRoomCapacityCommandHandler(RoomRepository roomRepository) {
+        this.roomRepository = roomRepository;
     }
 
     @Override
     @Transactional
     public ChangeRoomCapacityCommand.Result handle(@NonNull ChangeRoomCapacityCommand command) {
         // Step 1 — Load the aggregate (write side).
-        Room room = roomStateGateway.loadById(command.roomId())
-                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
+        Room room = RoomCommandGuard.loadForMutation(roomRepository, command.roomId());
 
-        // Step 2 — RAM guard (local invariant): reject non-positive capacity instantly, no outer query.
-        if (command.newCapacity() <= 0) {
-            throw new RoomDomainException("Room capacity must be greater than zero.");
-        }
-
-        // Step 3 — Idempotency: same capacity ⇒ no change, no save.
+        // Step 2 — Idempotency: same capacity ⇒ no change, no save.
         //         Returns the current entity's updatedAt (NOT Instant.now()) — nothing changed.
+        //         (The capacity>0 invariant is enforced solely by the domain in Room.changeCapacity.)
         if (command.newCapacity() == room.capacity()) {
             return toResult(room);
         }
 
-        // Step 4 — Domain mutation (records RoomCapacityChanged) then persist.
+        // Step 3 — Domain mutation (records RoomCapacityChanged) then persist.
         int oldCapacity = room.capacity();
         room.changeCapacity(command.newCapacity());
-        Room saved = roomStateGateway.save(room);
+        Room saved = roomRepository.save(room);
         return new ChangeRoomCapacityCommand.Result(saved.id(), oldCapacity, saved.capacity(), saved.updatedAt());
     }
 
-    @Contract("_ -> new")
     private static ChangeRoomCapacityCommand.@NonNull Result toResult(@NonNull Room room) {
         return new ChangeRoomCapacityCommand.Result(
                 room.id(), room.capacity(), room.capacity(), room.updatedAt());

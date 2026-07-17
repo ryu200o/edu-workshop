@@ -2,9 +2,8 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
@@ -28,10 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JpaRoomAdapterTest {
 
     @Autowired
-    private RoomStateGateway roomStateGateway;
-
-    @Autowired
-    private RoomExistencePort roomExistencePort;
+    private RoomRepository roomRepository;
 
     @Autowired
     private RoomQueryPort roomQueryPort;
@@ -46,7 +42,7 @@ class JpaRoomAdapterTest {
     void save_thenFindById_roundTripsThroughDatabase() {
         Room room = newRoom();
 
-        roomStateGateway.save(room);
+        roomRepository.save(room);
         Optional<RoomDetailView> found = roomQueryPort.findById(room.id());
 
         assertThat(found).isPresent();
@@ -62,7 +58,7 @@ class JpaRoomAdapterTest {
     @Test
     void save_thenFindByName_returnsProjection() {
         Room room = newRoom();
-        roomStateGateway.save(room);
+        roomRepository.save(room);
 
         Optional<RoomSummaryView> found = roomQueryPort.findByName(RoomName.ofRaw("F.0201"));
 
@@ -71,18 +67,18 @@ class JpaRoomAdapterTest {
     }
 
     @Test
-    void existsByNameAndLocation_reflectsPersistedRows_viaCompositeKey() {
+    void existsByCoordinate_reflectsPersistedRows_viaCompositeKey() {
         RoomLocation location = RoomLocation.of("F", 2);
         RoomName name = RoomName.of(location, "01");
 
-        assertThat(roomExistencePort.existsByNameAndLocation(name, location)).isFalse();
+        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), name.code())).isFalse();
 
-        roomStateGateway.save(Room.create(name, location, 50));
+        roomRepository.save(Room.create(name, location, 50));
 
-        assertThat(roomExistencePort.existsByNameAndLocation(name, location)).isTrue();
+        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), name.code())).isTrue();
         // Different code at same location must NOT collide.
-        assertThat(roomExistencePort.existsByNameAndLocation(
-                RoomName.of(location, "02"), location)).isFalse();
+        assertThat(roomRepository.existsByCoordinate(
+                location.building(), location.floor(), "02")).isFalse();
     }
 
     @Test
@@ -97,9 +93,9 @@ class JpaRoomAdapterTest {
 
     @Test
     void loadById_thenChangeCode_roundTripsAggregateAndPersistsRename() {
-        Room saved = roomStateGateway.save(newRoom());
+        Room saved = roomRepository.save(newRoom());
 
-        Optional<Room> loaded = roomStateGateway.loadById(saved.id());
+        Optional<Room> loaded = roomRepository.loadById(saved.id());
         assertThat(loaded).isPresent();
 
         Room room = loaded.get();
@@ -108,7 +104,7 @@ class JpaRoomAdapterTest {
         assertThat(room.capacity()).isEqualTo(50);
 
         room.changeCode("LAB");
-        roomStateGateway.save(room);
+        roomRepository.save(room);
 
         Optional<RoomDetailView> renamed = roomQueryPort.findById(saved.id());
         assertThat(renamed).isPresent();
@@ -117,21 +113,21 @@ class JpaRoomAdapterTest {
 
     @Test
     void loadById_whenAbsent_returnsEmpty() {
-        assertThat(roomStateGateway.loadById(UUID.randomUUID())).isEmpty();
+        assertThat(roomRepository.loadById(UUID.randomUUID())).isEmpty();
     }
 
     @Test
-    void existsByBuildingAndFloorAndCode_reflectsTargetCoordinate() {
+    void existsByCoordinate_reflectsTargetCoordinate() {
         RoomLocation location = RoomLocation.of("F", 2);
 
         // target (F, 2, "02") is free before any persist
-        assertThat(roomExistencePort.existsByBuildingAndFloorAndCode("F", 2, "02")).isFalse();
+        assertThat(roomRepository.existsByCoordinate("F", 2, "02")).isFalse();
 
-        roomStateGateway.save(Room.create(RoomName.of(location, "01"), location, 50));
+        roomRepository.save(Room.create(RoomName.of(location, "01"), location, 50));
 
         // same building/floor but different code is free
-        assertThat(roomExistencePort.existsByBuildingAndFloorAndCode("F", 2, "02")).isFalse();
+        assertThat(roomRepository.existsByCoordinate("F", 2, "02")).isFalse();
         // occupied coordinate collides
-        assertThat(roomExistencePort.existsByBuildingAndFloorAndCode("F", 2, "01")).isTrue();
+        assertThat(roomRepository.existsByCoordinate("F", 2, "01")).isTrue();
     }
 }
