@@ -47,6 +47,11 @@ bypassing aggregate reconstruction. Commands keep going through the Domain Model
 invariants). Read and write outbound ports are separated (e.g. `RoomRepository` vs
 `RoomQueryPort`), enabling future read/replica splitting without touching the Application layer.
 
+> **Update (Room module):** the read side is implemented with **JOOQ** (`JooqRoomReadAdapter`), querying the
+> `rooms` table directly via generated type-safe table classes and mapping flat columns into `Room*View`
+> projections — no JPA entity, no domain reconstruction. The write side stays on **JPA**
+> (`JpaRoomWriteAdapter`); both share one datasource (logical C/Q split). See `development-guidelines.md` §3.6.
+
 ### 5. "Intentional duplication" — each module owns its own Command/Query Bus
 Rather than sharing a single global bus, **each module declares its own `CommandBus`/`QueryBus`**
 (and the `Command`/`Query`/`*Handler` shared framework interfaces per module). This intentional

@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
+package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.jpa;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

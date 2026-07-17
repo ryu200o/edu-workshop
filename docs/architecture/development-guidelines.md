@@ -27,7 +27,10 @@
 │       ├── driving/
 │       │   ├── http/          # *CommandController, *QueryController, *ExceptionAdvice
 │       │   └── event/         # Event Bus consumer (tương lai)
-│       └── driven/            # jpa/ (Jpa*Adapter), persistence entity/mapper
+│       └── driven/
+│           └── persistence/
+│               ├── jpa/        # JpaRoomWriteAdapter (impl RoomRepository, C) + RoomJpaRepository/Entity
+│               └── jooq/       # JooqRoomReadAdapter (impl RoomQueryPort, Q) + generated jooq.tables.Rooms
 └── RoomExposeAPI.java         # public API (cross-module surface, để trống nếu chưa công bố)
 ```
 
@@ -198,6 +201,19 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
 ```
 
 ### 3.5 QueryBus — tương tự CommandBus, resolve qua `ResolvableType`.
+
+### 3.6 Driven persistence — tách Command (JPA) / Query (JOOQ), CQRS logical split (ADR 0002)
+> Write và read **cùng 1 datasource** (logical split, không tách DB vật lý). Mỗi bên có adapter + mapping riêng.
+- **Command side (`persistence/jpa/`):** `JpaRoomWriteAdapter` impl `RoomRepository` (save / loadById /
+  existsByCoordinate). Mapping domain ↔ JPA entity nằm ở đây. Flyway là **schema owner duy nhất**.
+- **Query side (`persistence/jooq/`):** `JooqRoomReadAdapter` impl `RoomQueryPort` (findById / findByName).
+  Dùng `DSLContext` (cùng DataSource) + generated `io.github.ryu200o.eduworkshop.room.jooq.tables.Rooms`
+  để query cột phẳng → map trực tiếp vào `Room*View`. **KHÔNG** qua JPA entity, **KHÔNG** reconstruct domain.
+- JOOQ table class sinh tự động từ `src/main/resources/db/codegen/rooms_schema.sql` (codegen-only DDL, mirror
+  schema cuối cùng) qua `jooq-codegen-maven` (DDLDatabase) ở phase `generate-sources`. JOOQ **chỉ đọc** schema,
+  không chạy migration. Khi schema đổi: sửa Flyway migration + cập nhật `rooms_schema.sql`, rồi rebuild.
+- Cấu hình: `spring.jooq.sql-dialect=POSTGRES` (H2 test chạy `MODE=PostgreSQL` nên đồng bộ cả 2 môi trường).
+- Rủi ro đã biết: 2 bộ mapping song song (entity vs row) — schema đổi phải sửa cả 2. Chấp nhận trade-off nhỏ.
 
 ---
 
