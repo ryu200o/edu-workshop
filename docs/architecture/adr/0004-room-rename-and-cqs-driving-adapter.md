@@ -33,7 +33,7 @@ no `updatedAt` bump) and **rejects a `DEACTIVATED` room** (frozen-permanent, con
 ### 2. Multi-tier guard, in performance order (write side)
 `RenameRoomCommandHandler` enforces: **load aggregate** (write port) → **RAM guard** (the `RoomName` VO
 self-validates/normalizes the new code) → **idempotency skip** (same code ⇒ no gate, no persist) →
-**DB gate** (`RoomExistencePort.existsByBuildingAndFloorAndCode(building, floor, code)` against the
+**DB gate** (`RoomRepository.existsByCoordinate(building, floor, code)` against the
 *target* coordinate) → **domain mutation** (`changeCode`) → **persist**. The DB gate catches a *different*
 room already occupying the target coordinate; idempotency prevents a false-positive self-collision.
 

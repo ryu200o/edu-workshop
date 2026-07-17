@@ -44,8 +44,8 @@ interfaces in `port/in/` and the module's `ExposeAPI`.
 Queries do **not** pass through the Domain Model. A query handler calls an outbound **query gateway**
 that returns a response/projection DTO directly (read-optimized, `@Transactional(readOnly = true)`),
 bypassing aggregate reconstruction. Commands keep going through the Domain Model (rich behavior +
-invariants). Read and write outbound ports are separated (e.g. `RoomStateGateway` vs
-`RoomQueryGateway`), enabling future read/replica splitting without touching the Application layer.
+invariants). Read and write outbound ports are separated (e.g. `RoomRepository` vs
+`RoomQueryPort`), enabling future read/replica splitting without touching the Application layer.
 
 ### 5. "Intentional duplication" — each module owns its own Command/Query Bus
 Rather than sharing a single global bus, **each module declares its own `CommandBus`/`QueryBus`**

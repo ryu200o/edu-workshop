@@ -3,16 +3,15 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
+import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 /**
  * Use-case handler for relocating a room (changing its building/floor; code unchanged). Enforces the
@@ -61,7 +60,8 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
         return toResult(saved, oldLocation);
     }
 
-    private static RelocateRoomCommand.Result toResult(Room room, RoomLocation oldLocation) {
+    @Contract("_, _ -> new")
+    private static RelocateRoomCommand.@NonNull Result toResult(@NonNull Room room, RoomLocation oldLocation) {
         return new RelocateRoomCommand.Result(
                 room.id(), oldLocation, room.location(), room.name().asString(), room.updatedAt());
     }

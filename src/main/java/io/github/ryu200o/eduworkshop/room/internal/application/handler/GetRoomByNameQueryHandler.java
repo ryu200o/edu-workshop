@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.Get
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.cqs.QueryHandler;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;

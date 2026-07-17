@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.room.internal.domain.model.value;
+package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.jetbrains.annotations.Contract;

@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.out;
 
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 
 import java.util.Optional;
 import java.util.UUID;

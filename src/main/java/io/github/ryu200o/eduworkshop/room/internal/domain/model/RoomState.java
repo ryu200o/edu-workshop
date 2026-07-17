@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.room.internal.domain.model.state;
+package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
 /**
  * Physical / static operating state of a room (venue).

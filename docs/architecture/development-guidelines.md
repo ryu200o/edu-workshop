@@ -12,18 +12,16 @@
 <module>/
 ├── internal/
 │   ├── domain/
-│   │   ├── model/
-│   │   │   ├── entity/        # Room, Workshop... (aggregate root, package-private)
-│   │   │   ├── vo/            # RoomCode, RoomName, RoomLocation (immutable, tự validate)
-│   │   │   └── event/         # RoomRenamedEvent, RoomCreatedEvent (sealed RoomDomainEvent)
-│   │   ├── service/           # domain service (nếu cần)
-│   │   └── policy/            # business rule / spec
+│   │   ├── model/             # Aggregate Root, Value Objects, state enum — TẤT CẢ ở root (flat)
+│   │   │   ├── event/         # RoomCreated, RoomRenamedEvent, ... (sealed RoomDomainEvent)
+│   │   │   └── exception/     # DuplicateRoomException, RoomDomainException, IllegalRoomStateException, ...
+│   │   └── service/           # domain service (nếu cần)
 │   ├── application/
 │   │   ├── port/
 │   │   │   ├── in/
 │   │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
 │   │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
-│   │   │   └── out/           # RoomStateGateway, RoomExistencePort, RoomQueryPort
+│   │   │   └── out/           # RoomRepository (write), RoomQueryPort (read, CQRS bypass)
 │   │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
 │   └── adapter/
 │       ├── driving/
@@ -73,17 +71,16 @@ public record CreateRoomCommand(String building, int floor, int capacity, String
 }
 ```
 
-### 2.3 Out Port (State / Existence) — ghi
+### 2.3 Out Port — ghi (RoomRepository)
+> Gộp write-side load/save + existence check vào MỘT port duy nhất để gọn, dễ inject, focus nghiệp vụ.
+> `RoomExistencePort` (cũ) + `RoomStateGateway` (cũ) đã hợp nhất tại đây — không còn tách rời.
 ```java
-// port.out.RoomStateGateway — write port, trả domain entity
-public interface RoomStateGateway {
+// port.out.RoomRepository — write port duy nhất (load + save + existence)
+public interface RoomRepository {
     Optional<Room> loadById(UUID id);
     Room save(Room room);
-}
-
-// port.out.RoomExistencePort — DB gate (kiểm tra coordinate target đã bị room KHÁC chiếm chưa)
-public interface RoomExistencePort {
-    boolean existsByBuildingAndFloorAndCode(String building, int floor, String code);
+    // Global invariant: kiểm tra coordinate target đã bị room KHÁC chiếm chưa (1 method duy nhất)
+    boolean existsByCoordinate(String building, int floor, String code);
 }
 ```
 
@@ -93,13 +90,12 @@ public interface RoomExistencePort {
 @Component
 class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RenameRoomCommand.Result> {
 
-    private final RoomStateGateway gateway;
-    private final RoomExistencePort existencePort;
+    private final RoomRepository repository;
 
     @Override
     public RenameRoomCommand.Result handle(RenameRoomCommand command) {
-        // 1. Load aggregate (write port)
-        Room room = gateway.loadById(command.roomId())
+        // 1. Load aggregate (write repository)
+        Room room = repository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
         // 2. RAM guard: RoomName VO tự validate/normalize newCode
@@ -110,8 +106,8 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
             return toResult(room, room.name().code());
         }
 
-        // 4. DB guard: chặn room KHÁC chiếm target coordinate
-        if (existencePort.existsByBuildingAndFloorAndCode(
+        // 4. DB guard: chặn room KHÁC chiếm target coordinate (1 method chuẩn)
+        if (repository.existsByCoordinate(
                 room.location().building(), room.location().floor(), candidate.code())) {
             throw new DuplicateRoomException(candidate, room.location());
         }
@@ -119,7 +115,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         // 5. Domain mutation (changeCode tái tính name + ghi RoomRenamedEvent) rồi persist
         String oldCode = room.name().code();
         room.changeCode(command.newCode());
-        Room saved = gateway.save(room);
+        Room saved = repository.save(room);
         return toResult(saved, oldCode);
     }
 
@@ -170,7 +166,8 @@ public record RoomDetailView(UUID id, String name, String building, int floor, i
 public record RoomSummaryView(UUID id, String name, String building, int floor) {}
 ```
 
-### 3.3 Out Port (Query Port) — đọc
+### 3.3 Out Port — đọc (RoomQueryPort, CQRS bypass)
+> Read-side giữ nguyên là `RoomQueryPort` (CQRS bypass), trả View trực tiếp, không reconstruct domain.
 ```java
 public interface RoomQueryPort {
     Optional<RoomDetailView> findById(UUID id);          // CQRS bypass: trả View trực tiếp

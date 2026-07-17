@@ -5,10 +5,10 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.vie
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.state.RoomState;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;

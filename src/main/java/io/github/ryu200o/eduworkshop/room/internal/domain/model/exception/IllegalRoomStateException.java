@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.exception;
 
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.state.RoomState;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 
 import java.util.UUID;
 
