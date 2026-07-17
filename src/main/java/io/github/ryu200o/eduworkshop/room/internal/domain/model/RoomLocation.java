@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
 
@@ -22,7 +21,7 @@ public final class RoomLocation {
         this.floor = floor;
     }
 
-    public static @NonNull RoomLocation of(String building, int floor) {
+    public static RoomLocation of(String building, int floor) {
         String normalized = normalizeBuilding(building);
         if (floor <= 0) {
             throw new RoomDomainException("Room floor must be a positive integer.");
@@ -33,11 +32,11 @@ public final class RoomLocation {
     /**
      * Reconstructs a location from persisted, already-normalized parts (no re-validation of format).
      */
-    public static @NonNull RoomLocation reconstruct(String building, int floor) {
+    public static RoomLocation reconstruct(String building, int floor) {
         return new RoomLocation(building, floor);
     }
 
-    private static @NonNull String normalizeBuilding(String building) {
+    private static String normalizeBuilding(String building) {
         if (building == null || building.isBlank()) {
             throw new RoomDomainException("Room building must not be blank.");
         }
@@ -56,7 +55,7 @@ public final class RoomLocation {
         return floor;
     }
 
-    public @NonNull String asString() {
+    public String asString() {
         return building + " / Floor " + floor;
     }
 

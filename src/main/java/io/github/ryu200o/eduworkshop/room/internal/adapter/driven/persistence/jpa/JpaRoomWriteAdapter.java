@@ -5,7 +5,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -42,7 +41,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
         return room;
     }
 
-    private static @NonNull RoomJpaEntity toEntity(@NonNull Room room) {
+    private static RoomJpaEntity toEntity(Room room) {
         return new RoomJpaEntity(
                 room.id(),
                 room.name().asString(),
@@ -56,7 +55,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
         );
     }
 
-    private static @NonNull Room toRoom(@NonNull RoomJpaEntity entity) {
+    private static Room toRoom(RoomJpaEntity entity) {
         RoomLocation location = RoomLocation.reconstruct(entity.getBuilding(), entity.getFloor());
         RoomName name = RoomName.of(location, entity.getCode());
         RoomState state = RoomState.valueOf(entity.getState());

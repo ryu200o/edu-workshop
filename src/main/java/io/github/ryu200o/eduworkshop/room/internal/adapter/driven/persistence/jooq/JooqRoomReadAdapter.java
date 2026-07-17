@@ -7,7 +7,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.jooq.tables.Rooms;
 import org.jooq.DSLContext;
 import org.jooq.Record;
-import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -59,7 +58,7 @@ class JooqRoomReadAdapter implements RoomQueryPort {
                 .map(JooqRoomReadAdapter::toSummaryView);
     }
 
-    private static @NonNull RoomDetailView toDetailView(@NonNull Record record) {
+    private static RoomDetailView toDetailView(Record record) {
         return new RoomDetailView(
                 record.get(ROOMS.ID),
                 record.get(ROOMS.NAME),
@@ -70,7 +69,7 @@ class JooqRoomReadAdapter implements RoomQueryPort {
         );
     }
 
-    private static @NonNull RoomSummaryView toSummaryView(@NonNull Record record) {
+    private static RoomSummaryView toSummaryView(Record record) {
         return new RoomSummaryView(
                 record.get(ROOMS.ID),
                 record.get(ROOMS.NAME),

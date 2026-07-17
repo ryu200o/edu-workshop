@@ -7,7 +7,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.Duplic
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,7 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
     @Override
     @Transactional
-    public RelocateRoomCommand.Result handle(@NonNull RelocateRoomCommand command) {
+    public RelocateRoomCommand.Result handle(RelocateRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
         Room room = roomRepository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
@@ -55,7 +54,7 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
         return toResult(saved, oldLocation);
     }
 
-    private static RelocateRoomCommand.@NonNull Result toResult(@NonNull Room room, RoomLocation oldLocation) {
+    private static RelocateRoomCommand.Result toResult(Room room, RoomLocation oldLocation) {
         return new RelocateRoomCommand.Result(
                 room.id(), oldLocation, room.location(), room.name().asString(), room.updatedAt());
     }

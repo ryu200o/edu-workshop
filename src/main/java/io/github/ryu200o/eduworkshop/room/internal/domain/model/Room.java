@@ -8,7 +8,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRename
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import org.jspecify.annotations.NonNull;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,7 +53,7 @@ public class Room {
      * and emits a {@link RoomCreated} event. The room name is generated from its location and a
      * flexible alphanumeric code, then validated by the {@link RoomName} value object (self-defense).
      */
-    public static @NonNull Room create(RoomName name, RoomLocation location, int capacity) {
+    public static Room create(RoomName name, RoomLocation location, int capacity) {
         Instant now = Instant.now();
         return create(UUID.randomUUID(), name, location, capacity, now, now);
     }
@@ -63,7 +62,7 @@ public class Room {
      * Factory with explicit identity/timestamps — used when minting a new room from externally
      * supplied identifiers. Emits a {@link RoomCreated} event.
      */
-    public static @NonNull Room create(UUID id, RoomName name, RoomLocation location, int capacity, Instant createdAt, Instant updatedAt) {
+    public static Room create(UUID id, RoomName name, RoomLocation location, int capacity, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
         requireNameConsistentWithLocation(name, location);
         requirePositiveCapacity(capacity);
@@ -79,7 +78,7 @@ public class Room {
      * Reconstructs an existing aggregate from persisted state. Pure data mapping only:
      * it must NOT impose creation rules nor record any event (no historical event re-dispatch).
      */
-    public static @NonNull Room reconstruct(UUID id, RoomName name, RoomLocation location, int capacity,
+    public static Room reconstruct(UUID id, RoomName name, RoomLocation location, int capacity,
                                             RoomState state, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
         requireNonNullLocation(location);
@@ -148,7 +147,7 @@ public class Room {
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
      * @throws RoomDomainException       if the new code is malformed (validated by {@link RoomName})
      */
-    public void changeCode(@NonNull String newCode) {
+    public void changeCode(String newCode) {
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room's code cannot be changed; the deactivation is permanent.");
@@ -181,7 +180,7 @@ public class Room {
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
      * @throws RoomDomainException       if the new location is malformed (validated by {@link RoomLocation})
      */
-    public void relocateTo(@NonNull RoomLocation newLocation) {
+    public void relocateTo(RoomLocation newLocation) {
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room cannot be relocated; the deactivation is permanent.");

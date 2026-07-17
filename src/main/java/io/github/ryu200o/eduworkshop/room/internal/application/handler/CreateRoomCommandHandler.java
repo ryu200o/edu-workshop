@@ -7,7 +7,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.Duplic
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,7 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
 
     @Override
     @Transactional
-    public CreateRoomCommand.Result handle(@NonNull CreateRoomCommand command) {
+    public CreateRoomCommand.Result handle(CreateRoomCommand command) {
         // Step 1 — RAM guard (Local invariants): value objects self-validate & normalize, no IO.
         RoomLocation location = RoomLocation.of(command.building(), command.floor());
         RoomName name = RoomName.of(location, command.roomCode());
