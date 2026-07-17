@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
@@ -26,7 +27,8 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
     @Transactional
     public ChangeRoomCapacityCommand.Result handle(@NonNull ChangeRoomCapacityCommand command) {
         // Step 1 — Load the aggregate (write side).
-        Room room = RoomCommandGuard.loadForMutation(roomRepository, command.roomId());
+        Room room = roomRepository.loadById(command.roomId())
+                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
         // Step 2 — Idempotency: same capacity ⇒ no change, no save.
         //         Returns the current entity's updatedAt (NOT Instant.now()) — nothing changed.

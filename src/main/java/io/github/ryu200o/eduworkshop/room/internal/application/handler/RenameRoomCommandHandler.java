@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.R
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
 import org.jspecify.annotations.NonNull;
@@ -29,7 +30,8 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
     @Transactional
     public RenameRoomCommand.Result handle(@NonNull RenameRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
-        Room room = RoomCommandGuard.loadForMutation(roomRepository, command.roomId());
+        Room room = roomRepository.loadById(command.roomId())
+                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
         // Step 2 — RAM guard (local invariant): the VO validates/normalizes the new code.
         RoomName candidate = RoomName.of(room.location(), command.newCode());
@@ -40,7 +42,9 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         }
 
         // Step 4 — DB guard (global invariant): target coordinate must be free of *other* rooms.
-        RoomCommandGuard.assertCoordinateFree(roomRepository, candidate, room.location());
+        if (roomRepository.existsByCoordinate(room.location().building(), room.location().floor(), candidate.code())) {
+            throw new DuplicateRoomException(candidate, room.location());
+        }
 
         // Step 5 — Domain mutation (recomputes name, records RoomRenamedEvent) then persist.
         String oldCode = room.name().code();

@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.R
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
 import org.jspecify.annotations.NonNull;
@@ -29,7 +30,8 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
     @Transactional
     public RelocateRoomCommand.Result handle(@NonNull RelocateRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
-        Room room = RoomCommandGuard.loadForMutation(roomRepository, command.roomId());
+        Room room = roomRepository.loadById(command.roomId())
+                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
         // Step 2 — RAM guard (local invariant): the VO validates/normalizes the new location.
         RoomLocation newLocation = RoomLocation.of(command.newBuilding(), command.newFloor());
@@ -42,7 +44,9 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
         // Step 4 — DB guard (global invariant): target coordinate (new location + same code) must be free
         //         of *other* rooms.
-        RoomCommandGuard.assertCoordinateFree(roomRepository, room.name(), newLocation);
+        if (roomRepository.existsByCoordinate(newLocation.building(), newLocation.floor(), room.name().code())) {
+            throw new DuplicateRoomException(room.name(), newLocation);
+        }
 
         // Step 5 — Domain mutation (recomputes name, records RoomRenamedEvent) then persist.
         RoomLocation oldLocation = room.location();
