@@ -8,7 +8,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRename
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.time.Instant;
@@ -80,7 +79,6 @@ public class Room {
      * Reconstructs an existing aggregate from persisted state. Pure data mapping only:
      * it must NOT impose creation rules nor record any event (no historical event re-dispatch).
      */
-    @Contract("_, _, _, _, _, _, _ -> new")
     public static @NonNull Room reconstruct(UUID id, RoomName name, RoomLocation location, int capacity,
                                             RoomState state, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);

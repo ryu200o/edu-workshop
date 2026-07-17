@@ -6,6 +6,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQuer
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.jooq.tables.Rooms;
 import org.jooq.DSLContext;
+import org.jooq.Record;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
@@ -42,18 +43,11 @@ class JooqRoomReadAdapter implements RoomQueryPort {
                 .from(ROOMS)
                 .where(ROOMS.ID.eq(id))
                 .fetchOptional()
-                .map(r -> new RoomDetailView(
-                        r.get(ROOMS.ID),
-                        r.get(ROOMS.NAME),
-                        r.get(ROOMS.BUILDING),
-                        r.get(ROOMS.FLOOR),
-                        r.get(ROOMS.CAPACITY),
-                        r.get(ROOMS.STATE)
-                ));
+                .map(JooqRoomReadAdapter::toDetailView);
     }
 
     @Override
-    public Optional<RoomSummaryView> findByName(@NonNull RoomName name) {
+    public Optional<RoomSummaryView> findByName(RoomName name) {
         return dsl.select(
                         ROOMS.ID,
                         ROOMS.NAME,
@@ -62,11 +56,26 @@ class JooqRoomReadAdapter implements RoomQueryPort {
                 .from(ROOMS)
                 .where(ROOMS.NAME.eq(name.asString()))
                 .fetchOptional()
-                .map(r -> new RoomSummaryView(
-                        r.get(ROOMS.ID),
-                        r.get(ROOMS.NAME),
-                        r.get(ROOMS.BUILDING),
-                        r.get(ROOMS.FLOOR)
-                ));
+                .map(JooqRoomReadAdapter::toSummaryView);
+    }
+
+    private static @NonNull RoomDetailView toDetailView(@NonNull Record record) {
+        return new RoomDetailView(
+                record.get(ROOMS.ID),
+                record.get(ROOMS.NAME),
+                record.get(ROOMS.BUILDING),
+                record.get(ROOMS.FLOOR),
+                record.get(ROOMS.CAPACITY),
+                record.get(ROOMS.STATE)
+        );
+    }
+
+    private static @NonNull RoomSummaryView toSummaryView(@NonNull Record record) {
+        return new RoomSummaryView(
+                record.get(ROOMS.ID),
+                record.get(ROOMS.NAME),
+                record.get(ROOMS.BUILDING),
+                record.get(ROOMS.FLOOR)
+        );
     }
 }

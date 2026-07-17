@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
@@ -23,7 +22,6 @@ public final class RoomLocation {
         this.floor = floor;
     }
 
-    @Contract("_, _ -> new")
     public static @NonNull RoomLocation of(String building, int floor) {
         String normalized = normalizeBuilding(building);
         if (floor <= 0) {
@@ -35,12 +33,10 @@ public final class RoomLocation {
     /**
      * Reconstructs a location from persisted, already-normalized parts (no re-validation of format).
      */
-    @Contract(value = "_, _ -> new", pure = true)
     public static @NonNull RoomLocation reconstruct(String building, int floor) {
         return new RoomLocation(building, floor);
     }
 
-    @Contract("null -> fail")
     private static @NonNull String normalizeBuilding(String building) {
         if (building == null || building.isBlank()) {
             throw new RoomDomainException("Room building must not be blank.");
@@ -60,7 +56,6 @@ public final class RoomLocation {
         return floor;
     }
 
-    @Contract(pure = true)
     public @NonNull String asString() {
         return building + " / Floor " + floor;
     }
