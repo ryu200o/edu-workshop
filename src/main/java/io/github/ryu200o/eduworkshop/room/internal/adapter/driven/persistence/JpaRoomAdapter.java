@@ -2,9 +2,8 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
@@ -23,7 +22,7 @@ import java.util.UUID;
  * Package-private; hidden inside the module's {@code internal} boundary.
  */
 @Component
-class JpaRoomAdapter implements RoomExistencePort, RoomStateGateway, RoomQueryPort {
+class JpaRoomAdapter implements RoomRepository, RoomQueryPort {
 
     private final RoomJpaRepository repository;
 
@@ -31,15 +30,9 @@ class JpaRoomAdapter implements RoomExistencePort, RoomStateGateway, RoomQueryPo
         this.repository = repository;
     }
 
-    // ── Write ports ──────────────────────────────────────────────────────────
+    // ── Write port (RoomRepository) ──────────────────────────────────────────
     @Override
-    public boolean existsByNameAndLocation(@NonNull RoomName name, @NonNull RoomLocation location) {
-        return repository.existsByBuildingAndFloorAndCode(
-                location.building(), location.floor(), name.code());
-    }
-
-    @Override
-    public boolean existsByBuildingAndFloorAndCode(String building, int floor, String code) {
+    public boolean existsByCoordinate(String building, int floor, String code) {
         return repository.existsByBuildingAndFloorAndCode(building, floor, code);
     }
 

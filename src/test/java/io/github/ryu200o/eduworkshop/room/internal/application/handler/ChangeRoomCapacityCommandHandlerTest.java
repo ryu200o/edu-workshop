@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -31,10 +31,10 @@ import static org.mockito.Mockito.when;
 class ChangeRoomCapacityCommandHandlerTest {
 
     @Mock
-    private RoomStateGateway roomStateGateway;
+    private RoomRepository roomRepository;
 
     private ChangeRoomCapacityCommandHandler handler() {
-        return new ChangeRoomCapacityCommandHandler(roomStateGateway);
+        return new ChangeRoomCapacityCommandHandler(roomRepository);
     }
 
     private static Room existingRoom() {
@@ -46,26 +46,27 @@ class ChangeRoomCapacityCommandHandlerTest {
     @Test
     void roomNotFound_whenLoadReturnsEmpty_throws() {
         UUID id = UUID.randomUUID();
-        when(roomStateGateway.loadById(id)).thenReturn(Optional.empty());
+        when(roomRepository.loadById(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(id, 80)))
                 .isInstanceOf(RoomNotFoundException.class);
 
-        verify(roomStateGateway, never()).save(any());
+        verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 2: RAM guard (local invariant) rejects non-positive capacity without persisting ──
+    // ── capacity invariant: the DOMAIN (Room.changeCapacity) rejects non-positive capacity ──
+    // (Double-guard removed in refactor: handler no longer re-checks capacity>0, domain is the single source.)
     @Test
-    void ramGuard_rejectsNonPositiveCapacity_withoutSaving() {
+    void domainRejectsNonPositiveCapacity_withoutSaving() {
         Room room = existingRoom();
-        when(roomStateGateway.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id(), 0)))
                 .isInstanceOf(RoomDomainException.class);
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id(), -3)))
                 .isInstanceOf(RoomDomainException.class);
 
-        verify(roomStateGateway, never()).save(any());
+        verify(roomRepository, never()).save(any());
     }
 
     // ── Idempotency: same capacity ⇒ no save, returns the entity's CURRENT updatedAt ──
@@ -76,27 +77,27 @@ class ChangeRoomCapacityCommandHandlerTest {
                 UUID.randomUUID(), RoomName.of(RoomLocation.of("F", 2), "01"),
                 RoomLocation.of("F", 2), 50, RoomState.ACTIVE,
                 Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
-        when(roomStateGateway.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
         ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id(), 50));
 
         assertThat(response.oldCapacity()).isEqualTo(50);
         assertThat(response.newCapacity()).isEqualTo(50);
         assertThat(response.updatedAt()).isEqualTo(fixedUpdated);   // NOT Instant.now()
-        verify(roomStateGateway, never()).save(any());
+        verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4: Happy path — passes guards, mutates, persists, returns projection ──
+    // ── Step 3: Happy path — passes guards, mutates, persists, returns projection ──
     @Test
     void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
-        when(roomStateGateway.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomStateGateway.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id(), 80));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
-        verify(roomStateGateway).save(captor.capture());
+        verify(roomRepository).save(captor.capture());
         Room saved = captor.getValue();
 
         assertThat(saved.capacity()).isEqualTo(80);
@@ -109,13 +110,13 @@ class ChangeRoomCapacityCommandHandlerTest {
     @Test
     void guardsRunInOrder_loadThenSave() {
         Room room = existingRoom();
-        when(roomStateGateway.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomStateGateway.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new ChangeRoomCapacityCommand(room.id(), 80));
 
-        var ordered = inOrder(roomStateGateway);
-        ordered.verify(roomStateGateway).loadById(any());
-        ordered.verify(roomStateGateway).save(any());
+        var ordered = inOrder(roomRepository);
+        ordered.verify(roomRepository).loadById(any());
+        ordered.verify(roomRepository).save(any());
     }
 }
