@@ -2,7 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.application.port.out;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 
 import java.util.Optional;
 import java.util.UUID;

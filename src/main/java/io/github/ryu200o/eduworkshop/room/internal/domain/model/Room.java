@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.room.internal.domain.model.entity;
+package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
@@ -8,9 +8,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRename
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.state.RoomState;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
 import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 

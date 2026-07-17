@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.out;
 
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 
 /**
  * Outbound port (SPI) for the global uniqueness invariant: checks whether a room with the given

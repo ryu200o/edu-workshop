@@ -2,7 +2,7 @@
 
 > **Cách dùng:** Tài liệu này là *cheat-sheet* — đọc để nắm công thức chuẩn trước khi code. Mỗi module
 > (Room, Workshop, ...) bắt buộc tuân thủ layout vàng bên dưới. Module **Room** hiện là
-> *reference implementation* (đã chạy thực tế, 87/87 test xanh): copy pattern từ đó khi tạo module mới.
+> *reference implementation* (đã chạy thực tế, 62/62 test xanh): copy pattern từ đó khi tạo module mới.
 
 ---
 
@@ -12,18 +12,16 @@
 <module>/
 ├── internal/
 │   ├── domain/
-│   │   ├── model/
-│   │   │   ├── entity/        # Room, Workshop... (aggregate root, package-private)
-│   │   │   ├── vo/            # RoomCode, RoomName, RoomLocation (immutable, tự validate)
-│   │   │   └── event/         # RoomRenamedEvent, RoomCreatedEvent (sealed RoomDomainEvent)
-│   │   ├── service/           # domain service (nếu cần)
-│   │   └── policy/            # business rule / spec
+│   │   ├── model/             # Aggregate Root, Value Objects, state enum — TẤT CẢ ở root (flat)
+│   │   │   ├── event/         # RoomCreated, RoomRenamedEvent, ... (sealed RoomDomainEvent)
+│   │   │   └── exception/     # DuplicateRoomException, RoomDomainException, IllegalRoomStateException, ...
+│   │   └── service/           # domain service (nếu cần)
 │   ├── application/
 │   │   ├── port/
 │   │   │   ├── in/
 │   │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
 │   │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
-│   │   │   └── out/           # RoomStateGateway, RoomQueryPort
+│   │   │   └── out/           # RoomRepository (write), RoomQueryPort (read, CQRS bypass)
 │   │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
 │   └── adapter/
 │       ├── driving/
@@ -73,61 +71,63 @@ public record CreateRoomCommand(String building, int floor, int capacity, String
 }
 ```
 
-### 2.3 Out Port (State) — ghi
+### 2.3 Out Port — ghi (RoomRepository)
+> Gộp write-side load/save + existence check vào MỘT port duy nhất để gọn, dễ inject, focus nghiệp vụ.
+> `RoomExistencePort` (cũ) + `RoomStateGateway` (cũ) đã hợp nhất tại đây — không còn tách rời.
 ```java
-// port.out.RoomStateGateway — write port, trả domain entity
-public interface RoomStateGateway {
+// port.out.RoomRepository — write port duy nhất (load + save + existence)
+public interface RoomRepository {
     Optional<Room> loadById(UUID id);
     Room save(Room room);
+    // Global invariant: kiểm tra coordinate target đã bị room KHÁC chiếm chưa (1 method duy nhất)
+    boolean existsByCoordinate(String building, int floor, String code);
 }
 ```
-> **Global invariant (trùng tọa độ) KHÔNG còn là out-port.** Nó là một **Domain Policy interface**
-> (`domain/model/policy/RoomUniquenessPolicy`) do Domain sở hữu, impl bởi driven adapter, và được thực thi
-> qua **Domain Factory** (`RoomFactory.create`) lúc tạo hoặc qua **aggregate method** (`room.changeCode(...,
-> policy)`) lúc đổi identity. Xem ADR 0005. `RoomExistencePort` đã nghỉ hưu (tránh 2 port cùng mục đích).
 
 ### 2.4 Handler (package-private, nằm trong `application/handler`)
 ```java
-// TẠO MỚI — Handler CHỈ gọi Domain Factory gateway, KHÔNG chạm Policy hay RoomName
-@Transactional
-@Component
-class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, CreateRoomCommand.Result> {
-    private final RoomFactory roomFactory;        // Domain gateway: check uniqueness + Room.create
-    private final RoomStateGateway gateway;
-
-    @Override
-    public CreateRoomCommand.Result handle(CreateRoomCommand command) {
-        RoomLocation location = RoomLocation.of(command.building(), command.floor());
-        Room room = roomFactory.create(location, command.roomCode(), command.capacity());
-        Room saved = gateway.save(room);
-        return new CreateRoomCommand.Result(saved.id(), saved.name().asString());
-    }
-}
-
-// ĐỔI IDENTITY (rename) — Handler nạp aggregate, truyền Policy vào aggregate method (KHÔNG gọi trực tiếp)
 @Transactional
 @Component
 class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RenameRoomCommand.Result> {
-    private final RoomStateGateway gateway;
-    private final RoomUniquenessPolicy policy;    // Domain interface, truyền vào aggregate method
+
+    private final RoomRepository repository;
 
     @Override
     public RenameRoomCommand.Result handle(RenameRoomCommand command) {
-        Room room = gateway.loadById(command.roomId())
+        // 1. Load aggregate (write repository)
+        Room room = repository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
+
+        // 2. RAM guard: RoomName VO tự validate/normalize newCode
+        RoomName candidate = RoomName.of(room.location(), command.newCode());
+
+        // 3. Idempotency: cùng code => no-op, không gate/persist
+        if (candidate.code().equals(room.name().code())) {
+            return toResult(room, room.name().code());
+        }
+
+        // 4. DB guard: chặn room KHÁC chiếm target coordinate (1 method chuẩn)
+        if (repository.existsByCoordinate(
+                room.location().building(), room.location().floor(), candidate.code())) {
+            throw new DuplicateRoomException(candidate, room.location());
+        }
+
+        // 5. Domain mutation (changeCode tái tính name + ghi RoomRenamedEvent) rồi persist
         String oldCode = room.name().code();
-        room.changeCode(command.newCode(), policy);   // idempotency + ensureUniqueOrThrow nằm trong aggregate
-        Room saved = gateway.save(room);
-        return new RenameRoomCommand.Result(saved.id(), oldCode, saved.name().code(),
-                saved.name().asString(), saved.updatedAt());
+        room.changeCode(command.newCode());
+        Room saved = repository.save(room);
+        return toResult(saved, oldCode);
+    }
+
+    private static RenameRoomCommand.Result toResult(Room room, String oldCode) {
+        return new RenameRoomCommand.Result(
+                room.id(), oldCode, room.name().code(), room.name().asString(), room.updatedAt());
     }
 }
 ```
-- Handler `@Transactional`, **package-private**, `@Component` — được gọi qua `CommandBus`, không gọi trực tiếp.
-- Application **mỏng**: không dựng `RoomName`, không `if (existsBy...)`, không gọi `policy` trực tiếp ở create
-  (Factory lo); ở rename/relocate chỉ **truyền** `policy` vào aggregate method.
-- `RoomFactory` là chốt chặn duy nhất cho uniqueness lúc tạo; `room.changeCode/relocateTo(policy)` là chốt chặn
-  cho đổi identity. Cùng một `RoomUniquenessPolicy` → không bao giờ "quên" check. Xem ADR 0005.
+- Handler `@Transactional`, **package-private**, `@Component` — được gọi qua `CommandBus` (Spring bean
+  tìm bằng generic type), không gọi trực tiếp từ ngoài.
+- Idempotency nằm trước DB gate để tránh *false-positive self-collision* (đổi sang cùng code cũ).
 
 ### 2.5 CommandBus (giữ nguyên, Shared Kernel)
 `CommandBus.execute(C command)` resolve handler qua `ResolvableType` (generic chính xác). Gọi:
@@ -166,7 +166,8 @@ public record RoomDetailView(UUID id, String name, String building, int floor, i
 public record RoomSummaryView(UUID id, String name, String building, int floor) {}
 ```
 
-### 3.3 Out Port (Query Port) — đọc
+### 3.3 Out Port — đọc (RoomQueryPort, CQRS bypass)
+> Read-side giữ nguyên là `RoomQueryPort` (CQRS bypass), trả View trực tiếp, không reconstruct domain.
 ```java
 public interface RoomQueryPort {
     Optional<RoomDetailView> findById(UUID id);          // CQRS bypass: trả View trực tiếp
@@ -280,14 +281,6 @@ class RoomExceptionAdvice {
 - `changeCode(String)` trong `Room`: preserve building/floor, tái tính name, **idempotent** khi code
   không đổi (no-op, không event/không bump `updatedAt`), **reject** room `DEACTIVATED`
   (`IllegalRoomStateException`). Validate code qua `RoomName`/`RoomCode` VO.
-- **Global invariant (trùng tọa độ) → Domain Policy + Factory (ADR 0005):** uniqueness là set-based invariant,
-  Aggregate không tự chứng minh được → do `RoomUniquenessPolicy` (Domain interface, impl ở adapter) làm trọng tài.
-  Tạo mới qua `RoomFactory.create(location, code, capacity)` (Factory gọi `policy.ensureUniqueOrThrow` rồi
-  `Room.create` tự dẫn xuất name). Đổi identity qua `room.changeCode(newCode, policy)` /
-  `room.relocateTo(newLocation, policy)` — aggregate vẫn là người quyết định (Rich). DB `uk_rooms_building_floor_code`
-  là chốt thẩm quyền chống race (TOCTOU); Factory check chỉ là fail-fast/UX.
-- **Reconstitution:** `Room.reconstruct(...)` dùng khi nạp từ DB — **không** qua `RoomFactory`, **không** check
-  uniqueness, **không** phát event. Tách biệt hoàn toàn với đường tạo mới.
 
 ---
 

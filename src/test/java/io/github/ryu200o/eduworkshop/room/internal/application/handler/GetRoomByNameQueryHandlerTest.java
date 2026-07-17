@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.vie
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

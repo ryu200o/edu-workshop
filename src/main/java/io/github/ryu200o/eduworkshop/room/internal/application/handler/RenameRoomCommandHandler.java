@@ -3,16 +3,15 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
+import org.jetbrains.annotations.Contract;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 /**
  * Use-case handler for renaming a room (changing its code; building/floor unchanged). Enforces the
@@ -59,7 +58,8 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         return toResult(saved, oldCode);
     }
 
-    private static RenameRoomCommand.Result toResult(Room room, String oldCode) {
+    @Contract("_, _ -> new")
+    private static RenameRoomCommand.@NonNull Result toResult(@NonNull Room room, String oldCode) {
         return new RenameRoomCommand.Result(
                 room.id(),
                 oldCode,

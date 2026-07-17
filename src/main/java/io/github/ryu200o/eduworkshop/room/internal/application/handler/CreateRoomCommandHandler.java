@@ -3,16 +3,14 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomExistencePort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomStateGateway;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.entity.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomLocation;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.value.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 /**
  * Use-case handler for creating a room. Enforces Requirement 3 (multi-tier duplicate guard) in strict

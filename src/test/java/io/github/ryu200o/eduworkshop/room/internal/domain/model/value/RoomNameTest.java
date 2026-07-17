@@ -1,5 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.value;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.junit.jupiter.api.Test;
 

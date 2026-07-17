@@ -51,11 +51,11 @@ API_IMPL="${MODULE_NAME_CAMEL}ExposeAPIImpl"
 DIRS=(
   "contract/dto"
   "contract/events"
-  "internal/domain/service"
-  "internal/domain/model/entity"
-  "internal/domain/model/state"
-  "internal/domain/model/event"
-  "internal/domain/model/exception"
+  "internal/domain/service"            # domain service (nếu cần)
+  "internal/domain/model/event"        # domain events (sealed RoomDomainEvent)
+  "internal/domain/model/exception"    # domain exceptions
+  # Aggregate Root, Value Objects, Factory, Policy, state enum live directly at
+  # internal/domain/model/ (flat) — only event/ and exception/ are sub-packages.
   "internal/application/port/in/command"
   "internal/application/port/in/query"
   "internal/application/port/out"
