@@ -45,7 +45,7 @@ Queries do **not** pass through the Domain Model. A query handler calls an outbo
 that returns a response/projection DTO directly (read-optimized, `@Transactional(readOnly = true)`),
 bypassing aggregate reconstruction. Commands keep going through the Domain Model (rich behavior +
 invariants). Read and write outbound ports are separated (e.g. `RoomRepository` vs
-`RoomQueryPort`), enabling future read/replica splitting without touching the Application layer.
+`RoomReader`), enabling future read/replica splitting without touching the Application layer.
 
 > **Update (Room module):** the read side is implemented with **JOOQ** (`JooqRoomReadAdapter`), querying the
 > `rooms` table directly via generated type-safe table classes and mapping flat columns into `Room*View`

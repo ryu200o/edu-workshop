@@ -9,11 +9,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Read-only outbound port (SPI) for the Room read side. Consumer-Driven: it declares only the lookups
+ * Read-side outbound port (SPI) for the Room read side. Consumer-Driven: it declares only the lookups
  * the query use cases actually need. Returns read-side {@code *View} projections directly (CQRS bypass
  * — no domain aggregate reconstruction). Implementations must be side-effect free.
  */
-public interface RoomQueryPort {
+public interface RoomReader {
 
     /**
      * Looks up a room's full detail by id. Returns {@link RoomDetailView} (full projection).

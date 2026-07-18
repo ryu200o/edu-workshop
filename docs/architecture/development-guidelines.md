@@ -21,7 +21,7 @@
 │   │   │   ├── in/
 │   │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
 │   │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
-│   │   │   └── out/           # RoomRepository (write), RoomQueryPort (read, CQRS bypass)
+ │   │   │   └── out/           # RoomRepository (write), RoomReader (read, CQRS bypass)
 │   │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
 │   └── adapter/
 │       ├── driving/
@@ -30,7 +30,7 @@
 │       └── driven/
 │           └── persistence/
 │               ├── jpa/        # JpaRoomWriteAdapter (impl RoomRepository, C) + RoomJpaRepository/Entity
-│               └── jooq/       # JooqRoomReadAdapter (impl RoomQueryPort, Q) + generated jooq.tables.Rooms
+ │               └── jooq/       # JooqRoomReadAdapter (impl RoomReader, Q) + generated jooq.tables.Rooms
 └── RoomExposeAPI.java         # public API (cross-module surface, để trống nếu chưa công bố)
 ```
 
@@ -93,12 +93,12 @@ public interface RoomRepository {
 @Component
 class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RenameRoomCommand.Result> {
 
-    private final RoomRepository repository;
+    private final RoomRepository roomRepository;
 
     @Override
     public RenameRoomCommand.Result handle(RenameRoomCommand command) {
         // 1. Load aggregate (write repository)
-        Room room = repository.loadById(command.roomId())
+        Room room = roomRepository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
         // 2. RAM guard: RoomName VO tự validate/normalize newCode
@@ -110,7 +110,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         }
 
         // 4. DB guard: chặn room KHÁC chiếm target coordinate (1 method chuẩn)
-        if (repository.existsByCoordinate(
+        if (roomRepository.existsByCoordinate(
                 room.location().building(), room.location().floor(), candidate.code())) {
             throw new DuplicateRoomException(candidate, room.location());
         }
@@ -118,7 +118,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         // 5. Domain mutation (changeCode tái tính name + ghi RoomRenamedEvent) rồi persist
         String oldCode = room.name().code();
         room.changeCode(command.newCode());
-        Room saved = repository.save(room);
+        Room saved = roomRepository.save(room);
         return toResult(saved, oldCode);
     }
 
@@ -174,10 +174,10 @@ public record RoomDetailView(UUID id, String name, String building, int floor, i
 public record RoomSummaryView(UUID id, String name, String building, int floor) {}
 ```
 
-### 3.3 Out Port — đọc (RoomQueryPort, CQRS bypass)
-> Read-side giữ nguyên là `RoomQueryPort` (CQRS bypass), trả View trực tiếp, không reconstruct domain.
+### 3.3 Out Port — đọc (RoomReader, CQRS bypass)
+> Read-side giữ nguyên là `RoomReader` (CQRS bypass), trả View trực tiếp, không reconstruct domain.
 ```java
-public interface RoomQueryPort {
+public interface RoomReader {
     Optional<RoomDetailView> findById(UUID id);          // CQRS bypass: trả View trực tiếp
     Optional<RoomSummaryView> findByName(RoomName name); // RoomName là opaque VO, không reverse-parse
 }
@@ -188,19 +188,19 @@ public interface RoomQueryPort {
 @Transactional(readOnly = true)
 @Component
 class GetRoomByIdQueryHandler implements QueryHandler<GetRoomByIdQuery, RoomDetailView> {
-    private final RoomQueryPort port;
+    private final RoomReader roomReader;
     @Override public RoomDetailView handle(GetRoomByIdQuery q) {
-        return port.findById(q.roomId()).orElseThrow(() -> new RoomNotFoundException("id=" + q.roomId()));
+        return roomReader.findById(q.roomId()).orElseThrow(() -> new RoomNotFoundException("id=" + q.roomId()));
     }
 }
 
 @Transactional(readOnly = true)
 @Component
 class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, RoomSummaryView> {
-    private final RoomQueryPort port;
+    private final RoomReader roomReader;
     @Override public RoomSummaryView handle(GetRoomByNameQuery q) {
         RoomName name = RoomName.ofRaw(q.roomName());  // RAM self-defense; opaque, không parse ngược
-        return port.findByName(name).orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));
+        return roomReader.findByName(name).orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));
     }
 }
 ```
@@ -214,7 +214,7 @@ read-only nên không có behavior chain.
 > Write và read **cùng 1 datasource** (logical split, không tách DB vật lý). Mỗi bên có adapter + mapping riêng.
 - **Command side (`persistence/jpa/`):** `JpaRoomWriteAdapter` impl `RoomRepository` (save / loadById /
   existsByCoordinate). Mapping domain ↔ JPA entity nằm ở đây. Flyway là **schema owner duy nhất**.
-- **Query side (`persistence/jooq/`):** `JooqRoomReadAdapter` impl `RoomQueryPort` (findById / findByName).
+- **Query side (`persistence/jooq/`):** `JooqRoomReadAdapter` impl `RoomReader` (findById / findByName).
   Dùng `DSLContext` (cùng DataSource) + generated `io.github.ryu200o.eduworkshop.room.jooq.tables.Rooms`
   để query cột phẳng → map trực tiếp vào `Room*View`. **KHÔNG** qua JPA entity, **KHÔNG** reconstruct domain.
 - JOOQ table class sinh tự động từ `src/main/resources/db/codegen/rooms_schema.sql` (codegen-only DDL, mirror

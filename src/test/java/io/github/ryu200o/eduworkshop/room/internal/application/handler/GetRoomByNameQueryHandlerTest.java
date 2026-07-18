@@ -2,7 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByNameQuery;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -26,16 +26,16 @@ import static org.mockito.Mockito.when;
 class GetRoomByNameQueryHandlerTest {
 
     @Mock
-    private RoomQueryPort roomQueryPort;
+    private RoomReader roomReader;
 
     private GetRoomByNameQueryHandler handler() {
-        return new GetRoomByNameQueryHandler(roomQueryPort);
+        return new GetRoomByNameQueryHandler(roomReader);
     }
 
     @Test
     void happyPath_parsesNameThenReturnsProjection() {
         RoomSummaryView expected = new RoomSummaryView(UUID.randomUUID(), "F.0201", "F", 2);
-        when(roomQueryPort.findByName(RoomName.ofRaw("F.0201"))).thenReturn(Optional.of(expected));
+        when(roomReader.findByName(RoomName.ofRaw("F.0201"))).thenReturn(Optional.of(expected));
 
         RoomSummaryView result = handler().handle(new GetRoomByNameQuery("F.0201"));
 
@@ -47,17 +47,17 @@ class GetRoomByNameQueryHandlerTest {
         assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F201"))) // missing dot
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomQueryPort);
+        verifyNoInteractions(roomReader);
     }
 
     @Test
     void notFound_throwsRoomNotFoundException() {
-        when(roomQueryPort.findByName(any())).thenReturn(Optional.empty());
+        when(roomReader.findByName(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F.0201")))
                 .isInstanceOf(RoomNotFoundException.class);
 
-        verify(roomQueryPort).findByName(RoomName.ofRaw("F.0201"));
+        verify(roomReader).findByName(RoomName.ofRaw("F.0201"));
     }
 
     @Test
@@ -65,6 +65,6 @@ class GetRoomByNameQueryHandlerTest {
         assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("bad")))
                 .isInstanceOf(RoomDomainException.class);
 
-        verify(roomQueryPort, never()).findByName(any());
+        verify(roomReader, never()).findByName(any());
     }
 }
