@@ -1,7 +1,17 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.config;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
-import io.github.ryu200o.eduworkshop.shared.cqs.Query;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Query;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.CommandDispatcher;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.HandlerRegistry;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.HandlerResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.QueryDispatcher;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.RegistryHandlerResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPipeline;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPolicyResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CompositeCommandPolicyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.context.annotation.Configuration;

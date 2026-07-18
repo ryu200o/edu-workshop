@@ -2,7 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByIdQuery;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByNameQuery;
-import io.github.ryu200o.eduworkshop.shared.kernel.bus.QueryBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -1,6 +1,6 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
 /**
  * Continuation of a {@link CommandBehavior} chain. Wrapping a command and the remaining chain, {@link #next}

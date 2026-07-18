@@ -1,6 +1,6 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.api;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
 /**
  * Shared command bus — the public write entry point for driving adapters (controllers, module_api).

@@ -1,6 +1,6 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.api;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Query;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Query;
 
 /**
  * Shared query bus — the public read entry point for driving adapters. Modules depend only on this

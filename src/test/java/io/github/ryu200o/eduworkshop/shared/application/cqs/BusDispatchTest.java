@@ -1,9 +1,19 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
-import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import io.github.ryu200o.eduworkshop.shared.cqs.Query;
-import io.github.ryu200o.eduworkshop.shared.cqs.QueryHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Query;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.CommandDispatcher;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.HandlerRegistry;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.HandlerResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.QueryDispatcher;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.RegistryHandlerResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.exception.DuplicateCommandHandlerException;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.exception.MissingCommandHandlerException;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPipeline;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPolicyResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CompositeCommandPolicyResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ListableBeanFactory;

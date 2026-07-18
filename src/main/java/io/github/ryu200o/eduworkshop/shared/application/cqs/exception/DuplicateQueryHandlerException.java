@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.exception;
 
 /**
  * Thrown at startup when two or more {@code QueryHandler} beans claim the same query type, so the

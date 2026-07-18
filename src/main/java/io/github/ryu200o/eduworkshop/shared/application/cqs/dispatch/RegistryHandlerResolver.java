@@ -1,17 +1,17 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
-import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 
 /**
  * {@link HandlerResolver} backed by the immutable {@link HandlerRegistry}. Looks up the handler for a command
  * type; missing handlers surface as {@link MissingCommandHandlerException}.
  */
-final class RegistryHandlerResolver implements HandlerResolver {
+public final class RegistryHandlerResolver implements HandlerResolver {
 
     private final HandlerRegistry registry;
 
-    RegistryHandlerResolver(HandlerRegistry registry) {
+    public RegistryHandlerResolver(HandlerRegistry registry) {
         this.registry = registry;
     }
 

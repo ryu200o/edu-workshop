@@ -1,6 +1,8 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPipeline;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPolicyResolver;
 
 /**
  * Command dispatch coordinator. Orchestrates resolution and execution but owns no business logic and knows

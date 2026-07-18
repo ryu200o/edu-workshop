@@ -1,7 +1,7 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
-import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 
 /**
  * Resolves a {@link CommandHandler} for a concrete {@link Command} type. Pure lookup: it knows nothing

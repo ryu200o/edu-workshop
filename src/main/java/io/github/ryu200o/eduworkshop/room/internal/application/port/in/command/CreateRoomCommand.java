@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.in.command;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
 import java.util.UUID;
 

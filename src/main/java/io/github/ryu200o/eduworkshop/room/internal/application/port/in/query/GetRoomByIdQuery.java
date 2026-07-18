@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.in.query;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
-import io.github.ryu200o.eduworkshop.shared.cqs.Query;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Query;
 
 import java.util.UUID;
 

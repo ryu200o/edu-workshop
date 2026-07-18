@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.vie
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.shared.cqs.QueryHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 

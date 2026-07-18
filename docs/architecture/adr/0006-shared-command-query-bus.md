@@ -11,7 +11,7 @@
 
 ADR 0002 §5 currently mandates that **each module owns its own `CommandBus`/`QueryBus`** (and their
 implementations, e.g. `room.internal.application.handler.SimpleCommandBus` / `SimpleQueryBus`). The shared
-kernel (`io.github.ryu200o.eduworkshop.shared.cqs`) today holds only the contracts: `Command`, `Query`,
+kernel (`io.github.ryu200o.eduworkshop.shared.application.cqs.api`) today holds only the contracts: `Command`, `Query`,
 `CommandHandler`, `QueryHandler`. The bus interfaces and their implementations live **inside** each module.
 
 During a recent architecture review, two alternative proposals (global `SpringCommandBus` /
@@ -73,17 +73,33 @@ A **Shared Application Kernel** owns the bus *capability*; modules own only Comm
 and (optionally) their own Policies.
 
 ```
-shared.kernel.application.bus/                (shared kernel — new package)
-├── CommandBus.java                           (interface, shared)
-├── QueryBus.java                             (interface, shared)
-├── CommandDispatcher.java                    (orchestration ONLY — Coordinator)
-├── QueryDispatcher.java
-├── HandlerResolver.java                      (CommandType -> Handler; no pipeline knowledge)
-├── HandlerRegistry.java                      (immutable after startup; auto-discovery + validation)
-├── CommandBehavior.java                      (Chain of Responsibility unit)
-├── CommandPipeline.java                      (ordered chain of CommandBehavior + handler)
-├── CommandPolicyResolver.java                (matcher-based; NO package-name identity)
-└── BusConfiguration.java                     (@Configuration declaring the shared beans)
+shared.application.cqs/                     (shared kernel — implemented package)
+├── api/                                      (CQS contracts + bus interfaces)
+│   ├── Command.java                           (marker interface, <R>)
+│   ├── Query.java                             (marker interface, <R>)
+│   ├── CommandHandler<C extends Command<R>, R>
+│   ├── QueryHandler<Q extends Query<R>, R>
+│   ├── CommandBus.java                        (interface, shared)
+│   └── QueryBus.java                          (interface, shared)
+├── dispatch/                                  (Coordinator + resolution)
+│   ├── CommandDispatcher.java                 (orchestration ONLY — Coordinator)
+│   ├── QueryDispatcher.java
+│   ├── HandlerResolver.java                   (CommandType -> Handler; no pipeline knowledge)
+│   ├── HandlerRegistry.java                   (immutable after startup; auto-discovery + validation)
+│   └── RegistryHandlerResolver.java
+├── pipeline/                                  (Chain of Responsibility)
+│   ├── BehaviorChain.java
+│   ├── CommandBehavior.java                   (Chain of Responsibility unit)
+│   ├── CommandPipeline.java                   (ordered chain of CommandBehavior + handler)
+│   ├── CommandPolicyResolver.java             (matcher-based; NO package-name identity)
+│   └── CompositeCommandPolicyResolver.java
+├── config/
+│   └── BusConfiguration.java                  (@Configuration declaring the shared beans)
+└── exception/
+    ├── DuplicateCommandHandlerException
+    ├── DuplicateQueryHandlerException
+    ├── MissingCommandHandlerException
+    └── MissingQueryHandlerException
 
 room.internal.application.*
 ├── port/in/command/

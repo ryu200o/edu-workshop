@@ -133,7 +133,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
 - Idempotency nằm trước DB gate để tránh *false-positive self-collision* (đổi sang cùng code cũ).
 
 ### 2.5 CommandBus (Shared Kernel — ADR 0006)
-`CommandBus` là interface chia sẻ ở `shared.kernel.bus` (không còn per-module). `CommandBus.execute(C command)`
+`CommandBus` là interface chia sẻ ở `shared.application.cqs.api` (shared kernel) (không còn per-module). `CommandBus.execute(C command)`
 được delegate tới `CommandDispatcher` (Coordinator) → `HandlerResolver` (resolve handler qua `ResolvableType`)
 → `CommandPipeline` (chain `CommandBehavior`, mặc định pass-through) → `CommandHandler`. Duplicate/missing
 handler fail fast bằng `DuplicateCommandHandlerException` / `MissingCommandHandlerException`.
@@ -206,7 +206,7 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
 ```
 
 ### 3.5 QueryBus (Shared Kernel — ADR 0006)
-Tương tự CommandBus, `QueryBus` là interface chia sẻ ở `shared.kernel.bus`. `QueryBus.execute(Q query)` delegate
+Tương tự CommandBus, `QueryBus` là interface chia sẻ ở `shared.application.cqs.api` (shared kernel). `QueryBus.execute(Q query)` delegate
 tới `QueryDispatcher` → `HandlerRegistry` resolve `QueryHandler` qua `ResolvableType` → invoke. Query là
 read-only nên không có behavior chain.
 

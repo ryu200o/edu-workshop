@@ -1,12 +1,12 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
 import java.util.List;
 
 /**
  * A Chain of Responsibility of {@link CommandBehavior} units terminating in the resolved
- * {@link io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler}. Knows the ordered behavior chain, not
+ * {@link io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler}. Knows the ordered behavior chain, not
  * Spring or the dispatcher internals.
  */
 public class CommandPipeline {

@@ -1,9 +1,13 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Command;
-import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import io.github.ryu200o.eduworkshop.shared.cqs.Query;
-import io.github.ryu200o.eduworkshop.shared.cqs.QueryHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Query;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.exception.DuplicateCommandHandlerException;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.exception.DuplicateQueryHandlerException;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.exception.MissingCommandHandlerException;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.exception.MissingQueryHandlerException;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.core.ResolvableType;
 
@@ -16,12 +20,12 @@ import java.util.Map;
  * validates that each command/query type has exactly one handler (failing fast with a dedicated exception),
  * and becomes read-only at runtime — no re-scan, no re-compute, no synchronization.
  */
-class HandlerRegistry {
+public class HandlerRegistry {
 
     private final Map<Class<?>, CommandHandler<?, ?>> commandHandlers;
     private final Map<Class<?>, QueryHandler<?, ?>> queryHandlers;
 
-    private HandlerRegistry(Map<Class<?>, CommandHandler<?, ?>> commandHandlers,
+    HandlerRegistry(Map<Class<?>, CommandHandler<?, ?>> commandHandlers,
                             Map<Class<?>, QueryHandler<?, ?>> queryHandlers) {
         this.commandHandlers = Map.copyOf(commandHandlers);
         this.queryHandlers = Map.copyOf(queryHandlers);
@@ -63,7 +67,7 @@ class HandlerRegistry {
         return handler.handle(query);
     }
 
-    static HandlerRegistry from(ListableBeanFactory beanFactory) {
+    public static HandlerRegistry from(ListableBeanFactory beanFactory) {
         Map<Class<?>, CommandHandler<?, ?>> commandHandlers = new LinkedHashMap<>();
         Map<Class<?>, QueryHandler<?, ?>> queryHandlers = new LinkedHashMap<>();
 

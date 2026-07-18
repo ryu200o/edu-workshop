@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
-import io.github.ryu200o.eduworkshop.shared.kernel.bus.CommandBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;

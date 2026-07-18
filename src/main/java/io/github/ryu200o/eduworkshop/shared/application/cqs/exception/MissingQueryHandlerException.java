@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.exception;
 
 /**
  * Thrown when a query is dispatched but no {@code QueryHandler} bean is registered for its type.

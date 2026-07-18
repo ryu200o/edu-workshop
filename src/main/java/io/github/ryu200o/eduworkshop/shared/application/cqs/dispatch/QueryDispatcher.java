@@ -1,9 +1,9 @@
-package io.github.ryu200o.eduworkshop.shared.kernel.bus;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch;
 
-import io.github.ryu200o.eduworkshop.shared.cqs.Query;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Query;
 
 /**
- * Query dispatch coordinator. Resolves the {@link io.github.ryu200o.eduworkshop.shared.cqs.QueryHandler} for
+ * Query dispatch coordinator. Resolves the {@link io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler} for
  * a query type via the {@link HandlerRegistry} and invokes it. Queries are side-effect free, so no behavior
  * chain is applied (read-only projection lookup).
  */
