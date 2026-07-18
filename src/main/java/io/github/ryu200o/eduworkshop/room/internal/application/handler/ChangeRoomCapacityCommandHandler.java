@@ -3,8 +3,9 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +27,7 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
     @Transactional
     public ChangeRoomCapacityCommand.Result handle(ChangeRoomCapacityCommand command) {
         // Step 1 — Load the aggregate (write side).
-        Room room = roomRepository.loadById(command.roomId())
+        Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
         // Step 2 — Idempotency: same capacity ⇒ no change, no save.
@@ -40,11 +41,11 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
         int oldCapacity = room.capacity();
         room.changeCapacity(command.newCapacity());
         Room saved = roomRepository.save(room);
-        return new ChangeRoomCapacityCommand.Result(saved.id(), oldCapacity, saved.capacity(), saved.updatedAt());
+        return new ChangeRoomCapacityCommand.Result(saved.id().value(), oldCapacity, saved.capacity(), saved.updatedAt());
     }
 
     private static ChangeRoomCapacityCommand.Result toResult(Room room) {
         return new ChangeRoomCapacityCommand.Result(
-                room.id(), room.capacity(), room.capacity(), room.updatedAt());
+                room.id().value(), room.capacity(), room.capacity(), room.updatedAt());
     }
 }

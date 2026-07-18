@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.shared.cqs;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.api;
 
 /**
  * Marker for a read-side query that, when handled, yields a result of type {@code R}.

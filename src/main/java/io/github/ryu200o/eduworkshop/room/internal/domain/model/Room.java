@@ -28,7 +28,7 @@ import java.util.UUID;
  */
 public class Room {
 
-    private final UUID id;
+    private final RoomId id;
     private RoomName name;
     private int capacity;
     private RoomLocation location;
@@ -38,7 +38,7 @@ public class Room {
 
     private final List<RoomDomainEvent> recordedEvents = new ArrayList<>();
 
-    private Room(UUID id, RoomName name, int capacity, RoomLocation location, RoomState state, Instant createdAt, Instant updatedAt) {
+    private Room(RoomId id, RoomName name, int capacity, RoomLocation location, RoomState state, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.capacity = capacity;
@@ -55,14 +55,14 @@ public class Room {
      */
     public static Room create(RoomName name, RoomLocation location, int capacity) {
         Instant now = Instant.now();
-        return create(UUID.randomUUID(), name, location, capacity, now, now);
+        return create(RoomId.generate(), name, location, capacity, now, now);
     }
 
     /**
      * Factory with explicit identity/timestamps — used when minting a new room from externally
      * supplied identifiers. Emits a {@link RoomCreated} event.
      */
-    public static Room create(UUID id, RoomName name, RoomLocation location, int capacity, Instant createdAt, Instant updatedAt) {
+    public static Room create(RoomId id, RoomName name, RoomLocation location, int capacity, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
         requireNameConsistentWithLocation(name, location);
         requirePositiveCapacity(capacity);
@@ -70,7 +70,7 @@ public class Room {
 
         Room room = new Room(id, name, capacity, location, RoomState.ACTIVE, createdAt, updatedAt);
         room.recordedEvents.add(new RoomCreated(
-                room.id, room.name, room.capacity, room.location, room.state, room.createdAt));
+                room.id.value(), room.name, room.capacity, room.location, room.state, room.createdAt));
         return room;
     }
 
@@ -78,8 +78,8 @@ public class Room {
      * Reconstructs an existing aggregate from persisted state. Pure data mapping only:
      * it must NOT impose creation rules nor record any event (no historical event re-dispatch).
      */
-    public static Room reconstruct(UUID id, RoomName name, RoomLocation location, int capacity,
-                                            RoomState state, Instant createdAt, Instant updatedAt) {
+    public static Room reconstruct(RoomId id, RoomName name, RoomLocation location, int capacity,
+                                             RoomState state, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
         requireNonNullLocation(location);
         requirePositiveCapacity(capacity);
@@ -136,7 +136,7 @@ public class Room {
         RoomState previous = this.state;
         this.state = next;
         this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomStateChanged(this.id, previous, next, this.updatedAt));
+        this.recordedEvents.add(new RoomStateChanged(this.id.value(), previous, next, this.updatedAt));
     }
 
     /**
@@ -164,7 +164,7 @@ public class Room {
         this.name = candidate;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRenamedEvent(
-                id, RoomRenameReason.CODE_CHANGED, previousName, previousCode,
+                id.value(), RoomRenameReason.CODE_CHANGED, previousName, previousCode,
                 candidate, candidate.code(), location, this.updatedAt));
     }
 
@@ -196,7 +196,7 @@ public class Room {
         this.name = newName;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRenamedEvent(
-                id, RoomRenameReason.LOCATION_CHANGED, previousName, previousName.code(),
+                id.value(), RoomRenameReason.LOCATION_CHANGED, previousName, previousName.code(),
                 newName, newName.code(), newLocation, this.updatedAt));
     }
 
@@ -227,7 +227,7 @@ public class Room {
         int previousCapacity = this.capacity;
         this.capacity = newCapacity;
         this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomCapacityChanged(id, previousCapacity, newCapacity, this.updatedAt));
+        this.recordedEvents.add(new RoomCapacityChanged(id.value(), previousCapacity, newCapacity, this.updatedAt));
     }
 
     private static void requireNonNullName(RoomName name) {
@@ -262,7 +262,7 @@ public class Room {
         }
     }
 
-    public UUID id() {
+    public RoomId id() {
         return id;
     }
 

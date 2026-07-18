@@ -2,7 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByIdQuery;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByNameQuery;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.QueryBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,7 +14,7 @@ import java.util.UUID;
 
 /**
  * Driving HTTP adapter for the Room READ side (Query). Accepts only data-reading HTTP methods (GET) and
- * talks exclusively to the module's internal {@link QueryBus}. Package-private and confined to the
+ * talks exclusively to the shared {@link QueryBus}. Package-private and confined to the
  * module's internal boundary. Error handling is centralized in {@link RoomExceptionAdvice}.
  */
 @RestController

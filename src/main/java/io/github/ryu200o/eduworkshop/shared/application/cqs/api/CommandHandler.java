@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.shared.cqs;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.api;
 
 /**
  * Handles a specific {@link Command} type and produces its result.

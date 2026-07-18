@@ -6,7 +6,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
-import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +40,6 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
         // Step 3 — Build the aggregate via the domain, then persist.
         Room room = Room.create(name, location, command.capacity());
         Room saved = roomRepository.save(room);
-        return new CreateRoomCommand.Result(saved.id(), saved.name().asString());
+        return new CreateRoomCommand.Result(saved.id().value(), saved.name().asString());
     }
 }

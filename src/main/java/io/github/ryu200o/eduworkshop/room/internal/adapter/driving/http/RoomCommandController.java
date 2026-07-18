@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CommandBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /**
  * Driving HTTP adapter for the Room WRITE side (Command). Accepts only state-changing HTTP methods
- * (POST, PUT, DELETE) and talks exclusively to the module's internal {@link CommandBus}. Package-private
+ * (POST, PUT, DELETE) and talks exclusively to the shared {@link CommandBus}. Package-private
  * and confined to the module's internal boundary. Error handling is centralized in {@link
  * RoomExceptionAdvice}.
  */

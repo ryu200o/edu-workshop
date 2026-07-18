@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -47,10 +48,10 @@ class RelocateRoomCommandHandlerTest {
     // ── Step 1: load failure ──
     @Test
     void roomNotFound_whenLoadReturnsEmpty_throws() {
-        UUID id = UUID.randomUUID();
+        RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(id, "G", 3)))
+        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(id.value(), "G", 3)))
                 .isInstanceOf(RoomNotFoundException.class);
 
         verify(roomRepository).loadById(any());
@@ -60,10 +61,10 @@ class RelocateRoomCommandHandlerTest {
     // ── Step 2: RAM guard (local invariant) blocks malformed location (load happens first, no save/gate) ──
     @Test
     void ramGuard_rejectsInvalidLocation_withoutTouchingPorts() {
-        UUID id = UUID.randomUUID();
+        RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.of(existingRoom()));
 
-        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(id, "G", 0)))
+        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(id.value(), "G", 0)))
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository).loadById(any());
@@ -78,7 +79,7 @@ class RelocateRoomCommandHandlerTest {
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(true);
 
-        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id(), "G", 3)))
+        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
                 .isInstanceOf(DuplicateRoomException.class);
 
         verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
@@ -90,12 +91,12 @@ class RelocateRoomCommandHandlerTest {
     void sameLocation_isIdempotent_noGateNoSave_returnsExistingUpdatedAt() {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
         Room room = Room.reconstruct(
-                UUID.randomUUID(), RoomName.of(RoomLocation.of("F", 2), "01"),
+                RoomId.of(UUID.randomUUID()), RoomName.of(RoomLocation.of("F", 2), "01"),
                 RoomLocation.of("F", 2), 50, RoomState.ACTIVE,
                 Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id(), "F", 2));
+        RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "F", 2));
 
         assertThat(response.oldLocation()).isEqualTo(room.location());
         assertThat(response.newLocation()).isEqualTo(room.location());
@@ -112,7 +113,7 @@ class RelocateRoomCommandHandlerTest {
         when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id(), "G", 3));
+        RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
@@ -121,7 +122,7 @@ class RelocateRoomCommandHandlerTest {
         assertThat(saved.location()).isEqualTo(RoomLocation.of("G", 3));
         assertThat(saved.name()).isEqualTo(RoomName.of(RoomLocation.of("G", 3), "01"));
         assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRenamedEvent);
-        assertThat(response.id()).isEqualTo(room.id());
+        assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.name()).isEqualTo("G.0301");
         assertThat(response.oldLocation()).isEqualTo(RoomLocation.of("F", 2));
         assertThat(response.newLocation()).isEqualTo(RoomLocation.of("G", 3));
@@ -134,7 +135,7 @@ class RelocateRoomCommandHandlerTest {
         when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        handler().handle(new RelocateRoomCommand(room.id(), "G", 3));
+        handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
 
         var ordered = inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());

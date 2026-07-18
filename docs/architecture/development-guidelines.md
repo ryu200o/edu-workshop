@@ -132,11 +132,16 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
   tìm bằng generic type), không gọi trực tiếp từ ngoài.
 - Idempotency nằm trước DB gate để tránh *false-positive self-collision* (đổi sang cùng code cũ).
 
-### 2.5 CommandBus (giữ nguyên, Shared Kernel)
-`CommandBus.execute(C command)` resolve handler qua `ResolvableType` (generic chính xác). Gọi:
+### 2.5 CommandBus (Shared Kernel — ADR 0006)
+`CommandBus` là interface chia sẻ ở `shared.application.cqs.api` (shared kernel) (không còn per-module). `CommandBus.execute(C command)`
+được delegate tới `CommandDispatcher` (Coordinator) → `HandlerResolver` (resolve handler qua `ResolvableType`)
+→ `CommandPipeline` (chain `CommandBehavior`, mặc định pass-through) → `CommandHandler`. Duplicate/missing
+handler fail fast bằng `DuplicateCommandHandlerException` / `MissingCommandHandlerException`.
 ```java
 RenameRoomCommand.Result result = commandBus.execute(command);
 ```
+> Mỗi module KHÔNG tự định nghĩa `CommandBus`/`SimpleCommandBus` nữa (ADR 0002 §5 đã bị supersede bởi ADR 0006).
+> Cross-cutting concern = thêm `CommandBehavior` mới + `ModuleRegistration` matcher, **không** sửa `CommandDispatcher`.
 
 ---
 
@@ -200,7 +205,10 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
 }
 ```
 
-### 3.5 QueryBus — tương tự CommandBus, resolve qua `ResolvableType`.
+### 3.5 QueryBus (Shared Kernel — ADR 0006)
+Tương tự CommandBus, `QueryBus` là interface chia sẻ ở `shared.application.cqs.api` (shared kernel). `QueryBus.execute(Q query)` delegate
+tới `QueryDispatcher` → `HandlerRegistry` resolve `QueryHandler` qua `ResolvableType` → invoke. Query là
+read-only nên không có behavior chain.
 
 ### 3.6 Driven persistence — tách Command (JPA) / Query (JOOQ), CQRS logical split (ADR 0002)
 > Write và read **cùng 1 datasource** (logical split, không tách DB vật lý). Mỗi bên có adapter + mapping riêng.

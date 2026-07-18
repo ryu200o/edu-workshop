@@ -53,6 +53,11 @@ invariants). Read and write outbound ports are separated (e.g. `RoomRepository` 
 > (`JpaRoomWriteAdapter`); both share one datasource (logical C/Q split). See `development-guidelines.md` §3.6.
 
 ### 5. "Intentional duplication" — each module owns its own Command/Query Bus
+> **Superseded by ADR 0006.** As of ADR 0006, the bus capability (interface, dispatcher, immutable
+> registry, behavior-chain pipeline) moves into the Shared Application Kernel; modules keep only
+> Commands/Queries/Handlers. The boundary-protection intent of this section is now achieved via
+> pluggable `CommandBehavior` extension points rather than duplicated bus classes. The text below is
+> retained for historical context.
 Rather than sharing a single global bus, **each module declares its own `CommandBus`/`QueryBus`**
 (and the `Command`/`Query`/`*Handler` shared framework interfaces per module). This intentional
 duplication protects Spring Modulith boundaries: no module reaches across into another module's

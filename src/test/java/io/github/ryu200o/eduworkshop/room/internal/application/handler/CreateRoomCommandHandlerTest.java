@@ -79,7 +79,7 @@ class CreateRoomCommandHandlerTest {
         verify(roomRepository).save(captor.capture());
         Room persisted = captor.getValue();
 
-        assertThat(result.id()).isEqualTo(persisted.id());
+        assertThat(result.id()).isEqualTo(persisted.id().value());
         assertThat(result.name()).isEqualTo(persisted.name().asString());
         assertThat(persisted.name()).isEqualTo(RoomName.of(RoomLocation.of("F", 2), "01"));
         assertThat(persisted.location()).isEqualTo(RoomLocation.of("F", 2));

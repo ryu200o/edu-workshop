@@ -3,10 +3,12 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.j
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.jooq.tables.Rooms;
 import org.jooq.DSLContext;
 import org.jooq.Record;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -31,7 +33,7 @@ class JooqRoomReadAdapter implements RoomQueryPort {
     }
 
     @Override
-    public Optional<RoomDetailView> findById(UUID id) {
+    public Optional<RoomDetailView> findById(RoomId id) {
         return dsl.select(
                         ROOMS.ID,
                         ROOMS.NAME,
@@ -40,7 +42,7 @@ class JooqRoomReadAdapter implements RoomQueryPort {
                         ROOMS.CAPACITY,
                         ROOMS.STATE)
                 .from(ROOMS)
-                .where(ROOMS.ID.eq(id))
+                .where(ROOMS.ID.eq(id.value()))
                 .fetchOptional()
                 .map(JooqRoomReadAdapter::toDetailView);
     }
