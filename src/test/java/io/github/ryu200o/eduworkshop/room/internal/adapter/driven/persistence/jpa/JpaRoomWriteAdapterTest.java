@@ -5,6 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration test for the JPA write adapter — full Spring context + real H2 (PostgreSQL mode) + Flyway,
@@ -88,5 +90,23 @@ class JpaRoomWriteAdapterTest {
         Optional<Room> renamed = roomRepository.loadById(saved.id());
         assertThat(renamed).isPresent();
         assertThat(renamed.get().name()).isEqualTo(RoomName.of(RoomLocation.of("F", 2), "LAB"));
+    }
+
+    @Test
+    void save_duplicateCoordinate_raceProofGate_throwsDuplicateRoomException() {
+        RoomLocation location = RoomLocation.of("F", 2);
+        RoomName name = RoomName.of(location, "01");
+
+        // First room owns the (building, floor, code) coordinate.
+        roomRepository.save(Room.create(name, location, 50));
+
+        // Second room with a DIFFERENT id but the SAME coordinate — simulates a concurrent insert that
+        // slipped past the handler's existsByCoordinate (rào lần 1). The DB unique constraint (rào lần 2)
+        // must reject it and the adapter must translate it into domain vocabulary.
+        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), name, location, 50,
+                java.time.Instant.now(), java.time.Instant.now());
+
+        assertThatThrownBy(() -> roomRepository.save(duplicate))
+                .isInstanceOf(DuplicateRoomException.class);
     }
 }
