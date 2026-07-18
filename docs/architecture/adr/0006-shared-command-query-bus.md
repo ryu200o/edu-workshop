@@ -1,9 +1,9 @@
 # ADR 0006: Shared Application Kernel for Command/Query Bus
 
-- **Status:** Proposed (under review — NOT yet accepted; ADR 0002 §5 remains the official decision until this is accepted and §5 is superseded)
+- **Status:** Accepted (2026-07-18) — supersedes ADR 0002 §5
 - **Date:** 2026-07-18
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** ADR 0002 (§5 intentional duplication), ADR 0001, `docs/architecture/development-guidelines.md`, `.AGENTS.md`, PR #17
+- **Related:** ADR 0002 (§5 superseded), ADR 0001, `docs/architecture/development-guidelines.md`, `.AGENTS.md`, PR #17
 
 ---
 
@@ -302,17 +302,14 @@ module's local bus.
 
 ## Final Recommendation
 
-This ADR takes **no side**. It records that:
+**Accepted (2026-07-18).** The Lead favors DRY and accepts the shared-kernel trade-off. ADR 0002 §5 is
+superseded. Implementation proceeds per the Migration Strategy below:
 
-- ADR 0002 §5 (per-module bus) is the **current official decision** and remains so until this ADR is
-  accepted.
-- A shared bus is a **technically legitimate** alternative whose main risk (global dispatch, duplicate
-  collision) is mitigable via a Coordinator-only bus + pluggable Pipeline/Policy + startup guard.
-- The decision belongs to the Lead. If the Lead favors DRY and accepts the shared-kernel trade-off, accept
-  this ADR and supersede ADR 0002 §5, then implement per the Migration Strategy. If the Lead prefers
-  maximum isolation and minimal shared-kernel surface, reject this ADR and keep ADR 0002 §5.
-
-**No code is changed by this ADR.** Implementation waits for the Lead's decision.
+- A shared bus as a Coordinator-only capability (no business logic) plus pluggable `CommandBehavior`
+  Chain-of-Responsibility / `CommandPolicyResolver` extension points and a startup guard
+  (`DuplicateCommandHandlerException` / `MissingCommandHandlerException`) mitigate the global-dispatch risk.
+- ADR 0002 §5 (per-module bus) no longer applies; the per-module `Simple*Bus` classes are removed and
+  modules depend only on the shared `CommandBus`/`QueryBus` interfaces.
 
 ---
 
