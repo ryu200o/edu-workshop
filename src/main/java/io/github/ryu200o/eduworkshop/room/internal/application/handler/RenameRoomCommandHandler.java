@@ -7,7 +7,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.Duplic
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
 
     @Override
     @Transactional
-    public RenameRoomCommand.Result handle(@NonNull RenameRoomCommand command) {
+    public RenameRoomCommand.Result handle(RenameRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
         Room room = roomRepository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
@@ -53,7 +52,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         return toResult(saved, oldCode);
     }
 
-    private static RenameRoomCommand.@NonNull Result toResult(@NonNull Room room, String oldCode) {
+    private static RenameRoomCommand.Result toResult(Room room, String oldCode) {
         return new RenameRoomCommand.Result(
                 room.id(),
                 oldCode,

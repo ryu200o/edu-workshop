@@ -3,7 +3,6 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CommandBus;
 import io.github.ryu200o.eduworkshop.shared.cqs.Command;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import org.jspecify.annotations.NonNull;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.ResolvableType;
 import org.springframework.stereotype.Component;
@@ -24,7 +23,7 @@ class SimpleCommandBus implements CommandBus {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <R, C extends Command<R>> R execute(@NonNull C command) {
+    public <R, C extends Command<R>> R execute(C command) {
         ResolvableType type = ResolvableType.forClassWithGenerics(
                 CommandHandler.class, command.getClass(), Object.class);
         String[] beanNames = context.getBeanNamesForType(type);

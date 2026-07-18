@@ -5,7 +5,6 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepo
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.cqs.CommandHandler;
-import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +24,7 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
 
     @Override
     @Transactional
-    public ChangeRoomCapacityCommand.Result handle(@NonNull ChangeRoomCapacityCommand command) {
+    public ChangeRoomCapacityCommand.Result handle(ChangeRoomCapacityCommand command) {
         // Step 1 — Load the aggregate (write side).
         Room room = roomRepository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
@@ -44,7 +43,7 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
         return new ChangeRoomCapacityCommand.Result(saved.id(), oldCapacity, saved.capacity(), saved.updatedAt());
     }
 
-    private static ChangeRoomCapacityCommand.@NonNull Result toResult(@NonNull Room room) {
+    private static ChangeRoomCapacityCommand.Result toResult(Room room) {
         return new ChangeRoomCapacityCommand.Result(
                 room.id(), room.capacity(), room.capacity(), room.updatedAt());
     }

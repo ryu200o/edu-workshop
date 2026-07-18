@@ -1,8 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import org.jetbrains.annotations.Contract;
-import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -43,7 +41,7 @@ public final class RoomName {
      * Composes a name from a (normalized) location and a code — the system-generated, downward path.
      * Equivalent to {@code fromCoordinate}; kept as {@code of} for idiom with the rest of the codebase.
      */
-    public static @NonNull RoomName of(@NonNull RoomLocation location, String code) {
+    public static RoomName of(RoomLocation location, String code) {
         String normalizedCode = normalizeCode(code);
         String value = location.building() + "." + String.format("%02d", location.floor()) + normalizedCode;
         return new RoomName(value, location.building(), location.floor(), normalizedCode);
@@ -53,8 +51,7 @@ public final class RoomName {
      * Wraps a raw name string coming up from a client query — the upward path. This is a pure display
      * token: it is format-gated (RAM self-defense) but NEVER reverse-parsed into coordinates.
      */
-    @Contract("null -> fail")
-    public static @NonNull RoomName ofRaw(String raw) {
+    public static RoomName ofRaw(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new RoomDomainException("Room name must not be blank.");
         }
@@ -66,8 +63,7 @@ public final class RoomName {
         return new RoomName(normalized, null, 0, null);
     }
 
-    @Contract("null -> fail")
-    private static @NonNull String normalizeCode(String code) {
+    private static String normalizeCode(String code) {
         if (code == null || !code.trim().matches("^[A-Za-z0-9]{1,10}$")) {
             throw new RoomDomainException("Room code must be 1–10 alphanumeric characters.");
         }
@@ -86,8 +82,7 @@ public final class RoomName {
         return code;
     }
 
-    @Contract(pure = true)
-    public @NonNull String asString() {
+    public String asString() {
         return value;
     }
 

@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence;
+package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.jpa;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
