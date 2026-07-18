@@ -3,6 +3,9 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.DeactivateRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.PlaceRoomUnderMaintenanceCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ReactivateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
 import org.springframework.http.ResponseEntity;
@@ -56,6 +59,27 @@ class RoomCommandController {
     ResponseEntity<ChangeRoomCapacityCommand.Result> changeCapacity(@PathVariable UUID id, @RequestBody ChangeRoomCapacityRequest request) {
         var command = new ChangeRoomCapacityCommand(id, request.newCapacity());
         ChangeRoomCapacityCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/maintenance")
+    ResponseEntity<PlaceRoomUnderMaintenanceCommand.Result> placeUnderMaintenance(@PathVariable UUID id) {
+        var command = new PlaceRoomUnderMaintenanceCommand(id);
+        PlaceRoomUnderMaintenanceCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/reactivate")
+    ResponseEntity<ReactivateRoomCommand.Result> reactivate(@PathVariable UUID id) {
+        var command = new ReactivateRoomCommand(id);
+        ReactivateRoomCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/deactivate")
+    ResponseEntity<DeactivateRoomCommand.Result> deactivate(@PathVariable UUID id) {
+        var command = new DeactivateRoomCommand(id);
+        DeactivateRoomCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
