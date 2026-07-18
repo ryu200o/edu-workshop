@@ -6,6 +6,8 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -38,7 +40,15 @@ class JpaRoomWriteAdapter implements RoomRepository {
 
     @Override
     public Room save(Room room) {
-        repository.save(toEntity(room));
+        try {
+            repository.saveAndFlush(toEntity(room));
+        } catch (DataIntegrityViolationException ex) {
+            // Race-proof gate (rào lần 2): the DB unique constraint (uk_rooms_building_floor_code) is the
+            // authoritative guard against concurrent duplicate coordinates. The application handler's
+            // existsByCoordinate is only fail-fast UX (rào lần 1). Translate the constraint violation into
+            // domain vocabulary so the caller sees a clean business exception.
+            throw new DuplicateRoomException(room.name(), room.location());
+        }
         return room;
     }
 
