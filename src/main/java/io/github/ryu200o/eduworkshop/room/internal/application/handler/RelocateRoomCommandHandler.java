@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
@@ -29,7 +30,7 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
     @Transactional
     public RelocateRoomCommand.Result handle(RelocateRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
-        Room room = roomRepository.loadById(command.roomId())
+        Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
         // Step 2 — RAM guard (local invariant): the VO validates/normalizes the new location.
@@ -56,6 +57,6 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
     private static RelocateRoomCommand.Result toResult(Room room, RoomLocation oldLocation) {
         return new RelocateRoomCommand.Result(
-                room.id(), oldLocation, room.location(), room.name().asString(), room.updatedAt());
+                room.id().value(), oldLocation, room.location(), room.name().asString(), room.updatedAt());
     }
 }

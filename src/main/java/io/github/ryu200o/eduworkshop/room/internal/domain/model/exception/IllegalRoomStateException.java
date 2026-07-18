@@ -1,8 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.exception;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-
-import java.util.UUID;
 
 /**
  * Raised when a requested physical-state transition is rejected by the room's invariant.
@@ -12,11 +11,11 @@ import java.util.UUID;
  */
 public class IllegalRoomStateException extends RoomDomainException {
 
-    private final UUID roomId;
+    private final RoomId roomId;
     private final RoomState currentState;
     private final RoomState attemptedState;
 
-    public IllegalRoomStateException(UUID roomId,
+    public IllegalRoomStateException(RoomId roomId,
                                      RoomState currentState,
                                      RoomState attemptedState,
                                      String message) {
@@ -26,7 +25,7 @@ public class IllegalRoomStateException extends RoomDomainException {
         this.attemptedState = attemptedState;
     }
 
-    public UUID getRoomId() {
+    public RoomId getRoomId() {
         return roomId;
     }
 

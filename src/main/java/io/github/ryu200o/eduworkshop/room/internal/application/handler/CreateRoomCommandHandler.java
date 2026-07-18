@@ -40,6 +40,6 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
         // Step 3 — Build the aggregate via the domain, then persist.
         Room room = Room.create(name, location, command.capacity());
         Room saved = roomRepository.save(room);
-        return new CreateRoomCommand.Result(saved.id(), saved.name().asString());
+        return new CreateRoomCommand.Result(saved.id().value(), saved.name().asString());
     }
 }

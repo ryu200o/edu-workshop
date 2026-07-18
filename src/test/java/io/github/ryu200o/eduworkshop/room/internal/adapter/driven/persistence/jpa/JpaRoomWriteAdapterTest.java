@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.j
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import org.junit.jupiter.api.Test;
@@ -44,7 +45,7 @@ class JpaRoomWriteAdapterTest {
 
     @Test
     void loadById_whenAbsent_returnsEmpty() {
-        assertThat(roomRepository.loadById(UUID.randomUUID())).isEmpty();
+        assertThat(roomRepository.loadById(RoomId.of(UUID.randomUUID()))).isEmpty();
     }
 
     @Test

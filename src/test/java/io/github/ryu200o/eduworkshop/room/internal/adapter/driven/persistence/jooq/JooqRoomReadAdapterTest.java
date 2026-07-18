@@ -5,6 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.vie
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -58,7 +59,7 @@ class JooqRoomReadAdapterTest {
 
         assertThat(found).isPresent();
         RoomDetailView response = found.get();
-        assertThat(response.id()).isEqualTo(room.id());
+        assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.name()).isEqualTo("F.0201");
         assertThat(response.building()).isEqualTo("F");
         assertThat(response.floor()).isEqualTo(2);
@@ -73,7 +74,7 @@ class JooqRoomReadAdapterTest {
         Optional<RoomSummaryView> found = roomQueryPort.findByName(RoomName.ofRaw("F.0201"));
 
         assertThat(found).isPresent();
-        assertThat(found.get().id()).isEqualTo(room.id());
+        assertThat(found.get().id()).isEqualTo(room.id().value());
         assertThat(found.get().name()).isEqualTo("F.0201");
         assertThat(found.get().building()).isEqualTo("F");
         assertThat(found.get().floor()).isEqualTo(2);
@@ -81,7 +82,7 @@ class JooqRoomReadAdapterTest {
 
     @Test
     void findById_whenAbsent_returnsEmpty() {
-        assertThat(roomQueryPort.findById(UUID.randomUUID())).isEmpty();
+        assertThat(roomQueryPort.findById(RoomId.of(UUID.randomUUID()))).isEmpty();
     }
 
     @Test

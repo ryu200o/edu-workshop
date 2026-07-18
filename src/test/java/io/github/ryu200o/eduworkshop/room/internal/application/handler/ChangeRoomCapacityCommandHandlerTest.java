@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
@@ -45,10 +46,10 @@ class ChangeRoomCapacityCommandHandlerTest {
     // ── Step 1: load failure ──
     @Test
     void roomNotFound_whenLoadReturnsEmpty_throws() {
-        UUID id = UUID.randomUUID();
+        RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(id, 80)))
+        assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(id.value(), 80)))
                 .isInstanceOf(RoomNotFoundException.class);
 
         verify(roomRepository, never()).save(any());
@@ -61,9 +62,9 @@ class ChangeRoomCapacityCommandHandlerTest {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id(), 0)))
+        assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 0)))
                 .isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id(), -3)))
+        assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id().value(), -3)))
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository, never()).save(any());
@@ -74,12 +75,12 @@ class ChangeRoomCapacityCommandHandlerTest {
     void sameCapacity_isIdempotent_noSave_returnsExistingUpdatedAt() {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
         Room room = Room.reconstruct(
-                UUID.randomUUID(), RoomName.of(RoomLocation.of("F", 2), "01"),
+                RoomId.of(UUID.randomUUID()), RoomName.of(RoomLocation.of("F", 2), "01"),
                 RoomLocation.of("F", 2), 50, RoomState.ACTIVE,
                 Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id(), 50));
+        ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 50));
 
         assertThat(response.oldCapacity()).isEqualTo(50);
         assertThat(response.newCapacity()).isEqualTo(50);
@@ -94,7 +95,7 @@ class ChangeRoomCapacityCommandHandlerTest {
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id(), 80));
+        ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 80));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
@@ -102,7 +103,7 @@ class ChangeRoomCapacityCommandHandlerTest {
 
         assertThat(saved.capacity()).isEqualTo(80);
         assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomCapacityChanged);
-        assertThat(response.id()).isEqualTo(room.id());
+        assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldCapacity()).isEqualTo(50);
         assertThat(response.newCapacity()).isEqualTo(80);
     }
@@ -113,7 +114,7 @@ class ChangeRoomCapacityCommandHandlerTest {
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        handler().handle(new ChangeRoomCapacityCommand(room.id(), 80));
+        handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 80));
 
         var ordered = inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());

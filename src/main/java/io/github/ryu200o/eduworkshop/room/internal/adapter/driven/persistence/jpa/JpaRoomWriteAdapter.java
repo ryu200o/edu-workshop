@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.j
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
@@ -31,8 +32,8 @@ class JpaRoomWriteAdapter implements RoomRepository {
     }
 
     @Override
-    public Optional<Room> loadById(UUID id) {
-        return repository.findById(id).map(JpaRoomWriteAdapter::toRoom);
+    public Optional<Room> loadById(RoomId id) {
+        return repository.findById(id.value()).map(JpaRoomWriteAdapter::toRoom);
     }
 
     @Override
@@ -43,7 +44,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
 
     private static RoomJpaEntity toEntity(Room room) {
         return new RoomJpaEntity(
-                room.id(),
+                room.id().value(),
                 room.name().asString(),
                 room.location().building(),
                 room.location().floor(),
@@ -59,7 +60,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
         RoomLocation location = RoomLocation.reconstruct(entity.getBuilding(), entity.getFloor());
         RoomName name = RoomName.of(location, entity.getCode());
         RoomState state = RoomState.valueOf(entity.getState());
-        return Room.reconstruct(entity.getId(), name, location, entity.getCapacity(), state,
+        return Room.reconstruct(RoomId.of(entity.getId()), name, location, entity.getCapacity(), state,
                 entity.getCreatedAt(), entity.getUpdatedAt());
     }
 }

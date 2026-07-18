@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -44,10 +45,10 @@ class RenameRoomCommandHandlerTest {
     // ── Step 1: load failure ──
     @Test
     void roomNotFound_whenLoadReturnsEmpty_throws() {
-        UUID id = UUID.randomUUID();
+        RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(id, "02")))
+        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(id.value(), "02")))
                 .isInstanceOf(RoomNotFoundException.class);
 
         verify(roomRepository).loadById(any());
@@ -57,10 +58,10 @@ class RenameRoomCommandHandlerTest {
     // ── Step 2: RAM guard (local invariant) blocks malformed code (load happens first, no save/gate) ──
     @Test
     void ramGuard_rejectsInvalidCode_withoutTouchingPorts() {
-        UUID id = UUID.randomUUID();
+        RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.of(existingRoom()));
 
-        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(id, "")))
+        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(id.value(), "")))
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository).loadById(any());
@@ -75,7 +76,7 @@ class RenameRoomCommandHandlerTest {
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(true);
 
-        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(room.id(), "02")))
+        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(room.id().value(), "02")))
                 .isInstanceOf(DuplicateRoomException.class);
 
         verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
@@ -88,7 +89,7 @@ class RenameRoomCommandHandlerTest {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id(), "01"));
+        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "01"));
 
         assertThat(response.name()).isEqualTo(room.name().asString());
         assertThat(response.oldCode()).isEqualTo("01");
@@ -105,7 +106,7 @@ class RenameRoomCommandHandlerTest {
         when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id(), "LAB"));
+        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "LAB"));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
@@ -113,7 +114,7 @@ class RenameRoomCommandHandlerTest {
 
         assertThat(saved.name()).isEqualTo(RoomName.of(RoomLocation.of("F", 2), "LAB"));
         assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRenamedEvent);
-        assertThat(response.id()).isEqualTo(room.id());
+        assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldCode()).isEqualTo("01");
         assertThat(response.newCode()).isEqualTo("LAB");
         assertThat(response.name()).isEqualTo("F.02LAB");
@@ -126,7 +127,7 @@ class RenameRoomCommandHandlerTest {
         when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        handler().handle(new RenameRoomCommand(room.id(), "LAB"));
+        handler().handle(new RenameRoomCommand(room.id().value(), "LAB"));
 
         var inOrder = org.mockito.Mockito.inOrder(roomRepository);
         inOrder.verify(roomRepository).loadById(any());

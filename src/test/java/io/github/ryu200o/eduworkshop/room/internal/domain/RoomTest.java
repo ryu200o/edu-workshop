@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
@@ -48,7 +49,7 @@ class RoomTest {
                 .isInstanceOf(RoomCreated.class)
                 .satisfies(e -> {
                     RoomCreated created = (RoomCreated) e;
-                    assertThat(created.roomId()).isEqualTo(room.id());
+                    assertThat(created.roomId()).isEqualTo(room.id().value());
                     assertThat(created.name()).isEqualTo(name());
                     assertThat(created.location()).isEqualTo(LOCATION);
                     assertThat(created.initialState()).isEqualTo(RoomState.ACTIVE);
@@ -57,13 +58,13 @@ class RoomTest {
 
     @Test
     void create_withExplicitIdentity_emitsCreatedEventAndPreservesTimestamps() {
-        UUID id = UUID.randomUUID();
+        RoomId roomId = RoomId.of(UUID.randomUUID());
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Instant updatedAt = Instant.parse("2026-01-01T00:00:00Z");
 
-        Room room = Room.create(id, name(), LOCATION, CAPACITY, createdAt, updatedAt);
+        Room room = Room.create(roomId, name(), LOCATION, CAPACITY, createdAt, updatedAt);
 
-        assertThat(room.id()).isEqualTo(id);
+        assertThat(room.id()).isEqualTo(roomId);
         assertThat(room.createdAt()).isEqualTo(createdAt);
         assertThat(room.updatedAt()).isEqualTo(updatedAt);
         assertThat(room.recordedEvents()).hasSize(1);
@@ -72,13 +73,13 @@ class RoomTest {
 
     @Test
     void reconstruct_preservesPersistedStateAndTimestamps_withoutEvents() {
-        UUID id = UUID.randomUUID();
+        RoomId roomId = RoomId.of(UUID.randomUUID());
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Instant updatedAt = Instant.parse("2026-06-01T00:00:00Z");
 
-        Room room = Room.reconstruct(id, name(), LOCATION, CAPACITY, RoomState.MAINTENANCE, createdAt, updatedAt);
+        Room room = Room.reconstruct(roomId, name(), LOCATION, CAPACITY, RoomState.MAINTENANCE, createdAt, updatedAt);
 
-        assertThat(room.id()).isEqualTo(id);
+        assertThat(room.id()).isEqualTo(roomId);
         assertThat(room.state()).isEqualTo(RoomState.MAINTENANCE);
         assertThat(room.createdAt()).isEqualTo(createdAt);
         assertThat(room.updatedAt()).isEqualTo(updatedAt);
@@ -87,10 +88,10 @@ class RoomTest {
 
     @Test
     void reconstruct_withNullState_isRejected() {
-        UUID id = UUID.randomUUID();
+        RoomId roomId = RoomId.of(UUID.randomUUID());
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
 
-        assertThatThrownBy(() -> Room.reconstruct(id, name(), LOCATION, CAPACITY, null, now, now))
+        assertThatThrownBy(() -> Room.reconstruct(roomId, name(), LOCATION, CAPACITY, null, now, now))
                 .isInstanceOf(RoomDomainException.class);
     }
 
@@ -132,7 +133,7 @@ class RoomTest {
                     RoomStateChanged changed = (RoomStateChanged) e;
                     assertThat(changed.previousState()).isEqualTo(RoomState.ACTIVE);
                     assertThat(changed.newState()).isEqualTo(RoomState.MAINTENANCE);
-                    assertThat(changed.roomId()).isEqualTo(room.id());
+                    assertThat(changed.roomId()).isEqualTo(room.id().value());
                 });
     }
 
@@ -263,7 +264,7 @@ class RoomTest {
                 .first()
                 .satisfies(e -> {
                     RoomRenamedEvent ev = (RoomRenamedEvent) e;
-                    assertThat(ev.roomId()).isEqualTo(room.id());
+                    assertThat(ev.roomId()).isEqualTo(room.id().value());
                     assertThat(ev.reason()).isEqualTo(RoomRenameReason.CODE_CHANGED);
                     assertThat(ev.oldName()).isEqualTo(name());
                     assertThat(ev.oldCode()).isEqualTo(CODE);
@@ -341,7 +342,7 @@ class RoomTest {
                 .first()
                 .satisfies(e -> {
                     RoomRenamedEvent ev = (RoomRenamedEvent) e;
-                    assertThat(ev.roomId()).isEqualTo(room.id());
+                    assertThat(ev.roomId()).isEqualTo(room.id().value());
                     assertThat(ev.reason()).isEqualTo(RoomRenameReason.LOCATION_CHANGED);
                     assertThat(ev.oldName()).isEqualTo(name());
                     assertThat(ev.oldCode()).isEqualTo(CODE);
@@ -404,7 +405,7 @@ class RoomTest {
                 .first()
                 .satisfies(e -> {
                     RoomCapacityChanged ev = (RoomCapacityChanged) e;
-                    assertThat(ev.roomId()).isEqualTo(room.id());
+                    assertThat(ev.roomId()).isEqualTo(room.id().value());
                     assertThat(ev.oldCapacity()).isEqualTo(CAPACITY);
                     assertThat(ev.newCapacity()).isEqualTo(80);
                     assertThat(ev.occurredAt()).isEqualTo(room.updatedAt());

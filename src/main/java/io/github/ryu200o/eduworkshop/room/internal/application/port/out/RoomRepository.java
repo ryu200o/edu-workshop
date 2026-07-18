@@ -1,9 +1,9 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.out;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Outbound port (SPI) for persisting and guarding Room aggregates on the write side. Consolidates the
@@ -21,7 +21,7 @@ public interface RoomRepository {
      * Loads the persisted Room aggregate by id for write-side mutation. Returns empty when absent, so the
      * handler (or {@code RoomCommandGuard}) can translate a missing room into a {@code RoomNotFoundException}.
      */
-    Optional<Room> loadById(UUID id);
+    Optional<Room> loadById(RoomId id);
 
     /**
      * Global-uniqueness gate on the hard business coordinates (building + floor + code). Returns true if ANY
