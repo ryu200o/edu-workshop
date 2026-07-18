@@ -47,7 +47,7 @@ into `floor`/`code` is **deleted**. Two factories replace the old dual `of(...)`
 `equals`/`hashCode` are based solely on `value`. `asString()` returns `value`.
 
 ### 3. Type-safe, exact-match lookup (no coordinate split at query time)
-`RoomQueryPort.findByName(RoomName name)` is **type-safe** on the RAM side. The infrastructure adapter
+`RoomReader.findByName(RoomName name)` is **type-safe** on the RAM side. The infrastructure adapter
 (`JpaRoomAdapter`) unwraps only `name.asString()` and runs an **exact** `WHERE name = ?` match against the
 DB index — the high-performance, collision-proof strategy. The query handler validates input via
 `RoomName.ofRaw(...)` but never reconstructs coordinates from it.

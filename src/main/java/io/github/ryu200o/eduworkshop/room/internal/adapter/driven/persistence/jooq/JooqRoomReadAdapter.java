@@ -2,7 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.j
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.jooq.tables.Rooms;
@@ -15,14 +15,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * JOOQ-backed driven adapter implementing the Room read port ({@link RoomQueryPort}). Queries the
+ * JOOQ-backed driven adapter implementing the Room read port ({@link RoomReader}). Queries the
  * {@code rooms} table directly via the generated {@link Rooms} model and maps flat columns into the
  * read-side {@code *View} projections — no JPA entity, no domain aggregate reconstruction (CQRS bypass).
  * Shares the module's single datasource with the write adapter. Package-private; hidden inside the
  * module's {@code internal} boundary.
  */
 @Component
-class JooqRoomReadAdapter implements RoomQueryPort {
+class JooqRoomReadAdapter implements RoomReader {
 
     private static final Rooms ROOMS = Rooms.ROOMS;
 

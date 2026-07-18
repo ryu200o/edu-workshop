@@ -2,7 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.j
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomQueryPort;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JooqRoomReadAdapterTest {
 
     @Autowired
-    private RoomQueryPort roomQueryPort;
+    private RoomReader roomReader;
 
     @Autowired
     private RoomRepository roomRepository;
@@ -55,7 +55,7 @@ class JooqRoomReadAdapterTest {
     void save_thenFindById_roundTripsThroughDatabase() {
         Room room = roomRepository.save(newRoom());
 
-        Optional<RoomDetailView> found = roomQueryPort.findById(room.id());
+        Optional<RoomDetailView> found = roomReader.findById(room.id());
 
         assertThat(found).isPresent();
         RoomDetailView response = found.get();
@@ -71,7 +71,7 @@ class JooqRoomReadAdapterTest {
     void save_thenFindByName_returnsProjection() {
         Room room = roomRepository.save(newRoom());
 
-        Optional<RoomSummaryView> found = roomQueryPort.findByName(RoomName.ofRaw("F.0201"));
+        Optional<RoomSummaryView> found = roomReader.findByName(RoomName.ofRaw("F.0201"));
 
         assertThat(found).isPresent();
         assertThat(found.get().id()).isEqualTo(room.id().value());
@@ -82,11 +82,11 @@ class JooqRoomReadAdapterTest {
 
     @Test
     void findById_whenAbsent_returnsEmpty() {
-        assertThat(roomQueryPort.findById(RoomId.of(UUID.randomUUID()))).isEmpty();
+        assertThat(roomReader.findById(RoomId.of(UUID.randomUUID()))).isEmpty();
     }
 
     @Test
     void findByName_whenAbsent_returnsEmpty() {
-        assertThat(roomQueryPort.findByName(RoomName.ofRaw("G.0301"))).isEmpty();
+        assertThat(roomReader.findByName(RoomName.ofRaw("G.0301"))).isEmpty();
     }
 }
