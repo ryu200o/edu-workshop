@@ -55,7 +55,7 @@ public class Room {
      */
     public static Room create(RoomName name, RoomLocation location, int capacity) {
         Instant now = Instant.now();
-        return create(RoomId.random(), name, location, capacity, now, now);
+        return create(RoomId.generate(), name, location, capacity, now, now);
     }
 
     /**

@@ -17,9 +17,10 @@ public record RoomId(UUID value) {
     }
 
     /**
-     * Generates a new random room identity (client-generated, per the module's ID strategy).
+     * Generates a new room identity (client-generated, per the module's ID strategy). The generation
+     * mechanism is an implementation detail and may change without affecting this public API.
      */
-    public static RoomId random() {
+    public static RoomId generate() {
         return new RoomId(UUID.randomUUID());
     }
 
