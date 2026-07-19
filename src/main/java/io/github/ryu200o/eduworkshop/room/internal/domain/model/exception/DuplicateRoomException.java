@@ -12,6 +12,8 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
  */
 public class DuplicateRoomException extends RoomDomainException {
 
+    private final Reason reason;
+
     public DuplicateRoomException(RoomName name, RoomLocation location) {
         this(Reason.NAME, 0, name, location);
     }
@@ -21,6 +23,11 @@ public class DuplicateRoomException extends RoomDomainException {
             case CODE -> "A room with code " + code + " already exists at " + location.asString() + ".";
             case NAME -> "A room named '" + name.asString() + "' already exists at " + location.asString() + ".";
         });
+        this.reason = reason;
+    }
+
+    public Reason getReason() {
+        return reason;
     }
 
     public enum Reason {
