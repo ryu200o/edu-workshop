@@ -21,7 +21,7 @@
 │   │   │   ├── in/
 │   │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
 │   │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
- │   │   │   └── out/           # RoomRepository (write), RoomReader (read, CQRS bypass)
+│   │   │   └── out/           # RoomRepository (write), RoomReader (read, CQRS bypass)
 │   │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
 │   └── adapter/
 │       ├── driving/
@@ -30,7 +30,7 @@
 │       └── driven/
 │           └── persistence/
 │               ├── jpa/        # JpaRoomWriteAdapter (impl RoomRepository, C) + RoomJpaRepository/Entity
- │               └── jooq/       # JooqRoomReadAdapter (impl RoomReader, Q) + generated jooq.tables.Rooms
+│               └── jooq/       # JooqRoomReadAdapter (impl RoomReader, Q) + generated jooq.tables.Rooms
 └── RoomExposeAPI.java         # public API (cross-module surface, để trống nếu chưa công bố)
 ```
 
@@ -81,15 +81,14 @@ public record ChangeRoomCodeCommand(UUID roomId, int newCode)
 ```
 
 ### 2.3 Out Port — ghi (RoomRepository)
-> Gộp write-side load/save + existence check vào MỘT port duy nhất để gọn, dễ inject, focus nghiệp vụ.
-> `RoomExistencePort` (cũ) + `RoomStateGateway` (cũ) đã hợp nhất tại đây — không còn tách rời.
+> Write port chỉ còn hợp đồng persistence nguyên thủy (`loadById` + `save`). **Uniqueness KHÔNG còn là
+> repository concern** — `existsByCoordinate` / `existsByName` đã bị gỡ bỏ (ADR 0005). Việc chứng minh tính
+> duy nhất toàn cục nằm ở Domain Policy (xem §2.6), IO của nó nằm ở adapter `JpaRoomUniquenessPolicy`.
 ```java
-// port.out.RoomRepository — write port duy nhất (load + save + existence)
+// port.out.RoomRepository — write port duy nhất (chỉ load + save)
 public interface RoomRepository {
     Optional<Room> loadById(UUID id);
     Room save(Room room);
-    // Global invariant: kiểm tra coordinate target đã bị room KHÁC chiếm chưa (1 method duy nhất)
-    boolean existsByCoordinate(String building, int floor, int code);
 }
 ```
 
@@ -116,9 +115,9 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         }
 
         // 4. Domain mutation (changeName ghi RoomRenamedEvent) rồi persist.
-        //    Tính duy nhất name do DB uk_rooms_building_floor_name + race gate ở adapter đảm bảo.
+        //    Tính duy nhất name do AGGREGATE tự check qua uniquenessPolicy (ADR 0005) + race gate ở adapter.
         String oldName = room.name().asString();
-        room.changeName(command.newName());
+        room.changeName(command.newName(), uniquenessPolicy);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldName);
     }
@@ -143,6 +142,73 @@ RenameRoomCommand.Result result = commandBus.execute(command);
 ```
 > Mỗi module KHÔNG tự định nghĩa `CommandBus`/`SimpleCommandBus` nữa (ADR 0002 §5 đã bị supersede bởi ADR 0006).
 > Cross-cutting concern = thêm `CommandBehavior` mới + `ModuleRegistration` matcher, **không** sửa `CommandDispatcher`.
+
+### 2.6 Global Uniqueness = Domain Policy (ADR 0005)
+
+> Set-based invariant (no two rooms share `(building, floor, code)` or `(building, floor, name)`) cannot be
+> proven *by* one aggregate, but the **decision + exception belong to the Domain**. So uniqueness is a
+> **domain-owned policy interface**, not an `exists*` method on the repository port.
+
+**Domain — `domain/model/policy/RoomUniquenessPolicy.java`** (specifies the invariant, no IO):
+```java
+public interface RoomUniquenessPolicy {
+    boolean isCodeUnique(RoomLocation location, int code);   // no other room owns the coordinate
+    boolean isNameUnique(RoomLocation location, RoomName name); // no other room owns the name@location
+}
+```
+The aggregate receives the policy as an argument on every uniqueness-sensitive op and throws
+`DuplicateRoomException` (with the correct `Reason`) itself:
+```java
+// Room.create / changeCode / changeName / relocateTo each take (..., RoomUniquenessPolicy policy)
+Room room = Room.create(name, location, code, capacity, uniquenessPolicy);   // checks both, then builds
+room.changeName(command.newName(), uniquenessPolicy);                        // idempotency skip, then check
+room.changeCode(newCode, uniquenessPolicy);
+room.relocateTo(newLocation, uniquenessPolicy);
+```
+Idempotency (same code / same name / same location) is checked **inside the aggregate, before** the policy
+call — avoids false-positive self-collision and needless IO.
+
+**Infrastructure — `adapter/driven/persistence/jpa/JpaRoomUniquenessPolicy.java`** (runtime IO, in the adapter):
+```java
+@Component
+class JpaRoomUniquenessPolicy implements RoomUniquenessPolicy {
+    private final RoomJpaRepository jpaRepository;
+    @Override public boolean isCodeUnique(RoomLocation loc, int code) {
+        return !jpaRepository.existsByBuildingAndFloorAndCode(loc.building(), loc.floor(), code);
+    }
+    @Override public boolean isNameUnique(RoomLocation loc, RoomName name) {
+        return !jpaRepository.existsByBuildingAndFloorAndName(loc.building(), loc.floor(), name.asString());
+    }
+}
+```
+
+**Handler stays thin** — injects `RoomUniquenessPolicy` (for the `create` path) + `RoomRepository` (load/save),
+never evaluates the invariant itself, never calls `exists*`:
+```java
+@Transactional
+@Component
+class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, CreateRoomCommand.Result> {
+    private final RoomRepository roomRepository;
+    private final RoomUniquenessPolicy uniquenessPolicy;
+
+    @Override
+    public CreateRoomCommand.Result handle(CreateRoomCommand c) {
+        RoomName name = RoomName.of(c.name());              // VO self-defense (local invariant)
+        RoomLocation location = RoomLocation.of(c.building(), c.floor());
+        if (c.code() <= 0) throw new RoomDomainException("code must be > 0");
+
+        Room room = Room.create(name, location, c.code(), c.capacity(), uniquenessPolicy); // Domain owns invariant
+        Room saved = roomRepository.save(room);
+        return new CreateRoomCommand.Result(saved.id().value(), saved.name().asString());
+    }
+}
+```
+
+**DB unique constraint = authoritative race-proof gate.** `uk_rooms_building_floor_code` +
+`uk_rooms_building_floor_name` remain the final integrity authority. `JpaRoomWriteAdapter.save()` still
+translates `DataIntegrityViolationException` → `DuplicateRoomException` (matched by constraint name, correct
+`Reason`), so the TOCTOU race is still caught. Policy read and DB constraint are **complementary**, not
+substitutive. Reconstitution (`Room.reconstruct`) bypasses any uniqueness check.
 
 ---
 
@@ -306,9 +372,9 @@ class RoomExceptionAdvice {
 - `RoomLocation` (`building`, `floor`) **immutable** — rename/đổi code không thay đổi tọa độ. Relocation
   (`relocateTo`) giữ nguyên `name` + `code`, chỉ đổi `location`, phát `RoomRelocatedEvent`
   (`oldLocation`/`newLocation`, không mang name).
-- Rename (`Room.changeName(String)`) đổi `name` trực tiếp, phát `RoomRenamedEvent` (chỉ
+- Rename (`Room.changeName(String, RoomUniquenessPolicy)`) đổi `name` trực tiếp, phát `RoomRenamedEvent` (chỉ
   `oldName`/`newName`, **không** mang code/location) để module khác (Workshop) phản ứng. Tính duy nhất name do
-  DB `uk_rooms_building_floor_name` + race gate ở `JpaRoomWriteAdapter.save()` đảm bảo.
+  **aggregate tự check qua `RoomUniquenessPolicy`** (ADR 0005) + race gate ở `JpaRoomWriteAdapter.save()` đảm bảo.
 - Aggregate **ghi nhận event** thay vì publish trực tiếp: `RoomRenamedEvent` (name change) và
   `RoomRelocatedEvent` (location change) là hai record riêng, đều `implements RoomDomainEvent`, thuộc
   sealed `RoomDomainEvent permits ...`. Mỗi event chứa đủ context liên quan (`RoomRenamedEvent`:
@@ -326,4 +392,6 @@ class RoomExceptionAdvice {
 - [ ] Exception nghiệp vụ tập trung ở `*ExceptionAdvice` scoped `assignableTypes`, nằm trong module.
 - [ ] `internal/` không bị outside import (chạy build/ArchitectureTest xanh).
 - [ ] Unique index `(building, floor, code)` (code INT) + `uk_rooms_building_floor_name` làm DB gate.
+- [ ] Global uniqueness nằm trong **Domain** (`RoomUniquenessPolicy` + aggregate tự throw
+  `DuplicateRoomException`); `RoomRepository` KHÔNG có `exists*`; handler "gầy" (chỉ truyền policy vào aggregate).
 - [ ] `./mvnw test` xanh toàn bộ, không regression.

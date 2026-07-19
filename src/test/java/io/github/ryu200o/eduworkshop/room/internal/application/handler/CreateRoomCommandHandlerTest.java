@@ -3,7 +3,6 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -36,6 +35,10 @@ class CreateRoomCommandHandlerTest {
         return new CreateRoomCommandHandler(roomRepository, uniquenessPolicy);
     }
 
+    // The handler is THIN: it builds VOs, delegates to the aggregate (which owns the invariant via the
+    // policy), and persists. Uniqueness is asserted inside RoomTest — the handler only passes the policy
+    // through. Here we verify the handler's own job: local VO guards and the load→build→save flow.
+
     // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any IO ──
     @Test
     void ramGuard_rejectsBlankName_withoutTouchingPorts() {
@@ -67,37 +70,11 @@ class CreateRoomCommandHandlerTest {
         verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
 
-    // ── Step 2: Domain guard (Global invariant via policy) blocks duplicate code, never persists ──
+    // ── Happy path: builds VOs, delegates to aggregate (which enforces uniqueness internally),
+    //    then persists and returns the id. We stub the policy to "unique" since the invariant is the
+    //    aggregate's concern, not the handler's. ──
     @Test
-    void domainGuard_rejectsDuplicateCode_andDoesNotSave() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
-
-        assertThatThrownBy(() -> handler().handle(command))
-                .isInstanceOf(DuplicateRoomException.class);
-
-        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
-        verify(roomRepository, never()).save(any());
-    }
-
-    // ── Step 2b: Domain guard (name) blocks duplicate name, never persists ──
-    @Test
-    void domainGuard_rejectsDuplicateName_andDoesNotSave() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
-        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(false);
-
-        assertThatThrownBy(() -> handler().handle(command))
-                .isInstanceOf(DuplicateRoomException.class);
-
-        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
-        verify(uniquenessPolicy).isNameUnique(any(), any());
-        verify(roomRepository, never()).save(any());
-    }
-
-    // ── Step 3: Happy path — passes both guards, persists, returns id ──
-    @Test
-    void happyPath_passesGuards_persists_andReturnsId() {
+    void happyPath_buildsVosDelegatesAndPersists() {
         CreateRoomCommand command = new CreateRoomCommand("f", 2, 1, "F-201", 50); // lowercase building
         when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
         when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
@@ -109,8 +86,8 @@ class CreateRoomCommandHandlerTest {
         verify(roomRepository).save(captor.capture());
         Room persisted = captor.getValue();
 
+        // Aggregate normalized the building (uppercase) and free-form name.
         assertThat(result.id()).isEqualTo(persisted.id().value());
-        assertThat(result.name()).isEqualTo(persisted.name().asString());
         assertThat(persisted.name()).isEqualTo(RoomName.of("F-201"));
         assertThat(persisted.location()).isEqualTo(RoomLocation.of("F", 2));
         assertThat(persisted.code()).isEqualTo(1);
@@ -118,7 +95,7 @@ class CreateRoomCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_policyCheckedBeforeSave() {
+    void happyPath_passesPolicyIntoAggregate_andSavesAfter() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
         when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
         when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
@@ -127,8 +104,22 @@ class CreateRoomCommandHandlerTest {
         handler().handle(command);
 
         var inOrder = org.mockito.Mockito.inOrder(uniquenessPolicy, roomRepository);
+        // The handler asks the policy (delegated to the aggregate) BEFORE persisting.
         inOrder.verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
         inOrder.verify(uniquenessPolicy).isNameUnique(any(), any());
         inOrder.verify(roomRepository).save(any());
+    }
+
+    // The duplicate-rejection path is owned by the aggregate (RoomTest). The handler must NOT bypass it:
+    // if the policy reports a duplicate, the aggregate throws before save, so nothing is persisted.
+    @Test
+    void duplicateCode_doesNotPersist_becauseAggregateRejectsFirst() {
+        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
+
+        assertThatThrownBy(() -> handler().handle(command))
+                .isInstanceOf(io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException.class);
+
+        verify(roomRepository, never()).save(any());
     }
 }

@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.C
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
@@ -85,9 +86,10 @@ class ChangeRoomCodeCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 3: Domain guard (global invariant) blocks duplicates, never persists ──
+    // The duplicate-code rejection is owned by the aggregate (RoomTest). When the policy reports a collision
+    // the aggregate throws before save, so nothing is persisted.
     @Test
-    void domainGuard_rejectsDuplicate_andDoesNotSave() {
+    void duplicateCode_doesNotPersist_becauseAggregateRejectsFirst() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
@@ -95,7 +97,6 @@ class ChangeRoomCodeCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCodeCommand(room.id().value(), 2)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -129,7 +130,7 @@ class ChangeRoomCodeCommandHandlerTest {
 
         assertThat(saved.code()).isEqualTo(99);
         assertThat(saved.recordedEvents())
-                .filteredOn(io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent.class::isInstance)
+                .filteredOn(RoomRenamedEvent.class::isInstance)
                 .isEmpty(); // silent — no rename event
         assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldCode()).isEqualTo(1);
@@ -137,7 +138,7 @@ class ChangeRoomCodeCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_loadThenPolicyThenSave() {
+    void happyPath_loadsThenDelegatesThenSaves() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);

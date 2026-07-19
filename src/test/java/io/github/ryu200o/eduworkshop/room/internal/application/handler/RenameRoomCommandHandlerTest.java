@@ -5,12 +5,11 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepo
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -98,9 +97,10 @@ class RenameRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4: Domain guard (name) blocks duplicate name at the same location, never persists ──
+    // The duplicate-name rejection is owned by the aggregate (RoomTest). The handler must not persist when
+    // the policy reports a collision, because the aggregate throws before save.
     @Test
-    void domainGuard_rejectsDuplicateName_andDoesNotSave() {
+    void duplicateName_doesNotPersist_becauseAggregateRejectsFirst() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(false);
@@ -108,11 +108,10 @@ class RenameRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101")))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(uniquenessPolicy).isNameUnique(any(), any());
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4: Happy path — passes guards, mutates, persists, returns projection ──
+    // ── Happy path — load → delegate (aggregate enforces uniqueness internally) → persist → return ──
     @Test
     void happyPath_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
@@ -134,7 +133,7 @@ class RenameRoomCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_loadThenPolicyThenSave() {
+    void happyPath_loadsThenDelegatesThenSaves() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);

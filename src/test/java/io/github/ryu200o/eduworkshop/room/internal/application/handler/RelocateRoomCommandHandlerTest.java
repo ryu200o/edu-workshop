@@ -89,9 +89,10 @@ class RelocateRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4: Domain guard (global invariant) blocks duplicate code, never persists ──
+    // The duplicate-code rejection is owned by the aggregate (RoomTest). When the policy reports a collision
+    // the aggregate throws before save, so nothing is persisted.
     @Test
-    void domainGuard_rejectsDuplicateCode_andDoesNotSave() {
+    void duplicateCode_doesNotPersist_becauseAggregateRejectsFirst() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
@@ -99,7 +100,6 @@ class RelocateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -122,23 +122,7 @@ class RelocateRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4b: Domain guard (name) blocks duplicate name at target location, never persists ──
-    @Test
-    void domainGuard_rejectsDuplicateName_andDoesNotSave() {
-        Room room = existingRoom();
-        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
-        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(false);
-
-        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
-                .isInstanceOf(DuplicateRoomException.class);
-
-        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
-        verify(uniquenessPolicy).isNameUnique(any(), any());
-        verify(roomRepository, never()).save(any());
-    }
-
-    // ── Step 5: Happy path — passes guards, mutates, persists, returns projection ──
+    // ── Happy path — load → delegate (aggregate enforces uniqueness internally) → persist → return ──
     @Test
     void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
@@ -163,7 +147,7 @@ class RelocateRoomCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_loadThenPolicyThenSave() {
+    void happyPath_loadsThenDelegatesThenSaves() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
