@@ -44,11 +44,11 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
         // Step 4 — DB guard (global invariant): target coordinate (new location + same code) must be free
         //         of *other* rooms.
-        if (roomRepository.existsByCoordinate(newLocation.building(), newLocation.floor(), room.name().code())) {
+        if (roomRepository.existsByCoordinate(newLocation.building(), newLocation.floor(), room.code())) {
             throw new DuplicateRoomException(room.name(), newLocation);
         }
 
-        // Step 5 — Domain mutation (recomputes name, records RoomRenamedEvent) then persist.
+        // Step 5 — Domain mutation (keeps name/code, records RoomRenamedEvent) then persist.
         RoomLocation oldLocation = room.location();
         room.relocateTo(newLocation);
         Room saved = roomRepository.save(room);

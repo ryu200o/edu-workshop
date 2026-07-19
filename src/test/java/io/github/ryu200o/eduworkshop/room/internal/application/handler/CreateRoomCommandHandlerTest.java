@@ -34,8 +34,18 @@ class CreateRoomCommandHandlerTest {
 
     // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any DB call ──
     @Test
-    void ramGuard_rejectsMalformedInput_withoutTouchingPorts() {
-        CreateRoomCommand badCode = new CreateRoomCommand("F", 2, 50, ""); // blank code is invalid
+    void ramGuard_rejectsBlankName_withoutTouchingPorts() {
+        CreateRoomCommand badName = new CreateRoomCommand("F", 2, 1, "", 50);
+
+        assertThatThrownBy(() -> handler().handle(badName))
+                .isInstanceOf(RoomDomainException.class);
+
+        verifyNoInteractions(roomRepository);
+    }
+
+    @Test
+    void ramGuard_rejectsNonPositiveCode_withoutTouchingPorts() {
+        CreateRoomCommand badCode = new CreateRoomCommand("F", 2, 0, "F-201", 50);
 
         assertThatThrownBy(() -> handler().handle(badCode))
                 .isInstanceOf(RoomDomainException.class);
@@ -45,7 +55,7 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void ramGuard_rejectsNonPositiveFloor_withoutTouchingPorts() {
-        CreateRoomCommand badFloor = new CreateRoomCommand("F", 0, 50, "01");
+        CreateRoomCommand badFloor = new CreateRoomCommand("F", 0, 1, "F-201", 50);
 
         assertThatThrownBy(() -> handler().handle(badFloor))
                 .isInstanceOf(RoomDomainException.class);
@@ -56,21 +66,21 @@ class CreateRoomCommandHandlerTest {
     // ── Step 2: DB guard (Global invariant) blocks duplicates, never persists ──
     @Test
     void dbGuard_rejectsDuplicate_andDoesNotSave() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 50, "01");
-        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(true);
+        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
+        verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
     // ── Step 3: Happy path — passes both guards, persists, returns id ──
     @Test
     void happyPath_passesGuards_persists_andReturnsId() {
-        CreateRoomCommand command = new CreateRoomCommand("f", 2, 50, "01"); // lowercase building
-        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
+        CreateRoomCommand command = new CreateRoomCommand("f", 2, 1, "F-201", 50); // lowercase building
+        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CreateRoomCommand.Result result = handler().handle(command);
@@ -81,21 +91,22 @@ class CreateRoomCommandHandlerTest {
 
         assertThat(result.id()).isEqualTo(persisted.id().value());
         assertThat(result.name()).isEqualTo(persisted.name().asString());
-        assertThat(persisted.name()).isEqualTo(RoomName.of(RoomLocation.of("F", 2), "01"));
+        assertThat(persisted.name()).isEqualTo(RoomName.of("F-201"));
         assertThat(persisted.location()).isEqualTo(RoomLocation.of("F", 2));
+        assertThat(persisted.code()).isEqualTo(1);
         assertThat(persisted.capacity()).isEqualTo(50);
     }
 
     @Test
     void guardsRunInOrder_existenceCheckedBeforeSave() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 50, "01");
-        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
+        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(command);
 
         var inOrder = org.mockito.Mockito.inOrder(roomRepository);
-        inOrder.verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
+        inOrder.verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
         inOrder.verify(roomRepository).save(any());
     }
 }

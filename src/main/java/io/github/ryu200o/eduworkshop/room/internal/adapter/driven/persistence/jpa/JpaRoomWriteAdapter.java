@@ -29,7 +29,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
     }
 
     @Override
-    public boolean existsByCoordinate(String building, int floor, String code) {
+    public boolean existsByCoordinate(String building, int floor, int code) {
         return repository.existsByBuildingAndFloorAndCode(building, floor, code);
     }
 
@@ -58,7 +58,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
                 room.name().asString(),
                 room.location().building(),
                 room.location().floor(),
-                room.name().code(),
+                room.code(),
                 room.capacity(),
                 room.state().name(),
                 room.createdAt(),
@@ -68,9 +68,9 @@ class JpaRoomWriteAdapter implements RoomRepository {
 
     private static Room toRoom(RoomJpaEntity entity) {
         RoomLocation location = RoomLocation.reconstruct(entity.getBuilding(), entity.getFloor());
-        RoomName name = RoomName.of(location, entity.getCode());
+        RoomName name = RoomName.of(entity.getName());
         RoomState state = RoomState.valueOf(entity.getState());
-        return Room.reconstruct(RoomId.of(entity.getId()), name, location, entity.getCapacity(), state,
-                entity.getCreatedAt(), entity.getUpdatedAt());
+        return Room.reconstruct(RoomId.of(entity.getId()), name, location, entity.getCode(),
+                entity.getCapacity(), state, entity.getCreatedAt(), entity.getUpdatedAt());
     }
 }

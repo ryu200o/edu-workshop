@@ -33,18 +33,18 @@ class GetRoomByNameQueryHandlerTest {
     }
 
     @Test
-    void happyPath_parsesNameThenReturnsProjection() {
-        RoomSummaryView expected = new RoomSummaryView(UUID.randomUUID(), "F.0201", "F", 2);
-        when(roomReader.findByName(RoomName.ofRaw("F.0201"))).thenReturn(Optional.of(expected));
+    void happyPath_returnsProjection() {
+        RoomSummaryView expected = new RoomSummaryView(UUID.randomUUID(), "F-201", "F", 2);
+        when(roomReader.findByName(RoomName.of("F-201"))).thenReturn(Optional.of(expected));
 
-        RoomSummaryView result = handler().handle(new GetRoomByNameQuery("F.0201"));
+        RoomSummaryView result = handler().handle(new GetRoomByNameQuery("F-201"));
 
         assertThat(result).isEqualTo(expected);
     }
 
     @Test
-    void malformedName_rejectedInRam_beforeTouchingPort() {
-        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F201"))) // missing dot
+    void blankName_rejectedInRam_beforeTouchingPort() {
+        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("   ")))
                 .isInstanceOf(RoomDomainException.class);
 
         verifyNoInteractions(roomReader);
@@ -54,15 +54,15 @@ class GetRoomByNameQueryHandlerTest {
     void notFound_throwsRoomNotFoundException() {
         when(roomReader.findByName(any())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F.0201")))
+        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F-201")))
                 .isInstanceOf(RoomNotFoundException.class);
 
-        verify(roomReader).findByName(RoomName.ofRaw("F.0201"));
+        verify(roomReader).findByName(RoomName.of("F-201"));
     }
 
     @Test
-    void malformedName_neverCallsPort() {
-        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("bad")))
+    void blankName_neverCallsPort() {
+        assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("")))
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomReader, never()).findByName(any());

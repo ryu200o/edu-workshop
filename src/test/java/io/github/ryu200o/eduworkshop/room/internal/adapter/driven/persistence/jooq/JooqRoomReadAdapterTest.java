@@ -47,8 +47,8 @@ class JooqRoomReadAdapterTest {
 
     private static Room newRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        RoomName name = RoomName.of(location, "01");
-        return Room.create(name, location, 50);
+        RoomName name = RoomName.of("F-201");
+        return Room.create(name, location, 1, 50);
     }
 
     @Test
@@ -60,7 +60,7 @@ class JooqRoomReadAdapterTest {
         assertThat(found).isPresent();
         RoomDetailView response = found.get();
         assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.name()).isEqualTo("F.0201");
+        assertThat(response.name()).isEqualTo("F-201");
         assertThat(response.building()).isEqualTo("F");
         assertThat(response.floor()).isEqualTo(2);
         assertThat(response.capacity()).isEqualTo(50);
@@ -71,11 +71,11 @@ class JooqRoomReadAdapterTest {
     void save_thenFindByName_returnsProjection() {
         Room room = roomRepository.save(newRoom());
 
-        Optional<RoomSummaryView> found = roomReader.findByName(RoomName.ofRaw("F.0201"));
+        Optional<RoomSummaryView> found = roomReader.findByName(RoomName.of("F-201"));
 
         assertThat(found).isPresent();
         assertThat(found.get().id()).isEqualTo(room.id().value());
-        assertThat(found.get().name()).isEqualTo("F.0201");
+        assertThat(found.get().name()).isEqualTo("F-201");
         assertThat(found.get().building()).isEqualTo("F");
         assertThat(found.get().floor()).isEqualTo(2);
     }
@@ -87,6 +87,6 @@ class JooqRoomReadAdapterTest {
 
     @Test
     void findByName_whenAbsent_returnsEmpty() {
-        assertThat(roomReader.findByName(RoomName.ofRaw("G.0301"))).isEmpty();
+        assertThat(roomReader.findByName(RoomName.of("G-301"))).isEmpty();
     }
 }

@@ -29,5 +29,5 @@ public interface RoomRepository {
      * (idempotency) to avoid a false-positive self-collision. The DB unique constraint remains the
      * authoritative, race-proof gate (anti-TOCTOU); this read is fail-fast/UX only.
      */
-    boolean existsByCoordinate(String building, int floor, String code);
+    boolean existsByCoordinate(String building, int floor, int code);
 }

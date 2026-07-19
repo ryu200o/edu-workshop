@@ -60,17 +60,23 @@ public interface CommandHandler<C extends Command<R>, R> {
 // port.in.command.RenameRoomCommand — chỉ chứa raw input, validation để ở domain VO bên trong handler
 public record RenameRoomCommand(
         UUID roomId,
-        String newCode
+        String newName
 ) implements Command<RenameRoomCommand.Result> {
 
-    // Kết quả ghi nhẹ: chỉ mang trường bị ảnh hưởng trực tiếp (id, old/new code, name tái tính, thời điểm)
-    public record Result(UUID id, String oldCode, String newCode, String name, Instant updatedAt) {}
+    // Kết quả ghi nhẹ: chỉ mang trường bị ảnh hưởng trực tiếp (id, old/new name, thời điểm)
+    public record Result(UUID id, String oldName, String newName, Instant updatedAt) {}
 }
 
-// port.in.command.CreateRoomCommand — lưu ý có trường capacity
-public record CreateRoomCommand(String building, int floor, int capacity, String roomCode)
+// port.in.command.CreateRoomCommand — lưu ý có trường capacity + code (int) + name (free-form)
+public record CreateRoomCommand(String building, int floor, int code, String name, int capacity)
         implements Command<CreateRoomCommand.Result> {
     public record Result(UUID id, String name) {}
+}
+
+// port.in.command.ChangeRoomCodeCommand — đổi code (int) SILENT, không event
+public record ChangeRoomCodeCommand(UUID roomId, int newCode)
+        implements Command<ChangeRoomCodeCommand.Result> {
+    public record Result(UUID id, int oldCode, int newCode, Instant updatedAt) {}
 }
 ```
 
@@ -83,7 +89,7 @@ public interface RoomRepository {
     Optional<Room> loadById(UUID id);
     Room save(Room room);
     // Global invariant: kiểm tra coordinate target đã bị room KHÁC chiếm chưa (1 method duy nhất)
-    boolean existsByCoordinate(String building, int floor, String code);
+    boolean existsByCoordinate(String building, int floor, int code);
 }
 ```
 
@@ -101,30 +107,25 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         Room room = roomRepository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
 
-        // 2. RAM guard: RoomName VO tự validate/normalize newCode
-        RoomName candidate = RoomName.of(room.location(), command.newCode());
+        // 2. RAM guard: RoomName VO tự validate/normalize newName (free-form, chỉ blank-check)
+        RoomName candidate = RoomName.of(command.newName());
 
-        // 3. Idempotency: cùng code => no-op, không gate/persist
-        if (candidate.code().equals(room.name().code())) {
-            return toResult(room, room.name().code());
+        // 3. Idempotency: cùng name => no-op, không gate/persist
+        if (candidate.equals(room.name())) {
+            return toResult(room, room.name().asString());
         }
 
-        // 4. DB guard: chặn room KHÁC chiếm target coordinate (1 method chuẩn)
-        if (roomRepository.existsByCoordinate(
-                room.location().building(), room.location().floor(), candidate.code())) {
-            throw new DuplicateRoomException(candidate, room.location());
-        }
-
-        // 5. Domain mutation (changeCode tái tính name + ghi RoomRenamedEvent) rồi persist
-        String oldCode = room.name().code();
-        room.changeCode(command.newCode());
+        // 4. Domain mutation (changeName ghi RoomRenamedEvent(NAME_CHANGED)) rồi persist.
+        //    Tính duy nhất name do DB uk_rooms_building_floor_name + race gate ở adapter đảm bảo.
+        String oldName = room.name().asString();
+        room.changeName(command.newName());
         Room saved = roomRepository.save(room);
-        return toResult(saved, oldCode);
+        return toResult(saved, oldName);
     }
 
-    private static RenameRoomCommand.Result toResult(Room room, String oldCode) {
+    private static RenameRoomCommand.Result toResult(Room room, String oldName) {
         return new RenameRoomCommand.Result(
-                room.id(), oldCode, room.name().code(), room.name().asString(), room.updatedAt());
+                room.id(), oldName, room.name().asString(), room.updatedAt());
     }
 }
 ```
@@ -199,7 +200,7 @@ class GetRoomByIdQueryHandler implements QueryHandler<GetRoomByIdQuery, RoomDeta
 class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, RoomSummaryView> {
     private final RoomReader roomReader;
     @Override public RoomSummaryView handle(GetRoomByNameQuery q) {
-        RoomName name = RoomName.ofRaw(q.roomName());  // RAM self-defense; opaque, không parse ngược
+        RoomName name = RoomName.of(q.roomName());  // RAM self-defense; free-form, không parse ngược
         return roomReader.findByName(name).orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));
     }
 }
@@ -236,17 +237,23 @@ class RoomCommandController {
     @PostMapping
     ResponseEntity<CreateRoomCommand.Result> create(@RequestBody CreateRoomRequest request) {
         var command = new CreateRoomCommand(            // var RÕ RÀNG, không new() trong execute()
-                request.building(), request.floor(), request.capacity(), request.roomCode());
+                request.building(), request.floor(), request.code(), request.name(), request.capacity());
         CreateRoomCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
     @PutMapping("/{id}/rename")
     ResponseEntity<RenameRoomCommand.Result> rename(@PathVariable UUID id, @RequestBody RenameRoomRequest request) {
-        var command = new RenameRoomCommand(id, request.newCode());
+        var command = new RenameRoomCommand(id, request.newName());
         return ResponseEntity.ok(commandBus.execute(command));
     }
-    record CreateRoomRequest(String building, int floor, int capacity, String roomCode) {}
-    record RenameRoomRequest(String newCode) {}
+    @PutMapping("/{id}/code")
+    ResponseEntity<ChangeRoomCodeCommand.Result> changeCode(@PathVariable UUID id, @RequestBody ChangeRoomCodeRequest request) {
+        var command = new ChangeRoomCodeCommand(id, request.newCode());
+        return ResponseEntity.ok(commandBus.execute(command));
+    }
+    record CreateRoomRequest(String building, int floor, int code, String name, int capacity) {}
+    record RenameRoomRequest(String newName) {}
+    record ChangeRoomCodeRequest(int newCode) {}
 }
 
 @RestController
@@ -290,21 +297,22 @@ class RoomExceptionAdvice {
 
 ---
 
-## 5. Domain Modeling — Value Object một chiều (nhắc lại, ADR 0003)
+## 5. Domain Modeling — Name free-form, Code int độc lập (nhắc lại, ADR 0003)
 
-- `RoomName` được **sinh ra TỪ** `RoomLocation` + `RoomCode` (`RoomName.of(location, code)`). Nguyên tắc
-  một chiều: chỉ `coordinate → name`. Chuỗi `name` raw (vd `"F.02LAB"`) chỉ để **hiển thị** và để
-  **match chính xác** khi truy vấn (`findByName(RoomName)` so khớp chuỗi, **không** parse ngược thành
-  tọa độ). Khi đổi `code`, gọi `location` cũ + `code` mới để `RoomName.of` tái tính `name`.
-- `RoomLocation` (`building`, `floor`) **immutable** — rename không thay đổi tọa độ. Relocation
-  (`relocateTo`) là use case khác, tương lai (phát sinh `RoomRenamedEvent(LOCATION_CHANGED)`).
+- `RoomName` là VO **free-form**: `RoomName.of(String)` chỉ blank-check + normalize (trim/upper), **không**
+  chứa tọa độ, **không** parse ngược. Business tự chịu rủi ro đặt tên trùng/định dạng.
+- `code` là `int` **độc lập**, chỉ để FE sắp xếp — đổi code (`Room.changeCode(int)`) là **silent**,
+  **không** phát event. Validate: dương.
+- `RoomLocation` (`building`, `floor`) **immutable** — rename/đổi code không thay đổi tọa độ. Relocation
+  (`relocateTo`) giữ nguyên `name` + `code`, chỉ đổi `location`, phát `RoomRenamedEvent(LOCATION_CHANGED)`
+  với `oldName == newName`.
+- Rename (`Room.changeName(String)`) đổi `name` trực tiếp, phát `RoomRenamedEvent(NAME_CHANGED)` (chỉ
+  `oldName`/`newName`, **không** mang code) để module khác (Workshop) phản ứng. Tính duy nhất name do
+  DB `uk_rooms_building_floor_name` + race gate ở `JpaRoomWriteAdapter.save()` đảm bảo.
 - Aggregate **ghi nhận event** thay vì publish trực tiếp: `RoomRenamedEvent` (record, `implements
   RoomDomainEvent`, thuộc sealed `RoomDomainEvent permits ...`). Event chứa đủ context cũ/mới
-  (`oldCode/newCode`, `reason`, `location`, `occurredAt`) để module khác (Workshop) phản ứng sau này mà
-  không cần gọi ngược. Xem `docs/architecture/diagrams/room-workshop-event-reaction.mermaid`.
-- `changeCode(String)` trong `Room`: preserve building/floor, tái tính name, **idempotent** khi code
-  không đổi (no-op, không event/không bump `updatedAt`), **reject** room `DEACTIVATED`
-  (`IllegalRoomStateException`). Validate code qua `RoomName`/`RoomCode` VO.
+  (`oldName/newName`, `reason`, `location`, `occurredAt`) để module khác phản ứng sau này mà không cần gọi
+  ngược. Xem `docs/architecture/diagrams/room-workshop-event-reaction.mermaid`.
 
 ---
 
@@ -316,5 +324,5 @@ class RoomExceptionAdvice {
       `var x = new XCommand(...)` trước `execute`; request body qua nested `XxxRequest`.
 - [ ] Exception nghiệp vụ tập trung ở `*ExceptionAdvice` scoped `assignableTypes`, nằm trong module.
 - [ ] `internal/` không bị outside import (chạy build/ArchitectureTest xanh).
-- [ ] Không đổi schema nếu dùng chung unique index `(building, floor, code)` làm DB gate.
+- [ ] Unique index `(building, floor, code)` (code INT) + `uk_rooms_building_floor_name` làm DB gate.
 - [ ] `./mvnw test` xanh toàn bộ, không regression.

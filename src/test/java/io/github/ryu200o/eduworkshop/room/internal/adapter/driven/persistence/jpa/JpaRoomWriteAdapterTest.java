@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,8 +31,8 @@ class JpaRoomWriteAdapterTest {
 
     private static Room newRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        RoomName name = RoomName.of(location, "01");
-        return Room.create(name, location, 50);
+        RoomName name = RoomName.of("F-201");
+        return Room.create(name, location, 1, 50);
     }
 
     @Test
@@ -40,7 +41,8 @@ class JpaRoomWriteAdapterTest {
 
         Optional<Room> loaded = roomRepository.loadById(saved.id());
         assertThat(loaded).isPresent();
-        assertThat(loaded.get().name()).isEqualTo(RoomName.of(RoomLocation.of("F", 2), "01"));
+        assertThat(loaded.get().name()).isEqualTo(RoomName.of("F-201"));
+        assertThat(loaded.get().code()).isEqualTo(1);
         assertThat(loaded.get().location()).isEqualTo(RoomLocation.of("F", 2));
         assertThat(loaded.get().capacity()).isEqualTo(50);
     }
@@ -53,58 +55,72 @@ class JpaRoomWriteAdapterTest {
     @Test
     void existsByCoordinate_reflectsPersistedRows_viaCompositeKey() {
         RoomLocation location = RoomLocation.of("F", 2);
-        RoomName name = RoomName.of(location, "01");
 
-        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), name.code())).isFalse();
+        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), 1)).isFalse();
 
-        roomRepository.save(Room.create(name, location, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
 
-        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), name.code())).isTrue();
+        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), 1)).isTrue();
         // Different code at same location must NOT collide.
-        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), "02")).isFalse();
+        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), 2)).isFalse();
     }
 
     @Test
     void existsByCoordinate_reflectsTargetCoordinate() {
         RoomLocation location = RoomLocation.of("F", 2);
 
-        assertThat(roomRepository.existsByCoordinate("F", 2, "02")).isFalse();
+        assertThat(roomRepository.existsByCoordinate("F", 2, 2)).isFalse();
 
-        roomRepository.save(Room.create(RoomName.of(location, "01"), location, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
 
-        assertThat(roomRepository.existsByCoordinate("F", 2, "02")).isFalse();
-        assertThat(roomRepository.existsByCoordinate("F", 2, "01")).isTrue();
+        assertThat(roomRepository.existsByCoordinate("F", 2, 2)).isFalse();
+        assertThat(roomRepository.existsByCoordinate("F", 2, 1)).isTrue();
     }
 
     @Test
-    void loadById_thenChangeCode_roundTripsAndPersistsRename() {
+    void loadById_thenChangeCode_roundTripsAndPersistsSilently() {
         Room saved = roomRepository.save(newRoom());
 
         Optional<Room> loaded = roomRepository.loadById(saved.id());
         assertThat(loaded).isPresent();
 
         Room room = loaded.get();
-        room.changeCode("LAB");
+        room.changeCode(99);
         roomRepository.save(room);
 
         Optional<Room> renamed = roomRepository.loadById(saved.id());
         assertThat(renamed).isPresent();
-        assertThat(renamed.get().name()).isEqualTo(RoomName.of(RoomLocation.of("F", 2), "LAB"));
+        assertThat(renamed.get().code()).isEqualTo(99);
+        assertThat(renamed.get().name()).isEqualTo(RoomName.of("F-201"));
     }
 
     @Test
     void save_duplicateCoordinate_raceProofGate_throwsDuplicateRoomException() {
         RoomLocation location = RoomLocation.of("F", 2);
-        RoomName name = RoomName.of(location, "01");
 
         // First room owns the (building, floor, code) coordinate.
-        roomRepository.save(Room.create(name, location, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
 
         // Second room with a DIFFERENT id but the SAME coordinate — simulates a concurrent insert that
         // slipped past the handler's existsByCoordinate (rào lần 1). The DB unique constraint (rào lần 2)
         // must reject it and the adapter must translate it into domain vocabulary.
-        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), name, location, 50,
-                java.time.Instant.now(), java.time.Instant.now());
+        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-202"), location, 1, 50,
+                Instant.now(), Instant.now());
+
+        assertThatThrownBy(() -> roomRepository.save(duplicate))
+                .isInstanceOf(DuplicateRoomException.class);
+    }
+
+    @Test
+    void save_duplicateNameInSameLocation_raceProofGate_throwsDuplicateRoomException() {
+        RoomLocation location = RoomLocation.of("F", 2);
+
+        // First room owns the (building, floor, name) coordinate.
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
+
+        // Same name (different code) at the same location must collide on uk_rooms_building_floor_name.
+        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-201"), location, 2, 50,
+                Instant.now(), Instant.now());
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
                 .isInstanceOf(DuplicateRoomException.class);

@@ -28,8 +28,8 @@ class RoomJpaEntity {
     @Column(nullable = false)
     private int floor;
 
-    @Column(nullable = false, length = 10)
-    private String code;
+    @Column(nullable = false)
+    private int code;
 
     @Column(nullable = false)
     private int capacity;
@@ -47,7 +47,7 @@ class RoomJpaEntity {
         // required by JPA
     }
 
-    RoomJpaEntity(UUID id, String name, String building, int floor, String code,
+    RoomJpaEntity(UUID id, String name, String building, int floor, int code,
                   int capacity, String state, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
@@ -76,7 +76,7 @@ class RoomJpaEntity {
         return floor;
     }
 
-    String getCode() {
+    int getCode() {
         return code;
     }
 

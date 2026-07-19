@@ -15,6 +15,7 @@ public record RoomCreated(
         RoomName name,
         int capacity,
         RoomLocation location,
+        int code,
         RoomState initialState,
         Instant occurredAt
 ) implements RoomDomainEvent {
