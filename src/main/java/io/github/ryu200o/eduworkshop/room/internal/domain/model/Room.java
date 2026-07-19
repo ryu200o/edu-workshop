@@ -69,17 +69,6 @@ public class Room {
     }
 
     /**
-     * Policy-free construction entry — used by unit tests and reconstitution-style assembly where the
-     * caller deliberately bypasses the uniqueness gate (e.g. the persistence adapter reconstructs an
-     * already-persisted, already-unique row). Prefer {@link #create(RoomName, RoomLocation, int, int,
-     * RoomUniquenessPolicy)} on the write path.
-     */
-    public static Room create(RoomName name, RoomLocation location, int code, int capacity) {
-        Instant now = Instant.now();
-        return create(RoomId.generate(), name, location, code, capacity, now, now);
-    }
-
-    /**
      * Factory with explicit identity/timestamps — used when minting a new room from externally
      * supplied identifiers. Enforces the global uniqueness invariants through {@code policy} before
      * emitting a {@link RoomCreated} event.
@@ -99,22 +88,6 @@ public class Room {
         if (!policy.isNameUnique(location, name)) {
             throw new DuplicateRoomException(name, location);
         }
-
-        Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
-        room.recordedEvents.add(new RoomCreated(
-                room.id.value(), room.name, room.capacity, room.location, room.code, room.state, room.createdAt));
-        return room;
-    }
-
-    /**
-     * Policy-free factory with explicit identity/timestamps — retained for callers that bypass the
-     * uniqueness gate by design (e.g. tests). The write path must use the policy-bearing overload.
-     */
-    public static Room create(RoomId id, RoomName name, RoomLocation location, int code, int capacity, Instant createdAt, Instant updatedAt) {
-        requireNonNullName(name);
-        requireValidCode(code);
-        requirePositiveCapacity(capacity);
-        requireNonNullLocation(location);
 
         Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
         room.recordedEvents.add(new RoomCreated(
@@ -188,30 +161,6 @@ public class Room {
     }
 
     /**
-     * Changes the room's {@code code} — an independent integer used only for FE ordering / floor-map
-     * rendering. This is a silent mutation: it emits NO domain event (the {@code code} has no business
-     * meaning for downstream modules).
-     *
-     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
-     * @throws RoomDomainException       if the new code is not positive
-     */
-    public void changeCode(int newCode) {
-        if (state == RoomState.DEACTIVATED) {
-            throw new IllegalRoomStateException(id, state, null,
-                    "A deactivated room's code cannot be changed; the deactivation is permanent.");
-        }
-        requireValidCode(newCode);
-
-        // Idempotent no-op: same code means no change, no event, no persist.
-        if (newCode == this.code) {
-            return;
-        }
-
-        this.code = newCode;
-        this.updatedAt = Instant.now();
-    }
-
-    /**
      * Changes the room's {@code code} with the global {@code (location, code)} uniqueness invariant
      * enforced through the injected {@link RoomUniquenessPolicy}. Silent mutation (no event). The
      * idempotency skip runs before the policy check to avoid a false-positive self-collision.
@@ -238,36 +187,6 @@ public class Room {
 
         this.code = newCode;
         this.updatedAt = Instant.now();
-    }
-
-    /**
-     * Renames the room by changing its free-form {@code name} directly. The building, floor and code are
-     * preserved (the name is fully decoupled from coordinates). Emits a {@link RoomRenamedEvent} so
-     * consumer modules (e.g. Workshop) can react.
-     *
-     * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
-     * persistence layer.</p>
-     *
-     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
-     * @throws RoomDomainException       if the new name is blank (validated by {@link RoomName})
-     */
-    public void changeName(String newName) {
-        if (state == RoomState.DEACTIVATED) {
-            throw new IllegalRoomStateException(id, state, null,
-                    "A deactivated room's name cannot be changed; the deactivation is permanent.");
-        }
-        RoomName candidate = RoomName.of(newName);
-
-        // Idempotent no-op: same name means no change, no event, no persist.
-        if (candidate.equals(this.name)) {
-            return;
-        }
-
-        RoomName previousName = this.name;
-        this.name = candidate;
-        this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomRenamedEvent(
-                id.value(), previousName, candidate, this.updatedAt));
     }
 
     /**
@@ -300,33 +219,6 @@ public class Room {
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRenamedEvent(
                 id.value(), previousName, candidate, this.updatedAt));
-    }
-
-    /**
-     * Relocates the room by changing its physical {@code location} (building and/or floor). The {@code name}
-     * and {@code code} are preserved (they are decoupled from coordinates). Emits a {@link RoomRelocatedEvent}
-     * carrying only the old/new location — the name is not part of a relocation.
-     *
-     * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
-     * persistence layer, so the write path owns the full state transition before it is persisted.</p>
-     *
-     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
-     * @throws RoomDomainException       if the new location is malformed (validated by {@link RoomLocation})
-     */
-    public void relocateTo(RoomLocation newLocation) {
-        if (state == RoomState.DEACTIVATED) {
-            throw new IllegalRoomStateException(id, state, null,
-                    "A deactivated room cannot be relocated; the deactivation is permanent.");
-        }
-        // Idempotent no-op: same location means no change, no event, no persist.
-        if (newLocation.equals(this.location)) {
-            return;
-        }
-        RoomLocation previousLocation = this.location;
-        this.location = newLocation;
-        this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomRelocatedEvent(
-                id.value(), previousLocation, newLocation, this.updatedAt));
     }
 
     /**

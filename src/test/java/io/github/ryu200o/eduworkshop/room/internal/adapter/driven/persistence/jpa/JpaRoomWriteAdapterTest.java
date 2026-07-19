@@ -33,10 +33,23 @@ class JpaRoomWriteAdapterTest {
     @Autowired
     private RoomUniquenessPolicy uniquenessPolicy;
 
+    // Fixtures bypass the uniqueness gate (already-unique rows): a policy that always reports "unique".
+    private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
+        @Override
+        public boolean isCodeUnique(RoomLocation location, int code) {
+            return true;
+        }
+
+        @Override
+        public boolean isNameUnique(RoomLocation location, RoomName name) {
+            return true;
+        }
+    };
+
     private static Room newRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
         RoomName name = RoomName.of("F-201");
-        return Room.create(name, location, 1, 50);
+        return Room.create(name, location, 1, 50, ALWAYS_UNIQUE);
     }
 
     @Test
@@ -62,7 +75,7 @@ class JpaRoomWriteAdapterTest {
 
         assertThat(uniquenessPolicy.isCodeUnique(location, 1)).isTrue();
 
-        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE));
 
         assertThat(uniquenessPolicy.isCodeUnique(location, 1)).isFalse();
         // Different code at same location must NOT collide.
@@ -75,7 +88,7 @@ class JpaRoomWriteAdapterTest {
 
         assertThat(uniquenessPolicy.isCodeUnique(location, 2)).isTrue();
 
-        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE));
 
         assertThat(uniquenessPolicy.isCodeUnique(location, 2)).isTrue();
         assertThat(uniquenessPolicy.isCodeUnique(location, 1)).isFalse();
@@ -87,7 +100,7 @@ class JpaRoomWriteAdapterTest {
 
         assertThat(uniquenessPolicy.isNameUnique(location, RoomName.of("F-201"))).isTrue();
 
-        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE));
 
         assertThat(uniquenessPolicy.isNameUnique(location, RoomName.of("F-201"))).isFalse();
         // Same name at a DIFFERENT location must NOT collide (constraint is scoped by location).
@@ -102,7 +115,7 @@ class JpaRoomWriteAdapterTest {
         assertThat(loaded).isPresent();
 
         Room room = loaded.get();
-        room.changeCode(99);
+        room.changeCode(99, ALWAYS_UNIQUE);
         roomRepository.save(room);
 
         Optional<Room> renamed = roomRepository.loadById(saved.id());
@@ -116,13 +129,12 @@ class JpaRoomWriteAdapterTest {
         RoomLocation location = RoomLocation.of("F", 2);
 
         // First room owns the (building, floor, code) coordinate.
-        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE));
 
         // Second room with a DIFFERENT id but the SAME coordinate — simulates a concurrent insert that
         // slipped past the policy's isCodeUnique (rào lần 1). The DB unique constraint (rào lần 2)
         // must reject it and the adapter must translate it into domain vocabulary.
-        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-202"), location, 1, 50,
-                Instant.now(), Instant.now());
+        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-202"), location, 1, 50, Instant.now(), Instant.now(), ALWAYS_UNIQUE);
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
                 .isInstanceOf(DuplicateRoomException.class)
@@ -134,11 +146,10 @@ class JpaRoomWriteAdapterTest {
         RoomLocation location = RoomLocation.of("F", 2);
 
         // First room owns the (building, floor, name) coordinate.
-        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE));
 
         // Same name (different code) at the same location must collide on uk_rooms_building_floor_name.
-        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-201"), location, 2, 50,
-                Instant.now(), Instant.now());
+        Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-201"), location, 2, 50, Instant.now(), Instant.now(), ALWAYS_UNIQUE);
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
                 .isInstanceOf(DuplicateRoomException.class)

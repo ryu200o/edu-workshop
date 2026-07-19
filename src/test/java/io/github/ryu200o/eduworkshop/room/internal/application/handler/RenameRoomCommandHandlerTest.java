@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -40,9 +41,22 @@ class RenameRoomCommandHandlerTest {
         return new RenameRoomCommandHandler(roomRepository, uniquenessPolicy);
     }
 
+    // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
+    private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
+        @Override
+        public boolean isCodeUnique(RoomLocation location, int code) {
+            return true;
+        }
+
+        @Override
+        public boolean isNameUnique(RoomLocation location, RoomName name) {
+            return true;
+        }
+    };
+
     private static Room existingRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        return Room.create(RoomName.of("F-201"), location, 1, 50);
+        return Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE);
     }
 
     // ── Step 1: load failure ──

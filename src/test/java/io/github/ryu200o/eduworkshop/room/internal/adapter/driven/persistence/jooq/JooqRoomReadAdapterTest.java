@@ -9,6 +9,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,8 +49,19 @@ class JooqRoomReadAdapterTest {
     private static Room newRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
         RoomName name = RoomName.of("F-201");
-        return Room.create(name, location, 1, 50);
+        return Room.create(name, location, 1, 50, new RoomUniquenessPolicy() {
+            @Override
+            public boolean isCodeUnique(RoomLocation location, int code) {
+                return true;
+            }
+
+            @Override
+            public boolean isNameUnique(RoomLocation location, RoomName name) {
+                return true;
+            }
+        });
     }
+
 
     @Test
     void save_thenFindById_roundTripsThroughDatabase() {
