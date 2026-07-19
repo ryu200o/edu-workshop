@@ -41,7 +41,7 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
         //         free of *other* rooms. The two checks mirror uk_rooms_building_floor_code and
         //         uk_rooms_building_floor_name; the DB constraints remain the authoritative race-proof gate.
         if (roomRepository.existsByCoordinate(location, command.code())) {
-            throw new DuplicateRoomException(name, location);
+            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, command.code(), name, location);
         }
         if (roomRepository.existsByName(location, name)) {
             throw new DuplicateRoomException(name, location);

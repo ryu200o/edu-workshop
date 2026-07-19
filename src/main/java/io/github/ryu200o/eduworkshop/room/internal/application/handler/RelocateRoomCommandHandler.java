@@ -47,7 +47,7 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
         //         so a collision on either would violate uk_rooms_building_floor_code /
         //         uk_rooms_building_floor_name. The DB constraints remain the authoritative race-proof gate.
         if (roomRepository.existsByCoordinate(newLocation, room.code())) {
-            throw new DuplicateRoomException(room.name(), newLocation);
+            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, room.code(), room.name(), newLocation);
         }
         if (roomRepository.existsByName(newLocation, room.name())) {
             throw new DuplicateRoomException(room.name(), newLocation);

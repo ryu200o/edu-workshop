@@ -121,7 +121,8 @@ class JpaRoomWriteAdapterTest {
                 Instant.now(), Instant.now());
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
-                .isInstanceOf(DuplicateRoomException.class);
+                .isInstanceOf(DuplicateRoomException.class)
+                .hasMessageContaining("code 1");
     }
 
     @Test
@@ -136,6 +137,7 @@ class JpaRoomWriteAdapterTest {
                 Instant.now(), Instant.now());
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
-                .isInstanceOf(DuplicateRoomException.class);
+                .isInstanceOf(DuplicateRoomException.class)
+                .hasMessageContaining("named 'F-201'");
     }
 }

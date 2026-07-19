@@ -8,8 +8,9 @@ import java.util.UUID;
 /**
  * Write command to rename a room by changing its free-form {@code name} directly (building/floor/code
  * preserved). Raw input only — all validation/normalization is performed by the {@code RoomName} value
- * object inside the handler. Name uniqueness is enforced by the DB {@code uk_rooms_building_floor_name}
- * constraint (and the race-proof gate in the write adapter); the handler does not pre-check it.
+ * object inside the handler. Name uniqueness is enforced by a fail-fast RAM check in the handler
+ * (mirroring {@code uk_rooms_building_floor_name}) and, authoritatively, by the DB constraint plus the
+ * race-proof gate in the write adapter.
  *
  * @param roomId the id of the room to rename
  * @param newName the new free-form room name (non-blank; validated by {@code RoomName})
