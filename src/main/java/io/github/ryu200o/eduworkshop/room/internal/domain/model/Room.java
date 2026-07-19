@@ -3,8 +3,8 @@ package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomainEvent;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -168,8 +168,8 @@ public class Room {
 
     /**
      * Renames the room by changing its free-form {@code name} directly. The building, floor and code are
-     * preserved (the name is fully decoupled from coordinates). Emits a {@link RoomRenamedEvent} with
-     * {@link RoomRenameReason#NAME_CHANGED} so consumer modules (e.g. Workshop) can react.
+     * preserved (the name is fully decoupled from coordinates). Emits a {@link RoomRenamedEvent} so
+     * consumer modules (e.g. Workshop) can react.
      *
      * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
      * persistence layer.</p>
@@ -193,13 +193,13 @@ public class Room {
         this.name = candidate;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRenamedEvent(
-                id.value(), RoomRenameReason.NAME_CHANGED, previousName, candidate, location, this.updatedAt));
+                id.value(), previousName, candidate, this.updatedAt));
     }
 
     /**
      * Relocates the room by changing its physical {@code location} (building and/or floor). The {@code name}
-     * and {@code code} are preserved (they are decoupled from coordinates). Emits a {@link RoomRenamedEvent}
-     * with {@link RoomRenameReason#LOCATION_CHANGED} and {@code oldName == newName}.
+     * and {@code code} are preserved (they are decoupled from coordinates). Emits a {@link RoomRelocatedEvent}
+     * carrying only the old/new location — the name is not part of a relocation.
      *
      * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
      * persistence layer, so the write path owns the full state transition before it is persisted.</p>
@@ -216,11 +216,11 @@ public class Room {
         if (newLocation.equals(this.location)) {
             return;
         }
-        RoomName previousName = this.name;
+        RoomLocation previousLocation = this.location;
         this.location = newLocation;
         this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomRenamedEvent(
-                id.value(), RoomRenameReason.LOCATION_CHANGED, previousName, previousName, newLocation, this.updatedAt));
+        this.recordedEvents.add(new RoomRelocatedEvent(
+                id.value(), previousLocation, newLocation, this.updatedAt));
     }
 
     /**

@@ -115,7 +115,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
             return toResult(room, room.name().asString());
         }
 
-        // 4. Domain mutation (changeName ghi RoomRenamedEvent(NAME_CHANGED)) rồi persist.
+        // 4. Domain mutation (changeName ghi RoomRenamedEvent) rồi persist.
         //    Tính duy nhất name do DB uk_rooms_building_floor_name + race gate ở adapter đảm bảo.
         String oldName = room.name().asString();
         room.changeName(command.newName());
@@ -304,15 +304,16 @@ class RoomExceptionAdvice {
 - `code` là `int` **độc lập**, chỉ để FE sắp xếp — đổi code (`Room.changeCode(int)`) là **silent**,
   **không** phát event. Validate: dương.
 - `RoomLocation` (`building`, `floor`) **immutable** — rename/đổi code không thay đổi tọa độ. Relocation
-  (`relocateTo`) giữ nguyên `name` + `code`, chỉ đổi `location`, phát `RoomRenamedEvent(LOCATION_CHANGED)`
-  với `oldName == newName`.
-- Rename (`Room.changeName(String)`) đổi `name` trực tiếp, phát `RoomRenamedEvent(NAME_CHANGED)` (chỉ
-  `oldName`/`newName`, **không** mang code) để module khác (Workshop) phản ứng. Tính duy nhất name do
+  (`relocateTo`) giữ nguyên `name` + `code`, chỉ đổi `location`, phát `RoomRelocatedEvent`
+  (`oldLocation`/`newLocation`, không mang name).
+- Rename (`Room.changeName(String)`) đổi `name` trực tiếp, phát `RoomRenamedEvent` (chỉ
+  `oldName`/`newName`, **không** mang code/location) để module khác (Workshop) phản ứng. Tính duy nhất name do
   DB `uk_rooms_building_floor_name` + race gate ở `JpaRoomWriteAdapter.save()` đảm bảo.
-- Aggregate **ghi nhận event** thay vì publish trực tiếp: `RoomRenamedEvent` (record, `implements
-  RoomDomainEvent`, thuộc sealed `RoomDomainEvent permits ...`). Event chứa đủ context cũ/mới
-  (`oldName/newName`, `reason`, `location`, `occurredAt`) để module khác phản ứng sau này mà không cần gọi
-  ngược. Xem `docs/architecture/diagrams/room-workshop-event-reaction.mermaid`.
+- Aggregate **ghi nhận event** thay vì publish trực tiếp: `RoomRenamedEvent` (name change) và
+  `RoomRelocatedEvent` (location change) là hai record riêng, đều `implements RoomDomainEvent`, thuộc
+  sealed `RoomDomainEvent permits ...`. Mỗi event chứa đủ context liên quan (`RoomRenamedEvent`:
+  `oldName/newName/occurredAt`; `RoomRelocatedEvent`: `oldLocation/newLocation/occurredAt`) để module khác
+  phản ứng sau này mà không cần gọi ngược. Xem `docs/architecture/diagrams/room-workshop-event-reaction.mermaid`.
 
 ---
 

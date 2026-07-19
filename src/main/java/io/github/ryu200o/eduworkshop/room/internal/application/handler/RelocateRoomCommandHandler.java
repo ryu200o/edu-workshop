@@ -48,7 +48,7 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
             throw new DuplicateRoomException(room.name(), newLocation);
         }
 
-        // Step 5 — Domain mutation (keeps name/code, records RoomRenamedEvent) then persist.
+        // Step 5 — Domain mutation (keeps name/code, records RoomRelocatedEvent) then persist.
         RoomLocation oldLocation = room.location();
         room.relocateTo(newLocation);
         Room saved = roomRepository.save(room);
@@ -57,6 +57,6 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
     private static RelocateRoomCommand.Result toResult(Room room, RoomLocation oldLocation) {
         return new RelocateRoomCommand.Result(
-                room.id().value(), oldLocation, room.location(), room.name().asString(), room.updatedAt());
+                room.id().value(), oldLocation, room.location(), room.updatedAt());
     }
 }

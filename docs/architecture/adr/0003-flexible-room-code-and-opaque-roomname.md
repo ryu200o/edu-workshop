@@ -34,19 +34,19 @@ VO without touching callers.
 
 ### 2. `code` is an independent `int`
 `Room.create(name, location, int code, capacity)` takes `code` directly. Changing it
-(`Room.changeCode(int)`) is a **silent** mutation — it emits **no** domain event and no `RoomRenamedEvent`.
+(`Room.changeCode(int)`) is a **silent** mutation — it emits **no** domain event.
 Validation: positive integer only.
 
 ### 3. Renaming changes `name` directly
 `RenameRoomCommand(UUID, String newName)` → `Room.changeName(String)` emits
-`RoomRenamedEvent(NAME_CHANGED)` carrying `oldName`/`newName` only (no code fields). Downstream modules
+`RoomRenamedEvent` carrying `oldName`/`newName` only (no code fields). Downstream modules
 (e.g. Workshop, which snapshots `name`) can react. Name uniqueness is enforced by the DB
 `uk_rooms_building_floor_name` constraint plus the race-proof gate in `JpaRoomWriteAdapter.save()`; the
 handler does not pre-check it.
 
 ### 4. Relocation keeps `name` and `code`
 `Room.relocateTo(RoomLocation)` moves only `location`; `name` and `code` are preserved (fully decoupled).
-It emits `RoomRenamedEvent(LOCATION_CHANGED)` with `oldName == newName`.
+It emits `RoomRelocatedEvent` carrying only `oldLocation`/`newLocation` (the name is not part of a relocation).
 
 ### 5. Database
 - `rooms.code` widened `VARCHAR(10)` → `INT` (Flyway `V3`).
@@ -58,7 +58,8 @@ It emits `RoomRenamedEvent(LOCATION_CHANGED)` with `oldName == newName`.
 
 ### Positive
 - **Business-owned naming**: rename independently of coordinates, no format shackles.
-- **Correct event signal**: code changes are silent; only genuine renames broadcast `NAME_CHANGED`.
+- **Correct event signal**: code changes are silent; only genuine renames broadcast `RoomRenamedEvent`,
+  and only relocations broadcast `RoomRelocatedEvent` — the two concerns are fully separate.
 - **Simpler VO**: `RoomName` is a single opaque string — no reverse-parse ambiguity, no coordinate leakage.
 - **Location-scoped uniqueness**: same name allowed in different buildings/floors.
 

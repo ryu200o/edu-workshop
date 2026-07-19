@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -313,10 +313,8 @@ class RoomTest {
                 .satisfies(e -> {
                     RoomRenamedEvent ev = (RoomRenamedEvent) e;
                     assertThat(ev.roomId()).isEqualTo(room.id().value());
-                    assertThat(ev.reason()).isEqualTo(RoomRenameReason.NAME_CHANGED);
                     assertThat(ev.oldName()).isEqualTo(name());
                     assertThat(ev.newName()).isEqualTo(RoomName.of("LAB-101"));
-                    assertThat(ev.location()).isEqualTo(LOCATION);
                 });
     }
 
@@ -363,16 +361,14 @@ class RoomTest {
         assertThat(room.code()).isEqualTo(CODE);
         assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
         assertThat(room.recordedEvents())
-                .filteredOn(RoomRenamedEvent.class::isInstance)
+                .filteredOn(RoomRelocatedEvent.class::isInstance)
                 .hasSize(1)
                 .first()
                 .satisfies(e -> {
-                    RoomRenamedEvent ev = (RoomRenamedEvent) e;
+                    RoomRelocatedEvent ev = (RoomRelocatedEvent) e;
                     assertThat(ev.roomId()).isEqualTo(room.id().value());
-                    assertThat(ev.reason()).isEqualTo(RoomRenameReason.LOCATION_CHANGED);
-                    assertThat(ev.oldName()).isEqualTo(name());
-                    assertThat(ev.newName()).isEqualTo(name());
-                    assertThat(ev.location()).isEqualTo(newLocation);
+                    assertThat(ev.oldLocation()).isEqualTo(LOCATION);
+                    assertThat(ev.newLocation()).isEqualTo(newLocation);
                 });
     }
 

@@ -84,9 +84,9 @@ fields directly affected by the command (id, changed field, timestamps). The rea
 - A deactivated room cannot be renamed — a deliberate freeze, may surprise callers (documented in API 409).
 
 ## Notes
-- **Deferred (future branch):** Relocation (`room.relocateTo` → `RoomRenamedEvent(LOCATION_CHANGED)`) and
-  actual publishing of `RoomRenamedEvent` to an Event Bus + the Workshop-module reaction described in
-  `docs/architecture/diagrams/room-workshop-event-reaction.mermaid`. The event is designed and recorded
-  now; dispatch is a later slice (Workshop module is still pending, progress-log entry 007).
+- **Deferred (future branch):** Relocation (`room.relocateTo` → `RoomRelocatedEvent`) and
+  actual publishing of `RoomRenamedEvent`/`RoomRelocatedEvent` to an Event Bus + the Workshop-module reaction
+  described in `docs/architecture/diagrams/room-workshop-event-reaction.mermaid`. The events are designed and
+  recorded now; dispatch is a later slice (Workshop module is still pending, progress-log entry 007).
 - The rename flow's DB gate reuses the existing composite-uniqueness column
   (`(building, floor, code)`), so no schema migration was needed for this use case.

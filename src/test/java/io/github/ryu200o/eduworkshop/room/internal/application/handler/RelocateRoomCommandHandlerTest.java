@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.R
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
@@ -122,9 +122,8 @@ class RelocateRoomCommandHandlerTest {
         assertThat(saved.location()).isEqualTo(RoomLocation.of("G", 3));
         assertThat(saved.name()).isEqualTo(RoomName.of("F-201")); // name is preserved (decoupled)
         assertThat(saved.code()).isEqualTo(1);                    // code is preserved
-        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRenamedEvent);
+        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRelocatedEvent);
         assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.name()).isEqualTo("F-201");
         assertThat(response.oldLocation()).isEqualTo(RoomLocation.of("F", 2));
         assertThat(response.newLocation()).isEqualTo(RoomLocation.of("G", 3));
     }

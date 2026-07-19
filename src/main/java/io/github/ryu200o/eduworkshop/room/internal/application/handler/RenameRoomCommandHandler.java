@@ -41,7 +41,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
             return toResult(room, room.name().asString());
         }
 
-        // Step 4 — Domain mutation (records RoomRenamedEvent(NAME_CHANGED)) then persist.
+        // Step 4 — Domain mutation (records RoomRenamedEvent) then persist.
         // Name uniqueness is enforced by the DB constraint + write-adapter race gate.
         String oldName = room.name().asString();
         room.changeName(command.newName());
