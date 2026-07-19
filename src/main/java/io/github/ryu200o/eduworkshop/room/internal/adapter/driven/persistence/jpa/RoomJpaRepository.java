@@ -17,5 +17,7 @@ interface RoomJpaRepository extends JpaRepository<RoomJpaEntity, UUID> {
      */
     boolean existsByBuildingAndFloorAndCode(String building, int floor, int code);
 
+    boolean existsByBuildingAndFloorAndName(String building, int floor, String name);
+
     Optional<RoomJpaEntity> findByName(String name);
 }

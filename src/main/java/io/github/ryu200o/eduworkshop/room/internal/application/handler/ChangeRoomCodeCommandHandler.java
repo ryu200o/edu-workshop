@@ -42,7 +42,7 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
         if (command.newCode() <= 0) {
             throw new RoomDomainException("Room code must be greater than zero.");
         }
-        if (roomRepository.existsByCoordinate(room.location().building(), room.location().floor(), command.newCode())) {
+        if (roomRepository.existsByCoordinate(room.location(), command.newCode())) {
             throw new DuplicateRoomException(room.name(), room.location());
         }
 

@@ -56,25 +56,38 @@ class JpaRoomWriteAdapterTest {
     void existsByCoordinate_reflectsPersistedRows_viaCompositeKey() {
         RoomLocation location = RoomLocation.of("F", 2);
 
-        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), 1)).isFalse();
+        assertThat(roomRepository.existsByCoordinate(location, 1)).isFalse();
 
         roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
 
-        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), 1)).isTrue();
+        assertThat(roomRepository.existsByCoordinate(location, 1)).isTrue();
         // Different code at same location must NOT collide.
-        assertThat(roomRepository.existsByCoordinate(location.building(), location.floor(), 2)).isFalse();
+        assertThat(roomRepository.existsByCoordinate(location, 2)).isFalse();
     }
 
     @Test
     void existsByCoordinate_reflectsTargetCoordinate() {
         RoomLocation location = RoomLocation.of("F", 2);
 
-        assertThat(roomRepository.existsByCoordinate("F", 2, 2)).isFalse();
+        assertThat(roomRepository.existsByCoordinate(location, 2)).isFalse();
 
         roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
 
-        assertThat(roomRepository.existsByCoordinate("F", 2, 2)).isFalse();
-        assertThat(roomRepository.existsByCoordinate("F", 2, 1)).isTrue();
+        assertThat(roomRepository.existsByCoordinate(location, 2)).isFalse();
+        assertThat(roomRepository.existsByCoordinate(location, 1)).isTrue();
+    }
+
+    @Test
+    void existsByName_reflectsPersistedRows_viaCompositeKey() {
+        RoomLocation location = RoomLocation.of("F", 2);
+
+        assertThat(roomRepository.existsByName(location, RoomName.of("F-201"))).isFalse();
+
+        roomRepository.save(Room.create(RoomName.of("F-201"), location, 1, 50));
+
+        assertThat(roomRepository.existsByName(location, RoomName.of("F-201"))).isTrue();
+        // Same name at a DIFFERENT location must NOT collide (constraint is scoped by location).
+        assertThat(roomRepository.existsByName(RoomLocation.of("G", 3), RoomName.of("F-201"))).isFalse();
     }
 
     @Test

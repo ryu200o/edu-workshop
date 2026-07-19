@@ -37,8 +37,13 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
             throw new RoomDomainException("Room code must be greater than zero.");
         }
 
-        // Step 2 — DB guard (Global invariant): single coordinate existence check.
-        if (roomRepository.existsByCoordinate(location.building(), location.floor(), command.code())) {
+        // Step 2 — DB guard (Global invariant): the (location, code) and (location, name) pairs must both be
+        //         free of *other* rooms. The two checks mirror uk_rooms_building_floor_code and
+        //         uk_rooms_building_floor_name; the DB constraints remain the authoritative race-proof gate.
+        if (roomRepository.existsByCoordinate(location, command.code())) {
+            throw new DuplicateRoomException(name, location);
+        }
+        if (roomRepository.existsByName(location, name)) {
             throw new DuplicateRoomException(name, location);
         }
 

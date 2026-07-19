@@ -29,8 +29,15 @@ class JpaRoomWriteAdapter implements RoomRepository {
     }
 
     @Override
-    public boolean existsByCoordinate(String building, int floor, int code) {
-        return repository.existsByBuildingAndFloorAndCode(building, floor, code);
+    public boolean existsByCoordinate(RoomLocation location, int code) {
+        // Adapter concern: decompose the domain location into the scalar columns the JPA entity persists.
+        return repository.existsByBuildingAndFloorAndCode(location.building(), location.floor(), code);
+    }
+
+    @Override
+    public boolean existsByName(RoomLocation location, RoomName name) {
+        // Adapter concern: decompose the domain location into the scalar columns the JPA entity persists.
+        return repository.existsByBuildingAndFloorAndName(location.building(), location.floor(), name.asString());
     }
 
     @Override

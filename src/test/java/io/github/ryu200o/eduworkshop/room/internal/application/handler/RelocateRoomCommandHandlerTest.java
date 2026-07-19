@@ -68,7 +68,7 @@ class RelocateRoomCommandHandlerTest {
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository).loadById(any());
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt(), anyInt());
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -77,12 +77,12 @@ class RelocateRoomCommandHandlerTest {
     void dbGuard_rejectsDuplicate_andDoesNotSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(true);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
+        verify(roomRepository).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -101,7 +101,22 @@ class RelocateRoomCommandHandlerTest {
         assertThat(response.oldLocation()).isEqualTo(room.location());
         assertThat(response.newLocation()).isEqualTo(room.location());
         assertThat(response.updatedAt()).isEqualTo(fixedUpdated);   // NOT Instant.now()
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt(), anyInt());
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
+        verify(roomRepository, never()).save(any());
+    }
+
+    // ── Step 4b: DB guard (name) blocks duplicate name at target location, never persists ──
+    @Test
+    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
+        Room room = existingRoom();
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(true);
+
+        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
+                .isInstanceOf(DuplicateRoomException.class);
+
+        verify(roomRepository).existsByName(any(), any());
         verify(roomRepository, never()).save(any());
     }
 
@@ -110,7 +125,8 @@ class RelocateRoomCommandHandlerTest {
     void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
@@ -132,14 +148,16 @@ class RelocateRoomCommandHandlerTest {
     void guardsRunInOrder_loadThenGateThenSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
 
         var ordered = inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
+        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt());
+        ordered.verify(roomRepository).existsByName(any(), any());
         ordered.verify(roomRepository).save(any());
     }
 }

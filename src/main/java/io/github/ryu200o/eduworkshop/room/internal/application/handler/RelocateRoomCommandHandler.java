@@ -42,9 +42,14 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
             return toResult(room, room.location());
         }
 
-        // Step 4 — DB guard (global invariant): target coordinate (new location + same code) must be free
-        //         of *other* rooms.
-        if (roomRepository.existsByCoordinate(newLocation.building(), newLocation.floor(), room.code())) {
+        // Step 4 — DB guard (global invariant): at the target location, BOTH the (location, code) and the
+        //         (location, name) pairs must be free of *other* rooms — relocation preserves code AND name,
+        //         so a collision on either would violate uk_rooms_building_floor_code /
+        //         uk_rooms_building_floor_name. The DB constraints remain the authoritative race-proof gate.
+        if (roomRepository.existsByCoordinate(newLocation, room.code())) {
+            throw new DuplicateRoomException(room.name(), newLocation);
+        }
+        if (roomRepository.existsByName(newLocation, room.name())) {
             throw new DuplicateRoomException(room.name(), newLocation);
         }
 

@@ -64,7 +64,7 @@ class ChangeRoomCodeCommandHandlerTest {
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository).loadById(any());
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt(), anyInt());
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -73,12 +73,12 @@ class ChangeRoomCodeCommandHandlerTest {
     void dbGuard_rejectsDuplicate_andDoesNotSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(true);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCodeCommand(room.id().value(), 2)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
+        verify(roomRepository).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -92,7 +92,7 @@ class ChangeRoomCodeCommandHandlerTest {
 
         assertThat(response.oldCode()).isEqualTo(1);
         assertThat(response.newCode()).isEqualTo(1);
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt(), anyInt());
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -101,7 +101,7 @@ class ChangeRoomCodeCommandHandlerTest {
     void happyPath_changesCodeSilently_persists_andReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ChangeRoomCodeCommand.Result response = handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
@@ -123,14 +123,14 @@ class ChangeRoomCodeCommandHandlerTest {
     void guardsRunInOrder_loadThenGateThenSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
 
         var ordered = org.mockito.Mockito.inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
+        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt());
         ordered.verify(roomRepository).save(any());
     }
 }

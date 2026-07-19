@@ -67,12 +67,26 @@ class CreateRoomCommandHandlerTest {
     @Test
     void dbGuard_rejectsDuplicate_andDoesNotSave() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(true);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
+        verify(roomRepository).existsByCoordinate(any(), anyInt());
+        verify(roomRepository, never()).save(any());
+    }
+
+    // ── Step 2b: DB guard (name) blocks duplicate name, never persists ──
+    @Test
+    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
+        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(true);
+
+        assertThatThrownBy(() -> handler().handle(command))
+                .isInstanceOf(DuplicateRoomException.class);
+
+        verify(roomRepository).existsByName(any(), any());
         verify(roomRepository, never()).save(any());
     }
 
@@ -80,7 +94,8 @@ class CreateRoomCommandHandlerTest {
     @Test
     void happyPath_passesGuards_persists_andReturnsId() {
         CreateRoomCommand command = new CreateRoomCommand("f", 2, 1, "F-201", 50); // lowercase building
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CreateRoomCommand.Result result = handler().handle(command);
@@ -100,13 +115,15 @@ class CreateRoomCommandHandlerTest {
     @Test
     void guardsRunInOrder_existenceCheckedBeforeSave() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(command);
 
         var inOrder = org.mockito.Mockito.inOrder(roomRepository);
-        inOrder.verify(roomRepository).existsByCoordinate(any(), anyInt(), anyInt());
+        inOrder.verify(roomRepository).existsByCoordinate(any(), anyInt());
+        inOrder.verify(roomRepository).existsByName(any(), any());
         inOrder.verify(roomRepository).save(any());
     }
 }
