@@ -7,9 +7,10 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -32,8 +33,11 @@ class RenameRoomCommandHandlerTest {
     @Mock
     private RoomRepository roomRepository;
 
+    @Mock
+    private RoomUniquenessPolicy uniquenessPolicy;
+
     private RenameRoomCommandHandler handler() {
-        return new RenameRoomCommandHandler(roomRepository);
+        return new RenameRoomCommandHandler(roomRepository, uniquenessPolicy);
     }
 
     private static Room existingRoom() {
@@ -80,17 +84,17 @@ class RenameRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4b: DB guard (name) blocks duplicate name at the same location, never persists ──
+    // ── Step 4: Domain guard (name) blocks duplicate name at the same location, never persists ──
     @Test
-    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
+    void domainGuard_rejectsDuplicateName_andDoesNotSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByName(any(), any())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101")))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByName(any(), any());
+        verify(uniquenessPolicy).isNameUnique(any(), any());
         verify(roomRepository, never()).save(any());
     }
 
@@ -99,7 +103,7 @@ class RenameRoomCommandHandlerTest {
     void happyPath_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
@@ -116,17 +120,17 @@ class RenameRoomCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_loadThenGateThenSave() {
+    void guardsRunInOrder_loadThenPolicyThenSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
 
-        var ordered = org.mockito.Mockito.inOrder(roomRepository);
+        var ordered = org.mockito.Mockito.inOrder(roomRepository, uniquenessPolicy);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(roomRepository).existsByName(any(), any());
+        ordered.verify(uniquenessPolicy).isNameUnique(any(), any());
         ordered.verify(roomRepository).save(any());
     }
 }

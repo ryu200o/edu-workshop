@@ -1,47 +1,49 @@
-# ADR 0005: Domain Factory Gateway & Global Invariant via Domain Policy Interface
+# ADR 0005: Global Uniqueness Invariant via a Domain-Owned `RoomUniquenessPolicy`
 
 - **Status:** Accepted
-- **Date:** 2026-07-15
+- **Date:** 2026-07-19 (revised; supersedes the earlier factory-based framing of ADR 0005)
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** ADR 0001, ADR 0002, ADR 0003, ADR 0004, `.AGENTS.md`, `docs/architecture/development-guidelines.md`,
-  `docs/db/database.md`
+- **Related:** ADR 0002, ADR 0003, ADR 0004, `.AGENTS.md`, `docs/db/database.md`
 
 ## Context
 
 The **global room-uniqueness invariant** — *no two rooms may occupy the same `(building, floor, code)`
-coordinate* — is a **set-based invariant**. By Evans/Vernon, an Aggregate can only guarantee invariants
-within *its own* consistency boundary; a rule that depends on the *set of all rooms* needs an arbiter that
-looks down from above. An Aggregate therefore **cannot self-prove its own uniqueness**; if we made it call a
-repository to check, we would commit the "aggregate calls repository" anti-pattern and pollute the Domain
-with IO.
+coordinate* **and** *no two rooms may share the same `(building, floor, name)` at one location* — is a
+**set-based invariant**. By Evans/Vernon, an Aggregate can only guarantee invariants within *its own*
+consistency boundary; a rule that depends on the *set of all rooms* needs an arbiter that looks down from
+above. An Aggregate therefore **cannot self-prove its own uniqueness**; if it called a repository directly
+we would commit the "aggregate calls repository" anti-pattern and pollute the Domain with IO.
 
-Historically this invariant leaked as a repeated naked `if (roomExistencePort.existsByBuildingAndFloorAndCode(...))
-throw new DuplicateRoomException(...)` in `CreateRoomCommandHandler` (:42), `RenameRoomCommandHandler` (:50) and
-`RelocateRoomCommandHandler` (:52). Business knowledge lived in orchestration, tripled; and `DuplicateRoomException`
-is already Domain vocabulary (`domain.model.exception`) yet was thrown from the Application — semantically
-incoherent.
+This invariant had leaked as a repeated naked guard in the application handlers:
 
-An earlier proposal (Option A) fixed ownership by introducing a `RoomUniquenessPolicy` Domain interface that the
-handlers called directly. That still left the guard call in the Application layer and left `Room.create` receiving
-an *externally built* `RoomName` — so the name-derivation wiring (`RoomName.of(location, code)`) kept leaking into
-the handler.
+- `CreateRoomCommandHandler`: `if (roomRepository.existsByCoordinate(...))` then `if (roomRepository.existsByName(...))`
+- `RenameRoomCommandHandler`: `if (roomRepository.existsByName(...))`
+- `RelocateRoomCommandHandler`: `if (roomRepository.existsByCoordinate(...))` then `if (roomRepository.existsByName(...))`
+- `ChangeRoomCodeCommandHandler`: `if (roomRepository.existsByCoordinate(...))`
 
-The locked decision (Solution 3, refined through the architecture survey) resolves both leaks:
+Business knowledge lived in orchestration, quadruplicated; and `DuplicateRoomException` is already Domain
+vocabulary (`domain.model.exception`) yet was thrown from the Application — semantically incoherent. The
+uniqueness check was also expressed as `exists*` methods on the **outbound repository port**
+(`RoomRepository`), mixing a global-invariant concern with persistence.
 
-- A **Domain Factory** is the **single construction gateway**. It depends ONLY on a **Domain Policy interface**
-  (`RoomUniquenessPolicy`) — pure by *dependency* (Hexagonal satisfied). The Policy's IO implementation lives in the
-  driven adapter (`application/port/out` / adapter). Construction logic (name derivation, local invariants, event)
-  stays ON the aggregate via a package-private factory-method.
-- **DB unique constraint** (`uk_rooms_building_floor_code`) remains the authoritative, race-proof gate.
+### Earlier framing (rejected in this revision)
+
+An earlier version of this ADR introduced a `RoomFactory` (a Spring bean) as the single construction
+gateway that depended on the policy. On reflection, the Factory added an indirection layer that owns
+*no* business logic of its own — construction logic already lives on the aggregate (`Room.create`). We
+therefore drop the Factory and keep only the **Domain Policy interface**: the aggregate itself becomes
+the single decision-maker, receiving the policy as an argument on each uniqueness-sensitive operation.
+This keeps the aggregate Rich (construction *and* mutation enforce the invariant) without a redundant
+gateway object.
 
 ### Clarification vs ADR 0002 (no contradiction)
 
-ADR 0002 §2 rejects `domain/spi` and places outbound **SPI ports** in `application/port/out/` to keep the Domain
-pure. ADR 0005 does **not** overturn that. It introduces a **Domain Policy interface** — a domain-owned business
-rule — which is a *distinct concept* from an outbound SPI port (an infrastructure need expressed by the app). The
-application `RoomExistencePort` (an SPI port that merely wrapped the uniqueness query) is therefore retired in
-favor of the domain-owned `RoomUniquenessPolicy`; uniqueness becomes a first-class domain concept instead of an
-application SPI. See the refinement note appended to ADR 0002.
+ADR 0002 §2 rejects `domain/spi` and places outbound **SPI ports** in `application/port/out/` to keep the
+Domain pure. ADR 0005 does **not** overturn that. `RoomUniquenessPolicy` is a **Domain Policy interface** —
+a domain-owned *business rule* — which is a *distinct concept* from an outbound SPI port (an infrastructure
+need expressed by the app). The application `RoomRepository.exists*` methods (outbound port) are therefore
+**retired** in favor of the domain-owned `RoomUniquenessPolicy`; uniqueness becomes a first-class domain
+concept instead of a repository capability. See the refinement note appended to ADR 0002.
 
 ## Decision
 
@@ -49,86 +51,85 @@ application SPI. See the refinement note appended to ADR 0002.
 New `RoomUniquenessPolicy` in `domain/model/policy/`:
 ```java
 public interface RoomUniquenessPolicy {
-    /** True when NO other room occupies the coordinate of {@code code} at {@code location}. */
-    boolean isSatisfiedBy(RoomLocation location, String code);
+    /** True when NO other room occupies the coordinate (location + code). */
+    boolean isCodeUnique(RoomLocation location, int code);
 
-    /** Domain guard: enforces the invariant, translating a violation into domain vocabulary. */
-    default void ensureUniqueOrThrow(RoomLocation location, String code) {
-        if (!isSatisfiedBy(location, code)) {
-            throw new DuplicateRoomException(RoomName.of(location, code), location);
-        }
-    }
+    /** True when NO other room occupies the (location + name) pair. */
+    boolean isNameUnique(RoomLocation location, RoomName name);
 }
 ```
-The Domain owns BOTH the specification AND the throw semantics. The adapter implements only the pure boolean; the
-`throw` lives in the Domain (IO-free) — invariant + exception reunited under Domain ownership.
+The Domain owns the *specification* of the invariant. The IO implementation lives in the driven adapter
+(`adapter/driven/persistence/jpa/JpaRoomUniquenessPolicy`), satisfying Hexagonal: the Domain depends only
+on a domain interface and knows nothing about the database.
 
-### 2. Domain Factory = single construction gateway
-`RoomFactory` in `domain/model/entity/` (same package as `Room`):
-- A Spring bean depending ONLY on `RoomUniquenessPolicy` (domain interface) — pure at compile time.
-- `Room create(RoomLocation location, String code, int capacity)`:
-  1. `policy.ensureUniqueOrThrow(location, code)` — fail-fast / UX read.
-  2. delegate to `Room.create(location, code, capacity)` (package-private factory-method on the aggregate).
-- Application handler injects ONLY `RoomFactory` + `RoomStateGateway` (never the Policy directly):
-  `Room room = roomFactory.create(location, code, capacity);`
+### 2. The aggregate is the single decision-maker
+The policy is passed **into the aggregate** as an argument on every uniqueness-sensitive operation:
 
-### 3. Aggregate construction logic stays ON the aggregate (Rich, not relocated)
-- `Room.create(RoomLocation, String code, int capacity)` becomes **package-private**; it **self-derives**
-  `RoomName.of(location, code)` internally and drops `requireNameConsistentWithLocation` (there is no external
-  name left to distrust). Local invariants (positive capacity, non-null) are enforced here, atomically.
-- `Room.reconstruct(...)` (existing) remains the **reconstitution** path — NO invariant check, NO event. DB load
-  bypasses the Factory entirely, so no spurious uniqueness re-check is triggered on read.
+- `Room.create(name, location, code, capacity, RoomUniquenessPolicy policy)` — checks both `isCodeUnique`
+  and `isNameUnique` before constructing; throws `DuplicateRoomException` (with the correct `Reason`) on
+  violation.
+- `Room.changeCode(int newCode, RoomUniquenessPolicy policy)` — checks `isCodeUnique` after the idempotency
+  skip.
+- `Room.relocateTo(RoomLocation newLocation, RoomUniquenessPolicy policy)` — checks both `isCodeUnique` and
+  `isNameUnique` after the idempotency skip (relocation preserves code *and* name).
+- `Room.changeName(String newName, RoomUniquenessPolicy policy)` — checks `isNameUnique` after the
+  idempotency skip.
 
-### 4. Identity-changing mutations route through the SAME Policy
-- `Room.changeCode(String newCode, RoomUniquenessPolicy policy)` and
-  `Room.relocateTo(RoomLocation newLocation, RoomUniquenessPolicy policy)` call
-  `policy.ensureUniqueOrThrow(...)` internally before mutating and emit `RoomRenamedEvent`. The aggregate stays the
-  decision-maker (Rich); IO happens only through the injected domain interface.
-- **Idempotency skip** (same code / same location) stays BEFORE the policy call to avoid false-positive
-  self-collision and needless IO.
-- This retires the scattered `if (existsBy...)` in the three handlers into one domain-owned arbiter.
+Idempotency (same code / same location / same name) is checked **before** the policy call, inside the
+aggregate, to avoid a false-positive self-collision and needless IO. The `throw` semantics (domain
+vocabulary + accurate `Reason`) live in the Domain — invariant and exception reunited under Domain
+ownership.
 
-### 5. Application layer becomes thin-and-correct
-- **Create:** map primitives → `roomFactory.create(location, code, capacity)` → `roomStateGateway.save(room)`.
-- **Rename/Relocate:** load aggregate → idempotency skip → `room.changeCode(newCode, policy)` /
-  `room.relocateTo(newLocation, policy)` → `save`. The Policy travels as a domain argument; the handler never
-  calls the Policy directly and never wires `RoomName`.
-- `RoomExistencePort` (application `port.out`) is **DELETED** — its role is absorbed by the Domain
-  `RoomUniquenessPolicy`. One concept, one port (resolves the "two ports, same purpose" ambiguity).
+### 3. Application layer becomes thin-and-correct
+Handlers inject **only** the domain `RoomUniquenessPolicy` (in addition to `RoomRepository` for
+load/save). They no longer call `exists*` on the repository and never wire `RoomName` for the guard:
 
-### 6. DB unique constraint = authoritative race-proof gate
-`uk_rooms_building_floor_code` (and `uk_rooms_name`) remain the final integrity authority. The Factory's Policy
-read is a fast-fail / UX optimization; the driven adapter translates `DataIntegrityViolationException` →
-`DuplicateRoomException` so the TOCTOU race is still caught. The two mechanisms are **complementary, not
-substitutive**.
+- **Create:** `Room room = Room.create(name, location, code, capacity, policy); repo.save(room);`
+- **ChangeCode / Rename / Relocate:** load aggregate → delegate to `room.changeCode(...)/changeName(...)/relocateTo(...)`
+  passing `policy` → `save`. The handler never evaluates the invariant itself.
 
-### 7. Dependency purity vs runtime IO (explicit)
-The Factory depends ONLY on a **Domain interface** → pure at compile time (Hexagonal: Domain knows no
-infrastructure). The Policy's DB read is runtime IO executed in the **infrastructure** implementation, not a
-layering violation. Trade-off accepted: every create/update triggers one read to the Policy impl (latency cost),
-justified by centralized invariant enforcement and fail-fast UX.
+This retires the scattered `if (existsBy...)` in the four handlers into one domain-owned arbiter.
+
+### 4. `RoomRepository` port is simplified
+`existsByCoordinate` / `existsByName` are **removed** from `RoomRepository`. The port returns to its
+primitive persistence contract (`save`, `loadById`). Uniqueness IO moves exclusively into
+`JpaRoomUniquenessPolicy` (which depends on `RoomJpaRepository`).
+
+### 5. DB unique constraint = authoritative race-proof gate
+`uk_rooms_building_floor_code` and `uk_rooms_building_floor_name` remain the final integrity authority.
+The Policy's read is a fast-fail / UX optimization; `JpaRoomWriteAdapter.save()` still translates
+`DataIntegrityViolationException` → `DuplicateRoomException` (with the violated-constraint `Reason`), so
+the TOCTOU race is still caught. The two mechanisms are **complementary, not substitutive**.
+
+### 6. Dependency purity vs runtime IO (explicit)
+The aggregate depends ONLY on a **Domain interface** → pure at compile time (Hexagonal: Domain knows no
+infrastructure). The Policy's DB read is runtime IO executed in the **infrastructure** implementation, not
+a layering violation. Trade-off accepted: every create/update triggers reads through the Policy impl
+(latency cost), justified by centralized invariant enforcement and fail-fast UX.
 
 ## Consequences
 
 ### Positive
-- **Single chokepoint** for uniqueness across create/rename/relocate — a future module cannot "forget" the check.
-- Domain owns the invariant contract + exception (Ubiquitous Language coherent).
-- Application is thin: no Policy mock, no `RoomName` wiring, no naked `if`.
-- Aggregate stays Rich (construction + mutation logic on the aggregate; Factory is a thin gateway).
+- **Single chokepoint** for uniqueness across create/rename/relocate/changeCode — a future module cannot
+  "forget" the check.
+- Domain owns the invariant contract + exception + `Reason` (Ubiquitous Language coherent).
+- Application is thin: no `exists*` calls, no `RoomName` wiring for the guard, no naked `if`.
+- Aggregate stays Rich (both construction and mutation enforce the invariant); no redundant Factory.
 - Compile-time pure Domain (only domain interfaces); runtime IO correctly placed in infra.
-- Reconstitution cleanly bypasses the Factory (no spurious checks).
+- Reconstitution (`Room.reconstruct`) cleanly bypasses any uniqueness check (no spurious re-check on read).
 
 ### Negative / Trade-offs
-- One extra read per create/update (latency) — accepted.
-- Factory depends on a domain interface that implies IO at runtime — must stay disciplined: never inject a
-  Repository / outbound port directly into a domain object; always via the domain Policy interface.
-- `RoomExistencePort` removal requires rewiring 3 handlers + adapter + tests (mechanical).
-- Risk if misapplied: turning the Factory into a God object that also absorbs mutations — guardrail: **Factory =
-  creation only**; identity-changing mutations go through aggregate methods + the same Policy.
+- One (or two) extra reads per create/update (latency) — accepted.
+- The aggregate now receives a domain interface argument on mutation methods — must stay disciplined:
+  never inject a Repository / outbound port directly into a domain object; always via the domain Policy
+  interface.
+- Removing `exists*` from `RoomRepository` requires rewiring 4 handlers + adapter + tests (mechanical).
+- Risk if misapplied: turning the policy into a catch-all validator — guardrail: the policy answers
+  **only** the two uniqueness questions.
 
 ## Notes
-- Supersedes the scattered `RoomExistencePort` pattern; refines (does not overturn) ADR 0002 §2 — see the
+- Supersedes the factory-based framing of ADR 0005; refines (does not overturn) ADR 0002 §2 — see the
   refinement note in ADR 0002.
-- Fitness function (future ArchUnit): `domain/**/factory` and `domain/**/policy` must not depend on `application`,
-  `port`, or Spring; no domain object calls a Repository directly.
+- Fitness function (future ArchUnit): `domain/**/policy` must not depend on `application`, `port`, or
+  Spring; no domain object calls a Repository directly.
 - DB schema unchanged (no migration needed).

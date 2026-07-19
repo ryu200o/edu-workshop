@@ -6,8 +6,10 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomain
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -55,6 +57,22 @@ public class Room {
      * and emits a {@link RoomCreated} event. The {@code name} is a free-form display string (self-defense
      * only: non-blank, normalized by {@link RoomName}); the {@code code} is an independent integer used
      * for FE ordering and is decoupled from {@code name}/{@code location}.
+     *
+     * <p>Uniqueness (the global {@code (location, code)} and {@code (location, name)} invariants) is
+     * enforced through the injected {@link RoomUniquenessPolicy} before construction, so the decision
+     * stays on the aggregate and the rule lives in domain vocabulary. The policy implementation performs
+     * the IO; the aggregate remains framework/IO-free.</p>
+     */
+    public static Room create(RoomName name, RoomLocation location, int code, int capacity, RoomUniquenessPolicy policy) {
+        Instant now = Instant.now();
+        return create(RoomId.generate(), name, location, code, capacity, now, now, policy);
+    }
+
+    /**
+     * Policy-free construction entry — used by unit tests and reconstitution-style assembly where the
+     * caller deliberately bypasses the uniqueness gate (e.g. the persistence adapter reconstructs an
+     * already-persisted, already-unique row). Prefer {@link #create(RoomName, RoomLocation, int, int,
+     * RoomUniquenessPolicy)} on the write path.
      */
     public static Room create(RoomName name, RoomLocation location, int code, int capacity) {
         Instant now = Instant.now();
@@ -63,7 +81,34 @@ public class Room {
 
     /**
      * Factory with explicit identity/timestamps — used when minting a new room from externally
-     * supplied identifiers. Emits a {@link RoomCreated} event.
+     * supplied identifiers. Enforces the global uniqueness invariants through {@code policy} before
+     * emitting a {@link RoomCreated} event.
+     */
+    public static Room create(RoomId id, RoomName name, RoomLocation location, int code, int capacity,
+                              Instant createdAt, Instant updatedAt, RoomUniquenessPolicy policy) {
+        requireNonNullName(name);
+        requireValidCode(code);
+        requirePositiveCapacity(capacity);
+        requireNonNullLocation(location);
+
+        // Global invariant (set-based): enforced via the domain-owned policy. Idempotency is irrelevant
+        // here (brand-new aggregate) — a self-collision cannot occur, so we check unconditionally.
+        if (!policy.isCodeUnique(location, code)) {
+            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, code, name, location);
+        }
+        if (!policy.isNameUnique(location, name)) {
+            throw new DuplicateRoomException(name, location);
+        }
+
+        Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
+        room.recordedEvents.add(new RoomCreated(
+                room.id.value(), room.name, room.capacity, room.location, room.code, room.state, room.createdAt));
+        return room;
+    }
+
+    /**
+     * Policy-free factory with explicit identity/timestamps — retained for callers that bypass the
+     * uniqueness gate by design (e.g. tests). The write path must use the policy-bearing overload.
      */
     public static Room create(RoomId id, RoomName name, RoomLocation location, int code, int capacity, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
@@ -167,6 +212,35 @@ public class Room {
     }
 
     /**
+     * Changes the room's {@code code} with the global {@code (location, code)} uniqueness invariant
+     * enforced through the injected {@link RoomUniquenessPolicy}. Silent mutation (no event). The
+     * idempotency skip runs before the policy check to avoid a false-positive self-collision.
+     *
+     * @throws IllegalRoomStateException   if the room is {@link RoomState#DEACTIVATED}
+     * @throws RoomDomainException         if the new code is not positive
+     * @throws DuplicateRoomException      if another room already owns the target coordinate
+     */
+    public void changeCode(int newCode, RoomUniquenessPolicy policy) {
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(id, state, null,
+                    "A deactivated room's code cannot be changed; the deactivation is permanent.");
+        }
+        requireValidCode(newCode);
+
+        // Idempotent no-op: same code means no change, no event, no persist, no IO.
+        if (newCode == this.code) {
+            return;
+        }
+
+        if (!policy.isCodeUnique(location, newCode)) {
+            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, newCode, name, location);
+        }
+
+        this.code = newCode;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
      * Renames the room by changing its free-form {@code name} directly. The building, floor and code are
      * preserved (the name is fully decoupled from coordinates). Emits a {@link RoomRenamedEvent} so
      * consumer modules (e.g. Workshop) can react.
@@ -197,6 +271,38 @@ public class Room {
     }
 
     /**
+     * Renames the room (free-form {@code name}) with the global {@code (location, name)} uniqueness
+     * invariant enforced through the injected {@link RoomUniquenessPolicy}. Emits a
+     * {@link RoomRenamedEvent}. The idempotency skip runs before the policy check to avoid a
+     * false-positive self-collision.
+     *
+     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
+     * @throws DuplicateRoomException    if another room already owns the target name at this location
+     */
+    public void changeName(String newName, RoomUniquenessPolicy policy) {
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(id, state, null,
+                    "A deactivated room's name cannot be changed; the deactivation is permanent.");
+        }
+        RoomName candidate = RoomName.of(newName);
+
+        // Idempotent no-op: same name means no change, no event, no persist, no IO.
+        if (candidate.equals(this.name)) {
+            return;
+        }
+
+        if (!policy.isNameUnique(location, candidate)) {
+            throw new DuplicateRoomException(candidate, location);
+        }
+
+        RoomName previousName = this.name;
+        this.name = candidate;
+        this.updatedAt = Instant.now();
+        this.recordedEvents.add(new RoomRenamedEvent(
+                id.value(), previousName, candidate, this.updatedAt));
+    }
+
+    /**
      * Relocates the room by changing its physical {@code location} (building and/or floor). The {@code name}
      * and {@code code} are preserved (they are decoupled from coordinates). Emits a {@link RoomRelocatedEvent}
      * carrying only the old/new location — the name is not part of a relocation.
@@ -215,6 +321,38 @@ public class Room {
         // Idempotent no-op: same location means no change, no event, no persist.
         if (newLocation.equals(this.location)) {
             return;
+        }
+        RoomLocation previousLocation = this.location;
+        this.location = newLocation;
+        this.updatedAt = Instant.now();
+        this.recordedEvents.add(new RoomRelocatedEvent(
+                id.value(), previousLocation, newLocation, this.updatedAt));
+    }
+
+    /**
+     * Relocates the room (changes its building/floor; {@code name} and {@code code} are preserved) with
+     * the global invariants enforced through the injected {@link RoomUniquenessPolicy}. Because relocation
+     * keeps both {@code code} and {@code name}, BOTH the {@code (location, code)} and
+     * {@code (location, name)} pairs must be free at the target. Emits a {@link RoomRelocatedEvent}. The
+     * idempotency skip runs before any policy check to avoid a false-positive self-collision.
+     *
+     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
+     * @throws DuplicateRoomException    if another room already owns the target coordinate or name
+     */
+    public void relocateTo(RoomLocation newLocation, RoomUniquenessPolicy policy) {
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(id, state, null,
+                    "A deactivated room cannot be relocated; the deactivation is permanent.");
+        }
+        // Idempotent no-op: same location means no change, no event, no persist, no IO.
+        if (newLocation.equals(this.location)) {
+            return;
+        }
+        if (!policy.isCodeUnique(newLocation, code)) {
+            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, code, name, newLocation);
+        }
+        if (!policy.isNameUnique(newLocation, name)) {
+            throw new DuplicateRoomException(name, newLocation);
         }
         RoomLocation previousLocation = this.location;
         this.location = newLocation;

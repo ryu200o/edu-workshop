@@ -4,26 +4,29 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.C
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Use-case handler for changing a room's independent {@code code} (an int used only for FE ordering).
- * This is a silent mutation — the domain emits NO event. The code uniqueness guard (building + floor +
- * code) still applies, enforced by the DB constraint and the race-proof gate in the write adapter.
+ * This is a silent mutation — the domain emits NO event. The {@code (building, floor, code)} uniqueness
+ * invariant is enforced inside the aggregate through the injected domain {@link RoomUniquenessPolicy};
+ * the DB constraint plus the race-proof gate in the write adapter remain the authoritative authority.
  * Package-private: reachable only via the module {@code CommandBus}.
  */
 @Component
 class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeCommand, ChangeRoomCodeCommand.Result> {
 
     private final RoomRepository roomRepository;
+    private final RoomUniquenessPolicy uniquenessPolicy;
 
-    ChangeRoomCodeCommandHandler(RoomRepository roomRepository) {
+    ChangeRoomCodeCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy) {
         this.roomRepository = roomRepository;
+        this.uniquenessPolicy = uniquenessPolicy;
     }
 
     @Override
@@ -38,17 +41,15 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
             return toResult(room, room.code());
         }
 
-        // Step 3 — DB guard (global invariant): target coordinate must be free of *other* rooms.
+        // Step 3 — RAM guard (local invariant): positive code only.
         if (command.newCode() <= 0) {
             throw new RoomDomainException("Room code must be greater than zero.");
         }
-        if (roomRepository.existsByCoordinate(room.location(), command.newCode())) {
-            throw new DuplicateRoomException(room.name(), room.location());
-        }
 
-        // Step 4 — Domain mutation (silent, no event) then persist.
+        // Step 4 — Domain mutation (silent, no event). The aggregate enforces the (location, code) uniqueness
+        //         invariant via the policy before mutating; then persist.
         int oldCode = room.code();
-        room.changeCode(command.newCode());
+        room.changeCode(command.newCode(), uniquenessPolicy);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldCode);
     }

@@ -7,6 +7,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.Duplic
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -28,11 +29,14 @@ class CreateRoomCommandHandlerTest {
     @Mock
     private RoomRepository roomRepository;
 
+    @Mock
+    private RoomUniquenessPolicy uniquenessPolicy;
+
     private CreateRoomCommandHandler handler() {
-        return new CreateRoomCommandHandler(roomRepository);
+        return new CreateRoomCommandHandler(roomRepository, uniquenessPolicy);
     }
 
-    // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any DB call ──
+    // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any IO ──
     @Test
     void ramGuard_rejectsBlankName_withoutTouchingPorts() {
         CreateRoomCommand badName = new CreateRoomCommand("F", 2, 1, "", 50);
@@ -40,7 +44,7 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badName))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomRepository);
+        verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
 
     @Test
@@ -50,7 +54,7 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badCode))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomRepository);
+        verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
 
     @Test
@@ -60,33 +64,34 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badFloor))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomRepository);
+        verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
 
-    // ── Step 2: DB guard (Global invariant) blocks duplicates, never persists ──
+    // ── Step 2: Domain guard (Global invariant via policy) blocks duplicate code, never persists ──
     @Test
-    void dbGuard_rejectsDuplicate_andDoesNotSave() {
+    void domainGuard_rejectsDuplicateCode_andDoesNotSave() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByCoordinate(any(), anyInt());
+        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 2b: DB guard (name) blocks duplicate name, never persists ──
+    // ── Step 2b: Domain guard (name) blocks duplicate name, never persists ──
     @Test
-    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
+    void domainGuard_rejectsDuplicateName_andDoesNotSave() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByName(any(), any());
+        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
+        verify(uniquenessPolicy).isNameUnique(any(), any());
         verify(roomRepository, never()).save(any());
     }
 
@@ -94,8 +99,8 @@ class CreateRoomCommandHandlerTest {
     @Test
     void happyPath_passesGuards_persists_andReturnsId() {
         CreateRoomCommand command = new CreateRoomCommand("f", 2, 1, "F-201", 50); // lowercase building
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CreateRoomCommand.Result result = handler().handle(command);
@@ -113,17 +118,17 @@ class CreateRoomCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_existenceCheckedBeforeSave() {
+    void guardsRunInOrder_policyCheckedBeforeSave() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(command);
 
-        var inOrder = org.mockito.Mockito.inOrder(roomRepository);
-        inOrder.verify(roomRepository).existsByCoordinate(any(), anyInt());
-        inOrder.verify(roomRepository).existsByName(any(), any());
+        var inOrder = org.mockito.Mockito.inOrder(uniquenessPolicy, roomRepository);
+        inOrder.verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
+        inOrder.verify(uniquenessPolicy).isNameUnique(any(), any());
         inOrder.verify(roomRepository).save(any());
     }
 }

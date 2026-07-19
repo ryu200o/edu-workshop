@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNo
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,8 +37,11 @@ class RelocateRoomCommandHandlerTest {
     @Mock
     private RoomRepository roomRepository;
 
+    @Mock
+    private RoomUniquenessPolicy uniquenessPolicy;
+
     private RelocateRoomCommandHandler handler() {
-        return new RelocateRoomCommandHandler(roomRepository);
+        return new RelocateRoomCommandHandler(roomRepository, uniquenessPolicy);
     }
 
     private static Room existingRoom() {
@@ -68,21 +72,21 @@ class RelocateRoomCommandHandlerTest {
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository).loadById(any());
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
+        verify(uniquenessPolicy, never()).isCodeUnique(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4: DB guard (global invariant) blocks duplicates, never persists ──
+    // ── Step 4: Domain guard (global invariant) blocks duplicate code, never persists ──
     @Test
-    void dbGuard_rejectsDuplicate_andDoesNotSave() {
+    void domainGuard_rejectsDuplicateCode_andDoesNotSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByCoordinate(any(), anyInt());
+        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -101,22 +105,23 @@ class RelocateRoomCommandHandlerTest {
         assertThat(response.oldLocation()).isEqualTo(room.location());
         assertThat(response.newLocation()).isEqualTo(room.location());
         assertThat(response.updatedAt()).isEqualTo(fixedUpdated);   // NOT Instant.now()
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
+        verify(uniquenessPolicy, never()).isCodeUnique(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4b: DB guard (name) blocks duplicate name at target location, never persists ──
+    // ── Step 4b: Domain guard (name) blocks duplicate name at target location, never persists ──
     @Test
-    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
+    void domainGuard_rejectsDuplicateName_andDoesNotSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByName(any(), any());
+        verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
+        verify(uniquenessPolicy).isNameUnique(any(), any());
         verify(roomRepository, never()).save(any());
     }
 
@@ -125,8 +130,8 @@ class RelocateRoomCommandHandlerTest {
     void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
@@ -145,19 +150,19 @@ class RelocateRoomCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_loadThenGateThenSave() {
+    void guardsRunInOrder_loadThenPolicyThenSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
 
-        var ordered = inOrder(roomRepository);
+        var ordered = inOrder(roomRepository, uniquenessPolicy);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt());
-        ordered.verify(roomRepository).existsByName(any(), any());
+        ordered.verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
+        ordered.verify(uniquenessPolicy).isNameUnique(any(), any());
         ordered.verify(roomRepository).save(any());
     }
 }

@@ -4,26 +4,29 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.R
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Use-case handler for relocating a room (changing its building/floor; code unchanged). Enforces the
- * multi-tier duplicate guard in performance order: load (write side) → RAM (VO self-validation) →
- * idempotency → DB (target-coordinate uniqueness) → domain mutation → persist. Package-private:
- * reachable only via the module {@code CommandBus}.
+ * Use-case handler for relocating a room (changing its building/floor; code unchanged). The global
+ * uniqueness invariant is enforced inside the aggregate through the injected domain
+ * {@link RoomUniquenessPolicy}: because relocation preserves both code and name, the aggregate checks
+ * BOTH the {@code (location, code)} and {@code (location, name)} pairs at the target via the policy.
+ * Package-private: reachable only via the module {@code CommandBus}.
  */
 @Component
 class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, RelocateRoomCommand.Result> {
 
     private final RoomRepository roomRepository;
+    private final RoomUniquenessPolicy uniquenessPolicy;
 
-    RelocateRoomCommandHandler(RoomRepository roomRepository) {
+    RelocateRoomCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy) {
         this.roomRepository = roomRepository;
+        this.uniquenessPolicy = uniquenessPolicy;
     }
 
     @Override
@@ -42,20 +45,10 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
             return toResult(room, room.location());
         }
 
-        // Step 4 — DB guard (global invariant): at the target location, BOTH the (location, code) and the
-        //         (location, name) pairs must be free of *other* rooms — relocation preserves code AND name,
-        //         so a collision on either would violate uk_rooms_building_floor_code /
-        //         uk_rooms_building_floor_name. The DB constraints remain the authoritative race-proof gate.
-        if (roomRepository.existsByCoordinate(newLocation, room.code())) {
-            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, room.code(), room.name(), newLocation);
-        }
-        if (roomRepository.existsByName(newLocation, room.name())) {
-            throw new DuplicateRoomException(room.name(), newLocation);
-        }
-
-        // Step 5 — Domain mutation (keeps name/code, records RoomRelocatedEvent) then persist.
+        // Step 4 — Domain mutation (keeps name/code, records RoomRelocatedEvent). The aggregate enforces the
+        //         (location, code) and (location, name) invariants via the policy before mutating; then persist.
         RoomLocation oldLocation = room.location();
-        room.relocateTo(newLocation);
+        room.relocateTo(newLocation, uniquenessPolicy);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldLocation);
     }
