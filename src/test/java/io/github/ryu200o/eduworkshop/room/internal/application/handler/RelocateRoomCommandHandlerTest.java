@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.R
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
@@ -42,7 +42,7 @@ class RelocateRoomCommandHandlerTest {
 
     private static Room existingRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        return Room.create(RoomName.of(location, "01"), location, 50);
+        return Room.create(RoomName.of("F-201"), location, 1, 50);
     }
 
     // ── Step 1: load failure ──
@@ -68,7 +68,7 @@ class RelocateRoomCommandHandlerTest {
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository).loadById(any());
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt(), any());
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -77,12 +77,12 @@ class RelocateRoomCommandHandlerTest {
     void dbGuard_rejectsDuplicate_andDoesNotSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(true);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
+        verify(roomRepository).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
@@ -91,8 +91,8 @@ class RelocateRoomCommandHandlerTest {
     void sameLocation_isIdempotent_noGateNoSave_returnsExistingUpdatedAt() {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
         Room room = Room.reconstruct(
-                RoomId.of(UUID.randomUUID()), RoomName.of(RoomLocation.of("F", 2), "01"),
-                RoomLocation.of("F", 2), 50, RoomState.ACTIVE,
+                RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
+                RoomLocation.of("F", 2), 1, 50, RoomState.ACTIVE,
                 Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
@@ -101,7 +101,22 @@ class RelocateRoomCommandHandlerTest {
         assertThat(response.oldLocation()).isEqualTo(room.location());
         assertThat(response.newLocation()).isEqualTo(room.location());
         assertThat(response.updatedAt()).isEqualTo(fixedUpdated);   // NOT Instant.now()
-        verify(roomRepository, never()).existsByCoordinate(any(), anyInt(), any());
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
+        verify(roomRepository, never()).save(any());
+    }
+
+    // ── Step 4b: DB guard (name) blocks duplicate name at target location, never persists ──
+    @Test
+    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
+        Room room = existingRoom();
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(true);
+
+        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
+                .isInstanceOf(DuplicateRoomException.class);
+
+        verify(roomRepository).existsByName(any(), any());
         verify(roomRepository, never()).save(any());
     }
 
@@ -110,7 +125,8 @@ class RelocateRoomCommandHandlerTest {
     void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
@@ -120,10 +136,10 @@ class RelocateRoomCommandHandlerTest {
         Room saved = captor.getValue();
 
         assertThat(saved.location()).isEqualTo(RoomLocation.of("G", 3));
-        assertThat(saved.name()).isEqualTo(RoomName.of(RoomLocation.of("G", 3), "01"));
-        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRenamedEvent);
+        assertThat(saved.name()).isEqualTo(RoomName.of("F-201")); // name is preserved (decoupled)
+        assertThat(saved.code()).isEqualTo(1);                    // code is preserved
+        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRelocatedEvent);
         assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.name()).isEqualTo("G.0301");
         assertThat(response.oldLocation()).isEqualTo(RoomLocation.of("F", 2));
         assertThat(response.newLocation()).isEqualTo(RoomLocation.of("G", 3));
     }
@@ -132,14 +148,16 @@ class RelocateRoomCommandHandlerTest {
     void guardsRunInOrder_loadThenGateThenSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByCoordinate(any(), anyInt(), any())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
 
         var ordered = inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt(), any());
+        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt());
+        ordered.verify(roomRepository).existsByName(any(), any());
         ordered.verify(roomRepository).save(any());
     }
 }

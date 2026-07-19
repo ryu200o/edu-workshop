@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -25,19 +25,21 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 class RoomTest {
 
     private static final RoomLocation LOCATION = RoomLocation.of("F", 2);
-    private static final String CODE = "01";
+    private static final String NAME = "F.0201";
+    private static final int CODE = 1;
     private static final int CAPACITY = 50;
 
     private static RoomName name() {
-        return RoomName.of(LOCATION, CODE);
+        return RoomName.of(NAME);
     }
 
     @Test
     void create_yieldsActiveRoomAndEmitsRoomCreated() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
         assertThat(room.id()).isNotNull();
         assertThat(room.name()).isEqualTo(name());
+        assertThat(room.code()).isEqualTo(CODE);
         assertThat(room.capacity()).isEqualTo(CAPACITY);
         assertThat(room.location()).isEqualTo(LOCATION);
         assertThat(room.state()).isEqualTo(RoomState.ACTIVE);
@@ -51,6 +53,7 @@ class RoomTest {
                     RoomCreated created = (RoomCreated) e;
                     assertThat(created.roomId()).isEqualTo(room.id().value());
                     assertThat(created.name()).isEqualTo(name());
+                    assertThat(created.code()).isEqualTo(CODE);
                     assertThat(created.location()).isEqualTo(LOCATION);
                     assertThat(created.initialState()).isEqualTo(RoomState.ACTIVE);
                 });
@@ -62,7 +65,7 @@ class RoomTest {
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Instant updatedAt = Instant.parse("2026-01-01T00:00:00Z");
 
-        Room room = Room.create(roomId, name(), LOCATION, CAPACITY, createdAt, updatedAt);
+        Room room = Room.create(roomId, name(), LOCATION, CODE, CAPACITY, createdAt, updatedAt);
 
         assertThat(room.id()).isEqualTo(roomId);
         assertThat(room.createdAt()).isEqualTo(createdAt);
@@ -77,7 +80,7 @@ class RoomTest {
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Instant updatedAt = Instant.parse("2026-06-01T00:00:00Z");
 
-        Room room = Room.reconstruct(roomId, name(), LOCATION, CAPACITY, RoomState.MAINTENANCE, createdAt, updatedAt);
+        Room room = Room.reconstruct(roomId, name(), LOCATION, CODE, CAPACITY, RoomState.MAINTENANCE, createdAt, updatedAt);
 
         assertThat(room.id()).isEqualTo(roomId);
         assertThat(room.state()).isEqualTo(RoomState.MAINTENANCE);
@@ -91,35 +94,35 @@ class RoomTest {
         RoomId roomId = RoomId.of(UUID.randomUUID());
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
 
-        assertThatThrownBy(() -> Room.reconstruct(roomId, name(), LOCATION, CAPACITY, null, now, now))
+        assertThatThrownBy(() -> Room.reconstruct(roomId, name(), LOCATION, CODE, CAPACITY, null, now, now))
                 .isInstanceOf(RoomDomainException.class);
     }
 
     @Test
     void create_rejectsNullName() {
-        assertThatThrownBy(() -> Room.create(null, LOCATION, CAPACITY))
+        assertThatThrownBy(() -> Room.create(null, LOCATION, CODE, CAPACITY))
                 .isInstanceOf(RoomDomainException.class);
     }
 
     @Test
-    void create_rejectsNameInconsistentWithLocation() {
-        RoomName foreign = RoomName.ofRaw("G.0301");
-
-        assertThatThrownBy(() -> Room.create(foreign, LOCATION, CAPACITY))
+    void create_rejectsNonPositiveCode() {
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, 0, CAPACITY))
+                .isInstanceOf(RoomDomainException.class);
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, -5, CAPACITY))
                 .isInstanceOf(RoomDomainException.class);
     }
 
     @Test
     void create_rejectsNonPositiveCapacity() {
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, 0))
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, 0))
                 .isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, -5))
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, -5))
                 .isInstanceOf(RoomDomainException.class);
     }
 
     @Test
     void placeUnderMaintenance_fromActive_transitionsToMaintenanceAndEmitsEvent() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
         room.placeUnderMaintenance();
 
@@ -139,7 +142,7 @@ class RoomTest {
 
     @Test
     void placeUnderMaintenance_fromMaintenance_isIdempotentAndEmitsNoEvent() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.placeUnderMaintenance();
         int eventsBefore = room.recordedEvents().size();
 
@@ -151,7 +154,7 @@ class RoomTest {
 
     @Test
     void placeUnderMaintenance_fromDeactivated_isRejected() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
 
         IllegalRoomStateException ex = catchThrowableOfType(
@@ -165,7 +168,7 @@ class RoomTest {
 
     @Test
     void reactivate_fromMaintenance_returnsToActive() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.placeUnderMaintenance();
 
         room.reactivate();
@@ -178,7 +181,7 @@ class RoomTest {
 
     @Test
     void reactivate_fromActive_isIdempotentAndEmitsNoEvent() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         int eventsBefore = room.recordedEvents().size();
 
         room.reactivate();
@@ -189,7 +192,7 @@ class RoomTest {
 
     @Test
     void reactivate_fromDeactivated_isRejected() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
 
         assertThatThrownBy(room::reactivate)
@@ -200,7 +203,7 @@ class RoomTest {
 
     @Test
     void deactivate_fromActive_permanentlyFreezesRoom() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
         room.deactivate();
 
@@ -218,7 +221,7 @@ class RoomTest {
 
     @Test
     void deactivate_fromMaintenance_permanentlyFreezesRoom() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.placeUnderMaintenance();
 
         room.deactivate();
@@ -228,7 +231,7 @@ class RoomTest {
 
     @Test
     void deactivate_fromDeactivated_isIdempotentNoOp() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
         int eventsBefore = room.recordedEvents().size();
 
@@ -240,7 +243,7 @@ class RoomTest {
 
     @Test
     void deactivatedRoom_blocksReactivationAndMaintenance_butDeactivateIsSafeNoOp() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
 
         assertThatThrownBy(room::placeUnderMaintenance).isInstanceOf(IllegalRoomStateException.class);
@@ -250,13 +253,58 @@ class RoomTest {
     }
 
     @Test
-    void changeCode_recomputesNameAndEmitsRoomRenamedEvent() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+    void changeCode_changesCodeSilently_noEvent() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
-        room.changeCode("LAB");
+        room.changeCode(99);
 
-        assertThat(room.name()).isEqualTo(RoomName.of(LOCATION, "LAB"));
+        assertThat(room.code()).isEqualTo(99);
+        assertThat(room.name()).isEqualTo(name());
         assertThat(room.location()).isEqualTo(LOCATION);
+        assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
+        assertThat(room.recordedEvents())
+                .filteredOn(RoomRenamedEvent.class::isInstance)
+                .isEmpty();
+    }
+
+    @Test
+    void changeCode_rejectsNonPositiveCode() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
+
+        assertThatThrownBy(() -> room.changeCode(0)).isInstanceOf(RoomDomainException.class);
+        assertThatThrownBy(() -> room.changeCode(-3)).isInstanceOf(RoomDomainException.class);
+    }
+
+    @Test
+    void changeCode_sameCode_isIdempotentNoEvent() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
+        int before = room.recordedEvents().size();
+
+        room.changeCode(CODE);
+
+        assertThat(room.code()).isEqualTo(CODE);
+        assertThat(room.recordedEvents()).hasSize(before);
+    }
+
+    @Test
+    void changeCode_fromDeactivated_isRejected() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
+        room.deactivate();
+
+        assertThatThrownBy(() -> room.changeCode(99))
+                .isInstanceOf(IllegalRoomStateException.class);
+        assertThat(room.code()).isEqualTo(CODE);
+    }
+
+    @Test
+    void changeName_recomputesNothingButEmitsRoomRenamedEvent() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
+
+        room.changeName("LAB-101");
+
+        assertThat(room.name()).isEqualTo(RoomName.of("LAB-101"));
+        assertThat(room.location()).isEqualTo(LOCATION);
+        assertThat(room.code()).isEqualTo(CODE);
         assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
         assertThat(room.recordedEvents())
                 .filteredOn(RoomRenamedEvent.class::isInstance)
@@ -265,59 +313,35 @@ class RoomTest {
                 .satisfies(e -> {
                     RoomRenamedEvent ev = (RoomRenamedEvent) e;
                     assertThat(ev.roomId()).isEqualTo(room.id().value());
-                    assertThat(ev.reason()).isEqualTo(RoomRenameReason.CODE_CHANGED);
                     assertThat(ev.oldName()).isEqualTo(name());
-                    assertThat(ev.oldCode()).isEqualTo(CODE);
-                    assertThat(ev.newName()).isEqualTo(RoomName.of(LOCATION, "LAB"));
-                    assertThat(ev.newCode()).isEqualTo("LAB");
-                    assertThat(ev.location()).isEqualTo(LOCATION);
+                    assertThat(ev.newName()).isEqualTo(RoomName.of("LAB-101"));
                 });
     }
 
     @Test
-    void changeCode_preservesBuildingAndFloor() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
-
-        room.changeCode("A1");
-
-        assertThat(room.location().building()).isEqualTo("F");
-        assertThat(room.location().floor()).isEqualTo(2);
-        assertThat(room.name().asString()).isEqualTo("F.02A1");
-    }
-
-    @Test
-    void changeCode_rejectsInvalidCode() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
-
-        assertThatThrownBy(() -> room.changeCode("")).isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> room.changeCode("A-B")).isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> room.changeCode("ABCDEFGHIJK")).isInstanceOf(RoomDomainException.class);
-    }
-
-    @Test
-    void changeCode_sameCode_isIdempotentNoEvent() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+    void changeName_sameName_isIdempotentNoEvent() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         int before = room.recordedEvents().size();
 
-        room.changeCode(CODE);
+        room.changeName(NAME);
 
         assertThat(room.name()).isEqualTo(name());
         assertThat(room.recordedEvents()).hasSize(before);
     }
 
     @Test
-    void changeCode_fromDeactivated_isRejected() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+    void changeName_fromDeactivated_isRejected() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
 
-        assertThatThrownBy(() -> room.changeCode("LAB"))
+        assertThatThrownBy(() -> room.changeName("LAB-101"))
                 .isInstanceOf(IllegalRoomStateException.class);
         assertThat(room.name()).isEqualTo(name());
     }
 
     @Test
     void clearDomainEvents_removesRecordedEvents() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
 
         room.clearDomainEvents();
@@ -326,45 +350,41 @@ class RoomTest {
     }
 
     @Test
-    void relocateTo_recomputesNameKeepsCodeAndEmitsLocationChanged() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+    void relocateTo_keepsNameAndCodeAndEmitsLocationChanged() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         RoomLocation newLocation = RoomLocation.of("G", 3);
 
         room.relocateTo(newLocation);
 
         assertThat(room.location()).isEqualTo(newLocation);
-        assertThat(room.name()).isEqualTo(RoomName.of(newLocation, CODE));
-        assertThat(room.name().code()).isEqualTo(CODE);
+        assertThat(room.name()).isEqualTo(name());
+        assertThat(room.code()).isEqualTo(CODE);
         assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
         assertThat(room.recordedEvents())
-                .filteredOn(RoomRenamedEvent.class::isInstance)
+                .filteredOn(RoomRelocatedEvent.class::isInstance)
                 .hasSize(1)
                 .first()
                 .satisfies(e -> {
-                    RoomRenamedEvent ev = (RoomRenamedEvent) e;
+                    RoomRelocatedEvent ev = (RoomRelocatedEvent) e;
                     assertThat(ev.roomId()).isEqualTo(room.id().value());
-                    assertThat(ev.reason()).isEqualTo(RoomRenameReason.LOCATION_CHANGED);
-                    assertThat(ev.oldName()).isEqualTo(name());
-                    assertThat(ev.oldCode()).isEqualTo(CODE);
-                    assertThat(ev.newName()).isEqualTo(RoomName.of(newLocation, CODE));
-                    assertThat(ev.newCode()).isEqualTo(CODE);
-                    assertThat(ev.location()).isEqualTo(newLocation);
+                    assertThat(ev.oldLocation()).isEqualTo(LOCATION);
+                    assertThat(ev.newLocation()).isEqualTo(newLocation);
                 });
     }
 
     @Test
-    void relocateTo_preservesCode() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+    void relocateTo_preservesNameAndCode() {
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
         room.relocateTo(RoomLocation.of("G", 3));
 
-        assertThat(room.name().code()).isEqualTo(CODE);
-        assertThat(room.name().asString()).isEqualTo("G.0301");
+        assertThat(room.name()).isEqualTo(name());
+        assertThat(room.code()).isEqualTo(CODE);
     }
 
     @Test
     void relocateTo_rejectsInvalidLocation() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
         assertThatThrownBy(() -> room.relocateTo(RoomLocation.of("G", 0)))
                 .isInstanceOf(RoomDomainException.class);
@@ -372,7 +392,7 @@ class RoomTest {
 
     @Test
     void relocateTo_sameLocation_isIdempotentNoEvent() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         int before = room.recordedEvents().size();
 
         room.relocateTo(LOCATION);
@@ -383,7 +403,7 @@ class RoomTest {
 
     @Test
     void relocateTo_fromDeactivated_isRejected() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
 
         assertThatThrownBy(() -> room.relocateTo(RoomLocation.of("G", 3)))
@@ -393,7 +413,7 @@ class RoomTest {
 
     @Test
     void changeCapacity_updatesCapacityAndEmitsRoomCapacityChanged() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
         room.changeCapacity(80);
 
@@ -414,7 +434,7 @@ class RoomTest {
 
     @Test
     void changeCapacity_rejectsNonPositive() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
 
         assertThatThrownBy(() -> room.changeCapacity(0))
                 .isInstanceOf(RoomDomainException.class);
@@ -425,7 +445,7 @@ class RoomTest {
 
     @Test
     void changeCapacity_sameCapacity_isIdempotentNoEvent() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         int before = room.recordedEvents().size();
 
         room.changeCapacity(CAPACITY);
@@ -436,7 +456,7 @@ class RoomTest {
 
     @Test
     void changeCapacity_fromDeactivated_isRejected() {
-        Room room = Room.create(name(), LOCATION, CAPACITY);
+        Room room = Room.create(name(), LOCATION, CODE, CAPACITY);
         room.deactivate();
 
         assertThatThrownBy(() -> room.changeCapacity(80))

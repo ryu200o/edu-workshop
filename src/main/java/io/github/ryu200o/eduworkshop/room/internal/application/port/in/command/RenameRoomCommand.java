@@ -6,28 +6,29 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Write command to rename a room by changing its code (building/floor preserved). Raw input only —
- * all validation/normalization is performed by the Room domain value objects inside the handler.
+ * Write command to rename a room by changing its free-form {@code name} directly (building/floor/code
+ * preserved). Raw input only — all validation/normalization is performed by the {@code RoomName} value
+ * object inside the handler. Name uniqueness is enforced by a fail-fast RAM check in the handler
+ * (mirroring {@code uk_rooms_building_floor_name}) and, authoritatively, by the DB constraint plus the
+ * race-proof gate in the write adapter.
  *
  * @param roomId the id of the room to rename
- * @param newCode the new 1–10 character alphanumeric room code (validated by {@code RoomName})
+ * @param newName the new free-form room name (non-blank; validated by {@code RoomName})
  */
 public record RenameRoomCommand(
         UUID roomId,
-        String newCode
+        String newName
 ) implements Command<RenameRoomCommand.Result> {
 
     /**
      * Lightweight write-side result for this command — carries only the fields directly affected by the
-     * rename (id, the old/new code, the recomputed name, and the update timestamp) to keep the write
-     * flow minimal.
+     * rename (id, the old/new name, and the update timestamp) to keep the write flow minimal.
      *
      * @param id        the renamed room's id
-     * @param oldCode   the previous code (before the rename)
-     * @param newCode   the new code (after the rename)
-     * @param name      the recomputed canonical room name (e.g. "F.02LAB")
+     * @param oldName   the previous name (before the rename)
+     * @param newName   the new name (after the rename)
      * @param updatedAt the moment the rename was applied
      */
-    public record Result(UUID id, String oldCode, String newCode, String name, Instant updatedAt) {
+    public record Result(UUID id, String oldName, String newName, Instant updatedAt) {
     }
 }

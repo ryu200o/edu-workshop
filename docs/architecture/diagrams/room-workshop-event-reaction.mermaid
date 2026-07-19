@@ -1,5 +1,6 @@
 graph TD
-    A[Module Room] -->|RoomRenamed <br>CODE_CHANGED / LOCATION_CHANGED| B[Workshop Module]
+    A[Module Room] -->|RoomRenamedEvent <br>name changed| B[Workshop Module]
+    A -->|RoomRelocatedEvent <br>location changed| B
     A -->|RoomDeactivated| B
     A -->|RoomCapacityChanged <br>EVENT MỚI| B
 
@@ -14,14 +15,18 @@ graph TD
     %% Tiêu điểm xử lý tại nhánh PUBLISHED
     E --> E1{Loại Event là gì?}
 
-    E1 -->|RoomRenamed / LocationChanged| E_Loc[Reschedule + Insert Event + Notify]
-    E_Loc --> J1[workshops UPDATE vị trí/tên]
-    E_Loc --> K1[workshop_events INSERT]
-    E_Loc --> L1[Thông báo đổi địa điểm qua registrations]
+    E1 -->|RoomRenamedEvent| E_Name[Update tên room]
+    E_Name --> J1[workshops UPDATE tên]
+    E_Name --> K1[Thông báo đổi tên qua registrations]
+
+    E1 -->|RoomRelocatedEvent| E_Loc[Reschedule + Insert Event + Notify]
+    E_Loc --> J2[workshops UPDATE vị trí]
+    E_Loc --> K2[workshop_events INSERT]
+    E_Loc --> L2[Thông báo đổi địa điểm qua registrations]
 
     E1 -->|RoomDeactivated| E_Deact[Chuyển trạng thái sang <br>ROOM_DEACTIVATED_PENDING + Báo Admin]
 
     E1 -->|RoomCapacityChanged| E_Cap[Capacity Delta Check]
     E_Cap --> E_Cap_Check{Học viên hiện tại > Capacity mới?}
-    E_Cap_Check -->|Thỏa mãn / Nhỏ hơn| E_Cap_OK[Cập nhật max_capacity ngầm <br> Không làm gì thêm]
+    E_Cap_Check -->|Thỏa mãn / Nhỏ hơn| E_Cap_OK[Cập nhật max_capacity ngầm <br>Không làm gì thêm]
     E_Cap_Check -->|VƯỢT QUÁ| E_Cap_Crisis[Kích hoạt luồng khủng hoảng <br>Chuyển sang OVER_CAPACITY_PENDING + Báo Admin]

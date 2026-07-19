@@ -15,7 +15,9 @@ interface RoomJpaRepository extends JpaRepository<RoomJpaEntity, UUID> {
      * Global-uniqueness gate on the hard business coordinates (building + floor + code) — independent
      * of any RAM string-composition of the room name.
      */
-    boolean existsByBuildingAndFloorAndCode(String building, int floor, String code);
+    boolean existsByBuildingAndFloorAndCode(String building, int floor, int code);
+
+    boolean existsByBuildingAndFloorAndName(String building, int floor, String name);
 
     Optional<RoomJpaEntity> findByName(String name);
 }

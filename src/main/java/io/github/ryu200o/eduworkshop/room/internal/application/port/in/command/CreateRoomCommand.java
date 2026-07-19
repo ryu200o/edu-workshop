@@ -10,14 +10,16 @@ import java.util.UUID;
  *
  * @param building the building/block name (will be normalized by {@code RoomLocation})
  * @param floor    the floor number (positive; validated by {@code RoomLocation})
+ * @param code     the independent integer room code used for FE ordering (validated by {@code Room})
+ * @param name     the free-form display name (non-blank; validated by {@code RoomName})
  * @param capacity the physical capacity (positive; validated by {@code Room})
- * @param roomCode the 1–10 character alphanumeric room code (validated by {@code RoomName})
  */
 public record CreateRoomCommand(
         String building,
         int floor,
-        int capacity,
-        String roomCode
+        int code,
+        String name,
+        int capacity
 ) implements Command<CreateRoomCommand.Result> {
 
     /**

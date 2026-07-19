@@ -3,8 +3,8 @@ package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomainEvent;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenameReason;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
@@ -32,17 +32,19 @@ public class Room {
     private RoomName name;
     private int capacity;
     private RoomLocation location;
+    private int code;
     private RoomState state;
     private final Instant createdAt;
     private Instant updatedAt;
 
     private final List<RoomDomainEvent> recordedEvents = new ArrayList<>();
 
-    private Room(RoomId id, RoomName name, int capacity, RoomLocation location, RoomState state, Instant createdAt, Instant updatedAt) {
+    private Room(RoomId id, RoomName name, int capacity, RoomLocation location, int code, RoomState state, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.capacity = capacity;
         this.location = location;
+        this.code = code;
         this.state = state;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -50,27 +52,28 @@ public class Room {
 
     /**
      * Factory: creates a new room with the default physical state {@link RoomState#ACTIVE}
-     * and emits a {@link RoomCreated} event. The room name is generated from its location and a
-     * flexible alphanumeric code, then validated by the {@link RoomName} value object (self-defense).
+     * and emits a {@link RoomCreated} event. The {@code name} is a free-form display string (self-defense
+     * only: non-blank, normalized by {@link RoomName}); the {@code code} is an independent integer used
+     * for FE ordering and is decoupled from {@code name}/{@code location}.
      */
-    public static Room create(RoomName name, RoomLocation location, int capacity) {
+    public static Room create(RoomName name, RoomLocation location, int code, int capacity) {
         Instant now = Instant.now();
-        return create(RoomId.generate(), name, location, capacity, now, now);
+        return create(RoomId.generate(), name, location, code, capacity, now, now);
     }
 
     /**
      * Factory with explicit identity/timestamps — used when minting a new room from externally
      * supplied identifiers. Emits a {@link RoomCreated} event.
      */
-    public static Room create(RoomId id, RoomName name, RoomLocation location, int capacity, Instant createdAt, Instant updatedAt) {
+    public static Room create(RoomId id, RoomName name, RoomLocation location, int code, int capacity, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
-        requireNameConsistentWithLocation(name, location);
+        requireValidCode(code);
         requirePositiveCapacity(capacity);
         requireNonNullLocation(location);
 
-        Room room = new Room(id, name, capacity, location, RoomState.ACTIVE, createdAt, updatedAt);
+        Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
         room.recordedEvents.add(new RoomCreated(
-                room.id.value(), room.name, room.capacity, room.location, room.state, room.createdAt));
+                room.id.value(), room.name, room.capacity, room.location, room.code, room.state, room.createdAt));
         return room;
     }
 
@@ -78,14 +81,14 @@ public class Room {
      * Reconstructs an existing aggregate from persisted state. Pure data mapping only:
      * it must NOT impose creation rules nor record any event (no historical event re-dispatch).
      */
-    public static Room reconstruct(RoomId id, RoomName name, RoomLocation location, int capacity,
+    public static Room reconstruct(RoomId id, RoomName name, RoomLocation location, int code, int capacity,
                                              RoomState state, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
         requireNonNullLocation(location);
         requirePositiveCapacity(capacity);
         requireNonNullState(state);
 
-        return new Room(id, name, capacity, location, state, createdAt, updatedAt);
+        return new Room(id, name, capacity, location, code, state, createdAt, updatedAt);
     }
 
     /**
@@ -140,39 +143,63 @@ public class Room {
     }
 
     /**
-     * Renames the room by changing only its {@code code}; the building and floor are preserved. The
-     * name is recomputed from the (unchanged) location and the new code — preserving the one-way
-     * derivation (coordinates {@literal ->} name). Emits a {@link RoomRenamedEvent}.
+     * Changes the room's {@code code} — an independent integer used only for FE ordering / floor-map
+     * rendering. This is a silent mutation: it emits NO domain event (the {@code code} has no business
+     * meaning for downstream modules).
      *
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
-     * @throws RoomDomainException       if the new code is malformed (validated by {@link RoomName})
+     * @throws RoomDomainException       if the new code is not positive
      */
-    public void changeCode(String newCode) {
+    public void changeCode(int newCode) {
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room's code cannot be changed; the deactivation is permanent.");
         }
-        RoomName candidate = RoomName.of(location, newCode);
+        requireValidCode(newCode);
 
-        // Idempotent no-op: same code means no coordinate change, no event, no persist.
-        if (candidate.code().equals(this.name.code())) {
+        // Idempotent no-op: same code means no change, no event, no persist.
+        if (newCode == this.code) {
+            return;
+        }
+
+        this.code = newCode;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Renames the room by changing its free-form {@code name} directly. The building, floor and code are
+     * preserved (the name is fully decoupled from coordinates). Emits a {@link RoomRenamedEvent} so
+     * consumer modules (e.g. Workshop) can react.
+     *
+     * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
+     * persistence layer.</p>
+     *
+     * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
+     * @throws RoomDomainException       if the new name is blank (validated by {@link RoomName})
+     */
+    public void changeName(String newName) {
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(id, state, null,
+                    "A deactivated room's name cannot be changed; the deactivation is permanent.");
+        }
+        RoomName candidate = RoomName.of(newName);
+
+        // Idempotent no-op: same name means no change, no event, no persist.
+        if (candidate.equals(this.name)) {
             return;
         }
 
         RoomName previousName = this.name;
-        String previousCode = this.name.code();
         this.name = candidate;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRenamedEvent(
-                id.value(), RoomRenameReason.CODE_CHANGED, previousName, previousCode,
-                candidate, candidate.code(), location, this.updatedAt));
+                id.value(), previousName, candidate, this.updatedAt));
     }
 
     /**
-     * Relocates the room by changing its physical {@code location} (building and/or floor); the
-     * {@code code} is preserved. The name is recomputed from the new location and the (unchanged) code
-     * — preserving the one-way derivation (coordinates {@literal ->} name). Emits a
-     * {@link RoomRenamedEvent} with {@link RoomRenameReason#LOCATION_CHANGED}.
+     * Relocates the room by changing its physical {@code location} (building and/or floor). The {@code name}
+     * and {@code code} are preserved (they are decoupled from coordinates). Emits a {@link RoomRelocatedEvent}
+     * carrying only the old/new location — the name is not part of a relocation.
      *
      * <p>The {@code updatedAt} timestamp is controlled entirely by this aggregate (in RAM), never by the
      * persistence layer, so the write path owns the full state transition before it is persisted.</p>
@@ -189,15 +216,11 @@ public class Room {
         if (newLocation.equals(this.location)) {
             return;
         }
-        RoomName previousName = this.name;
         RoomLocation previousLocation = this.location;
-        RoomName newName = RoomName.of(newLocation, this.name.code());
         this.location = newLocation;
-        this.name = newName;
         this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomRenamedEvent(
-                id.value(), RoomRenameReason.LOCATION_CHANGED, previousName, previousName.code(),
-                newName, newName.code(), newLocation, this.updatedAt));
+        this.recordedEvents.add(new RoomRelocatedEvent(
+                id.value(), previousLocation, newLocation, this.updatedAt));
     }
 
     /**
@@ -242,17 +265,15 @@ public class Room {
         }
     }
 
-    private static void requireNameConsistentWithLocation(RoomName name, RoomLocation location) {
-        if (location != null && !name.matches(location)) {
-            throw new RoomDomainException(
-                    "Room name '" + name.asString() + "' is inconsistent with its location "
-                            + location.asString() + ".");
-        }
-    }
-
     private static void requirePositiveCapacity(int capacity) {
         if (capacity <= 0) {
             throw new RoomDomainException("Room capacity must be greater than zero.");
+        }
+    }
+
+    private static void requireValidCode(int code) {
+        if (code <= 0) {
+            throw new RoomDomainException("Room code must be greater than zero.");
         }
     }
 
@@ -272,6 +293,10 @@ public class Room {
 
     public int capacity() {
         return capacity;
+    }
+
+    public int code() {
+        return code;
     }
 
     public RoomLocation location() {

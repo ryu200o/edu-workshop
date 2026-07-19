@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCodeCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.DeactivateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.PlaceRoomUnderMaintenanceCommand;
@@ -36,15 +37,22 @@ class RoomCommandController {
 
     @PostMapping
     ResponseEntity<CreateRoomCommand.Result> create(@RequestBody CreateRoomRequest request) {
-        var command = new CreateRoomCommand(request.building(), request.floor(), request.capacity(), request.roomCode());
+        var command = new CreateRoomCommand(request.building(), request.floor(), request.code(), request.name(), request.capacity());
         CreateRoomCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
     @PutMapping("/{id}/rename")
     ResponseEntity<RenameRoomCommand.Result> rename(@PathVariable UUID id, @RequestBody RenameRoomRequest request) {
-        var command = new RenameRoomCommand(id, request.newCode());
+        var command = new RenameRoomCommand(id, request.newName());
         RenameRoomCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PutMapping("/{id}/code")
+    ResponseEntity<ChangeRoomCodeCommand.Result> changeCode(@PathVariable UUID id, @RequestBody ChangeRoomCodeRequest request) {
+        var command = new ChangeRoomCodeCommand(id, request.newCode());
+        ChangeRoomCodeCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
@@ -83,10 +91,13 @@ class RoomCommandController {
         return ResponseEntity.ok(result);
     }
 
-    record CreateRoomRequest(String building, int floor, int capacity, String roomCode) {
+    record CreateRoomRequest(String building, int floor, int code, String name, int capacity) {
     }
 
-    record RenameRoomRequest(String newCode) {
+    record RenameRoomRequest(String newName) {
+    }
+
+    record ChangeRoomCodeRequest(int newCode) {
     }
 
     record RelocateRoomRequest(String newBuilding, int newFloor) {

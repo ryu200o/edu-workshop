@@ -23,15 +23,13 @@ public record RelocateRoomCommand(
 
     /**
      * Lightweight write-side result for this command — carries only the fields directly affected by the
-     * relocation (id, old/new location, the recomputed name, and the update timestamp) to keep the
-     * write flow minimal.
+     * relocation (id, old/new location, and the update timestamp) to keep the write flow minimal.
      *
      * @param id          the relocated room's id
      * @param oldLocation the previous location
      * @param newLocation the new location
-     * @param name        the recomputed canonical room name (e.g. "G.03LAB")
      * @param updatedAt   the moment the relocation was applied
      */
-    public record Result(UUID id, RoomLocation oldLocation, RoomLocation newLocation, String name, Instant updatedAt) {
+    public record Result(UUID id, RoomLocation oldLocation, RoomLocation newLocation, Instant updatedAt) {
     }
 }

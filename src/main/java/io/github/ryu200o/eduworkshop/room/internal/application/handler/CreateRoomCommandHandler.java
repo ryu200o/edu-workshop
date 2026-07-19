@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.C
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
@@ -30,15 +31,24 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
     public CreateRoomCommand.Result handle(CreateRoomCommand command) {
         // Step 1 — RAM guard (Local invariants): value objects self-validate & normalize, no IO.
         RoomLocation location = RoomLocation.of(command.building(), command.floor());
-        RoomName name = RoomName.of(location, command.roomCode());
+        RoomName name = RoomName.of(command.name());
 
-        // Step 2 — DB guard (Global invariant): single coordinate existence check.
-        if (roomRepository.existsByCoordinate(location.building(), location.floor(), name.code())) {
+        if (command.code() <= 0) {
+            throw new RoomDomainException("Room code must be greater than zero.");
+        }
+
+        // Step 2 — DB guard (Global invariant): the (location, code) and (location, name) pairs must both be
+        //         free of *other* rooms. The two checks mirror uk_rooms_building_floor_code and
+        //         uk_rooms_building_floor_name; the DB constraints remain the authoritative race-proof gate.
+        if (roomRepository.existsByCoordinate(location, command.code())) {
+            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, command.code(), name, location);
+        }
+        if (roomRepository.existsByName(location, name)) {
             throw new DuplicateRoomException(name, location);
         }
 
         // Step 3 — Build the aggregate via the domain, then persist.
-        Room room = Room.create(name, location, command.capacity());
+        Room room = Room.create(name, location, command.code(), command.capacity());
         Room saved = roomRepository.save(room);
         return new CreateRoomCommand.Result(saved.id().value(), saved.name().asString());
     }

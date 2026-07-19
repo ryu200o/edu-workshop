@@ -29,8 +29,15 @@ class JpaRoomWriteAdapter implements RoomRepository {
     }
 
     @Override
-    public boolean existsByCoordinate(String building, int floor, String code) {
-        return repository.existsByBuildingAndFloorAndCode(building, floor, code);
+    public boolean existsByCoordinate(RoomLocation location, int code) {
+        // Adapter concern: decompose the domain location into the scalar columns the JPA entity persists.
+        return repository.existsByBuildingAndFloorAndCode(location.building(), location.floor(), code);
+    }
+
+    @Override
+    public boolean existsByName(RoomLocation location, RoomName name) {
+        // Adapter concern: decompose the domain location into the scalar columns the JPA entity persists.
+        return repository.existsByBuildingAndFloorAndName(location.building(), location.floor(), name.asString());
     }
 
     @Override
@@ -43,13 +50,21 @@ class JpaRoomWriteAdapter implements RoomRepository {
         try {
             repository.saveAndFlush(toEntity(room));
         } catch (DataIntegrityViolationException ex) {
-            // Race-proof gate (rào lần 2): the DB unique constraint (uk_rooms_building_floor_code) is the
-            // authoritative guard against concurrent duplicate coordinates. The application handler's
-            // existsByCoordinate is only fail-fast UX (rào lần 1). Translate the constraint violation into
-            // domain vocabulary so the caller sees a clean business exception.
-            throw new DuplicateRoomException(room.name(), room.location());
+            // Race-proof gate (rào lần 2): the DB unique constraints are the authoritative guard against
+            // concurrent duplicate coordinates/names. The application handler's exists* checks are only
+            // fail-fast UX (rào lần 1). Translate the constraint violation into domain vocabulary with an
+            // accurate reason so the caller sees a clean, non-misleading business exception.
+            throw toDuplicateRoomException(ex, room);
         }
         return room;
+    }
+
+    private static DuplicateRoomException toDuplicateRoomException(DataIntegrityViolationException ex, Room room) {
+        DuplicateRoomException.Reason reason = ex.getMessage() != null
+                && ex.getMessage().toUpperCase().contains("UK_ROOMS_BUILDING_FLOOR_NAME")
+                ? DuplicateRoomException.Reason.NAME
+                : DuplicateRoomException.Reason.CODE;
+        return new DuplicateRoomException(reason, room.code(), room.name(), room.location());
     }
 
     private static RoomJpaEntity toEntity(Room room) {
@@ -58,7 +73,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
                 room.name().asString(),
                 room.location().building(),
                 room.location().floor(),
-                room.name().code(),
+                room.code(),
                 room.capacity(),
                 room.state().name(),
                 room.createdAt(),
@@ -68,9 +83,9 @@ class JpaRoomWriteAdapter implements RoomRepository {
 
     private static Room toRoom(RoomJpaEntity entity) {
         RoomLocation location = RoomLocation.reconstruct(entity.getBuilding(), entity.getFloor());
-        RoomName name = RoomName.of(location, entity.getCode());
+        RoomName name = RoomName.of(entity.getName());
         RoomState state = RoomState.valueOf(entity.getState());
-        return Room.reconstruct(RoomId.of(entity.getId()), name, location, entity.getCapacity(), state,
-                entity.getCreatedAt(), entity.getUpdatedAt());
+        return Room.reconstruct(RoomId.of(entity.getId()), name, location, entity.getCode(),
+                entity.getCapacity(), state, entity.getCreatedAt(), entity.getUpdatedAt());
     }
 }

@@ -40,7 +40,7 @@ class ChangeRoomCapacityCommandHandlerTest {
 
     private static Room existingRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        return Room.create(RoomName.of(location, "01"), location, 50);
+        return Room.create(RoomName.of("F-201"), location, 1, 50);
     }
 
     // ── Step 1: load failure ──
@@ -75,8 +75,8 @@ class ChangeRoomCapacityCommandHandlerTest {
     void sameCapacity_isIdempotent_noSave_returnsExistingUpdatedAt() {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
         Room room = Room.reconstruct(
-                RoomId.of(UUID.randomUUID()), RoomName.of(RoomLocation.of("F", 2), "01"),
-                RoomLocation.of("F", 2), 50, RoomState.ACTIVE,
+                RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
+                RoomLocation.of("F", 2), 1, 50, RoomState.ACTIVE,
                 Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 

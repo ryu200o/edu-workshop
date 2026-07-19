@@ -40,8 +40,8 @@ class ReactivateRoomCommandHandlerTest {
 
     private static Room existingRoom(RoomState state) {
         RoomLocation location = RoomLocation.of("F", 2);
-        return Room.reconstruct(RoomId.of(UUID.randomUUID()), RoomName.of(location, "01"),
-                location, 50, state, Instant.parse("2026-01-01T00:00:00Z"),
+        return Room.reconstruct(RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
+                location, 1, 50, state, Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-03-15T00:00:00Z"));
     }
 

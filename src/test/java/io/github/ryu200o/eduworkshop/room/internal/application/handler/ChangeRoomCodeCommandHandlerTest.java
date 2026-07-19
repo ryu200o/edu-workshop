@@ -1,13 +1,12 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCodeCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import org.junit.jupiter.api.Test;
@@ -22,18 +21,19 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class RenameRoomCommandHandlerTest {
+class ChangeRoomCodeCommandHandlerTest {
 
     @Mock
     private RoomRepository roomRepository;
 
-    private RenameRoomCommandHandler handler() {
-        return new RenameRoomCommandHandler(roomRepository);
+    private ChangeRoomCodeCommandHandler handler() {
+        return new ChangeRoomCodeCommandHandler(roomRepository);
     }
 
     private static Room existingRoom() {
@@ -47,86 +47,90 @@ class RenameRoomCommandHandlerTest {
         RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(id.value(), "F-202")))
+        assertThatThrownBy(() -> handler().handle(new ChangeRoomCodeCommand(id.value(), 2)))
                 .isInstanceOf(RoomNotFoundException.class);
 
         verify(roomRepository).loadById(any());
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 2: RAM guard (local invariant) blocks blank name (load happens first, no save/gate) ──
+    // ── Step 2: RAM guard (local invariant) blocks non-positive code (load happens first, no save/gate) ──
     @Test
-    void ramGuard_rejectsBlankName_withoutTouchingPorts() {
+    void ramGuard_rejectsNonPositiveCode_withoutTouchingPorts() {
         RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.of(existingRoom()));
 
-        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(id.value(), "")))
+        assertThatThrownBy(() -> handler().handle(new ChangeRoomCodeCommand(id.value(), 0)))
                 .isInstanceOf(RoomDomainException.class);
 
         verify(roomRepository).loadById(any());
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Idempotency: same name ⇒ no gate, no save, returns current projection ──
+    // ── Step 3: DB guard (global invariant) blocks duplicates, never persists ──
     @Test
-    void sameName_isIdempotent_noSave() {
+    void dbGuard_rejectsDuplicate_andDoesNotSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
 
-        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "F-201"));
-
-        assertThat(response.oldName()).isEqualTo("F-201");
-        assertThat(response.newName()).isEqualTo("F-201");
-        verify(roomRepository, never()).save(any());
-    }
-
-    // ── Step 4b: DB guard (name) blocks duplicate name at the same location, never persists ──
-    @Test
-    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
-        Room room = existingRoom();
-        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByName(any(), any())).thenReturn(true);
-
-        assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101")))
+        assertThatThrownBy(() -> handler().handle(new ChangeRoomCodeCommand(room.id().value(), 2)))
                 .isInstanceOf(DuplicateRoomException.class);
 
-        verify(roomRepository).existsByName(any(), any());
+        verify(roomRepository).existsByCoordinate(any(), anyInt());
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 4: Happy path — passes guards, mutates, persists, returns projection ──
+    // ── Idempotency: same code ⇒ no gate, no save ──
     @Test
-    void happyPath_mutatesPersistsAndReturnsResponse() {
+    void sameCode_isIdempotent_noGateNoSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+
+        ChangeRoomCodeCommand.Result response = handler().handle(new ChangeRoomCodeCommand(room.id().value(), 1));
+
+        assertThat(response.oldCode()).isEqualTo(1);
+        assertThat(response.newCode()).isEqualTo(1);
+        verify(roomRepository, never()).existsByCoordinate(any(), anyInt());
+        verify(roomRepository, never()).save(any());
+    }
+
+    // ── Happy path — silent change, persists, no RoomRenamedEvent ──
+    @Test
+    void happyPath_changesCodeSilently_persists_andReturnsResponse() {
+        Room room = existingRoom();
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
+        ChangeRoomCodeCommand.Result response = handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
         Room saved = captor.getValue();
 
-        assertThat(saved.name()).isEqualTo(RoomName.of("LAB-101"));
-        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRenamedEvent);
+        assertThat(saved.code()).isEqualTo(99);
+        assertThat(saved.recordedEvents())
+                .filteredOn(io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent.class::isInstance)
+                .isEmpty(); // silent — no rename event
         assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.oldName()).isEqualTo("F-201");
-        assertThat(response.newName()).isEqualTo("LAB-101");
+        assertThat(response.oldCode()).isEqualTo(1);
+        assertThat(response.newCode()).isEqualTo(99);
     }
 
     @Test
     void guardsRunInOrder_loadThenGateThenSave() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
+        handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
 
         var ordered = org.mockito.Mockito.inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(roomRepository).existsByName(any(), any());
+        ordered.verify(roomRepository).existsByCoordinate(any(), anyInt());
         ordered.verify(roomRepository).save(any());
     }
 }
