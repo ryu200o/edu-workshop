@@ -8,10 +8,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 /**
- * Dedicated infrastructure component translating persistence-level exceptions into the ubiquitous
- * language of the Room domain. All JPA / Hibernate / H2-specific exception parsing lives here so the
- * write adapter stays focused on persistence orchestration. Constraint names, Hibernate APIs and H2
- * workarounds are implementation details and never leak out of this class.
+ * Dedicated infrastructure translator converting persistence-specific failures into the ubiquitous
+ * language of the Room domain. It reasons in terms of <em>business conflicts</em> (a duplicate room
+ * name, a duplicate room code) rather than database metadata. All JPA / Hibernate / H2 detection
+ * mechanics are encapsulated behind business-oriented helpers and never surface as constraint names.
  */
 @Component
 class JpaRoomPersistenceExceptionTranslator {
@@ -20,13 +20,11 @@ class JpaRoomPersistenceExceptionTranslator {
     private static final String CONSTRAINT_BUILDING_FLOOR_CODE = "uk_rooms_building_floor_code";
 
     RoomDomainException translate(DataIntegrityViolationException ex, Room room) {
-        String constraint = extractConstraint(ex);
-
-        if (CONSTRAINT_BUILDING_FLOOR_NAME.equalsIgnoreCase(constraint)) {
+        if (representsDuplicateRoomName(ex)) {
             return new DuplicateRoomNameException(room.location(), room.name());
         }
 
-        if (CONSTRAINT_BUILDING_FLOOR_CODE.equalsIgnoreCase(constraint)) {
+        if (representsDuplicateRoomCode(ex)) {
             return new DuplicateRoomCodeException(room.location(), room.code());
         }
 
@@ -39,9 +37,21 @@ class JpaRoomPersistenceExceptionTranslator {
         );
     }
 
-    private static String extractConstraint(DataIntegrityViolationException ex) {
+    // ====================== BUSINESS-CONFLICT DETECTION ======================
+
+    private static boolean representsDuplicateRoomName(DataIntegrityViolationException ex) {
+        return violatesConstraint(ex, CONSTRAINT_BUILDING_FLOOR_NAME);
+    }
+
+    private static boolean representsDuplicateRoomCode(DataIntegrityViolationException ex) {
+        return violatesConstraint(ex, CONSTRAINT_BUILDING_FLOOR_CODE);
+    }
+
+    // ====================== TECHNICAL DETECTION MECHANISM ======================
+
+    private static boolean violatesConstraint(DataIntegrityViolationException ex, String constraintName) {
         if (ex == null) {
-            return null;
+            return false;
         }
 
         Throwable rootCause = ex.getMostSpecificCause();
@@ -49,22 +59,13 @@ class JpaRoomPersistenceExceptionTranslator {
         // Preferred: the constraint name reported by the ORM (reliable on real DBs via Hibernate).
         if (rootCause instanceof org.hibernate.exception.ConstraintViolationException cve
                 && cve.getConstraintName() != null) {
-            return cve.getConstraintName();
+            return constraintName.equalsIgnoreCase(cve.getConstraintName());
         }
 
         // Fallback: some drivers (e.g. H2) omit the constraint name, but the violation message still
         // contains it (e.g. "PUBLIC.UK_ROOMS_BUILDING_FLOOR_CODE ..."). Match it so the gate stays
         // accurate across providers.
         String message = rootCause.getMessage();
-        if (message != null) {
-            if (message.toUpperCase().contains(CONSTRAINT_BUILDING_FLOOR_NAME.toUpperCase())) {
-                return CONSTRAINT_BUILDING_FLOOR_NAME;
-            }
-            if (message.toUpperCase().contains(CONSTRAINT_BUILDING_FLOOR_CODE.toUpperCase())) {
-                return CONSTRAINT_BUILDING_FLOOR_CODE;
-            }
-        }
-
-        return null;
+        return message != null && message.toUpperCase().contains(constraintName.toUpperCase());
     }
 }
