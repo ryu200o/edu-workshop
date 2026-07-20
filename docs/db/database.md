@@ -92,7 +92,7 @@ Manages the lifecycle of workshops — from draft through scheduling, publishing
 *   `idx_workshop_room_id`: Index on `room_id` for room utilization queries.
 *   `idx_workshop_state`: Index on `state` for lifecycle filtering.
 *   `idx_workshop_start_time`: Index on `start_time` for time-range queries.
-*   `idx_workshop_room_time`: **partial** index on `(room_id, start_time, end_time) WHERE room_id IS NOT NULL AND state != 'CANCELLED'` — serves the overlap scan during schedule/publish/reschedule without scanning cancelled or unscheduled rows.
+*   `idx_workshop_room_time`: composite index on `(room_id, start_time, end_time)` — serves the overlap scan during schedule/publish/reschedule. A **partial** index (`WHERE room_id IS NOT NULL AND state != 'CANCELLED'`) is preferred on PostgreSQL, but the DDL uses a plain index for portability (H2 test DB does not support filtered indexes); the same query predicate still benefits from the leading columns.
 
 **Architectural Notes (Module Boundary & Decoupling — ADR 0001)**:
 *   `room_id` is a **logical UUID only** — no physical foreign key to the `rooms` table (respects Spring Modulith boundaries). Room physical info is reached via `RoomExposeAPI`, never by JOIN.
