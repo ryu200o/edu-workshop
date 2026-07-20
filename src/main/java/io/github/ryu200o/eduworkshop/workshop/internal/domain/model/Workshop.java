@@ -109,6 +109,9 @@ public class Workshop {
         if (!end.isAfter(start)) {
             throw new WorkshopDomainException("Workshop end time must be after the start time.");
         }
+        if(capacity == null) {
+            throw new WorkshopDomainException("Workshop capacity must be set before scheduling.");
+        }
 
         this.roomReference = room;
         this.startTime = start;
