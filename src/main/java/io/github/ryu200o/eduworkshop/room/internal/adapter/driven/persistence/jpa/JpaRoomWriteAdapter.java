@@ -6,9 +6,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
@@ -17,19 +14,20 @@ import java.util.Optional;
 /**
  * JPA-backed driven adapter implementing the Room write port ({@link RoomRepository}). Handles aggregate
  * mutation, load and the global-uniqueness gate on the hard business coordinates. Domain &harr; entity
- * mapping is performed entirely here, keeping the domain framework-free. Package-private; hidden inside
- * the module's {@code internal} boundary.
+ * mapping is performed entirely here, keeping the domain framework-free. Persistence exception translation
+ * is delegated to {@link JpaRoomPersistenceExceptionTranslator}. Package-private; hidden inside the
+ * module's {@code internal} boundary.
  */
 @Component
 class JpaRoomWriteAdapter implements RoomRepository {
 
-    private static final String CONSTRAINT_BUILDING_FLOOR_NAME = "uk_rooms_building_floor_name";
-    private static final String CONSTRAINT_BUILDING_FLOOR_CODE = "uk_rooms_building_floor_code";
-
     private final RoomJpaRepository repository;
+    private final JpaRoomPersistenceExceptionTranslator exceptionTranslator;
 
-    JpaRoomWriteAdapter(RoomJpaRepository repository) {
+    JpaRoomWriteAdapter(RoomJpaRepository repository,
+            JpaRoomPersistenceExceptionTranslator exceptionTranslator) {
         this.repository = repository;
+        this.exceptionTranslator = exceptionTranslator;
     }
 
     @Override
@@ -44,62 +42,11 @@ class JpaRoomWriteAdapter implements RoomRepository {
         } catch (DataIntegrityViolationException ex) {
             // Race-proof gate (rào lần 2): the DB unique constraints are the authoritative guard against
             // concurrent duplicate coordinates/names. The aggregate's policy check is only fail-fast UX
-            // (rào lần 1). Translate the constraint violation into domain vocabulary with an accurate type so
-            // the caller sees a clean, non-misleading business exception.
-            throw toDuplicateRoomException(ex, room);
+            // (rào lần 1). The violation is translated into domain vocabulary with an accurate type so the
+            // caller sees a clean, non-misleading business exception.
+            throw exceptionTranslator.translate(ex, room);
         }
         return room;
-    }
-
-    // ====================== EXCEPTION TRANSLATION ======================
-
-    private static RoomDomainException toDuplicateRoomException(DataIntegrityViolationException ex, Room room) {
-        String constraint = extractConstraint(ex);
-
-        if (CONSTRAINT_BUILDING_FLOOR_NAME.equalsIgnoreCase(constraint)) {
-            return new DuplicateRoomNameException(room.location(), room.name());
-        }
-
-        if (CONSTRAINT_BUILDING_FLOOR_CODE.equalsIgnoreCase(constraint)) {
-            return new DuplicateRoomCodeException(room.location(), room.code());
-        }
-
-        return new RoomDomainException(
-                String.format("Cannot save room at location '%s'. " +
-                                "A conflict was detected with an existing room (code or name). " +
-                                "Please check the information and try again.",
-                        room.location()),
-                ex
-        );
-    }
-
-    private static String extractConstraint(DataIntegrityViolationException ex) {
-        if (ex == null) {
-            return null;
-        }
-
-        Throwable rootCause = ex.getMostSpecificCause();
-
-        // Preferred: the constraint name reported by the ORM (reliable on real DBs via Hibernate).
-        if (rootCause instanceof org.hibernate.exception.ConstraintViolationException cve
-                && cve.getConstraintName() != null) {
-            return cve.getConstraintName();
-        }
-
-        // Fallback: some drivers (e.g. H2) omit the constraint name, but the violation message still
-        // contains it (e.g. "PUBLIC.UK_ROOMS_BUILDING_FLOOR_CODE ..."). Match it so the gate stays
-        // accurate across providers.
-        String message = rootCause.getMessage();
-        if (message != null) {
-            if (message.toUpperCase().contains(CONSTRAINT_BUILDING_FLOOR_NAME.toUpperCase())) {
-                return CONSTRAINT_BUILDING_FLOOR_NAME;
-            }
-            if (message.toUpperCase().contains(CONSTRAINT_BUILDING_FLOOR_CODE.toUpperCase())) {
-                return CONSTRAINT_BUILDING_FLOOR_CODE;
-            }
-        }
-
-        return null;
     }
 
     // ====================== MAPPER ======================
