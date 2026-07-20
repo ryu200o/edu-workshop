@@ -79,6 +79,10 @@ Consult these before designing or coding. They are the source of truth:
   Workshop decouples from Room via logical `room_id` UUID + selective `room_name_snapshot` /
   `room_location_snapshot` columns (no physical FK / cross-module JOIN); proactive sync via `RoomExposeAPI`,
   reactive sync deferred until Room events are published.
+- `docs/architecture/adr/0008-room-allocation-policy-planning-vs-reservation.md` — **Proposed**: Room
+  allocation is *planning* at `SCHEDULED` (no exclusive reservation; overlapping schedules allowed) and
+  *reservation* only at `PUBLISHED` (publish-time conflict check in Application layer). Room Availability
+  has 3 states (AVAILABLE / AVAILABLE_WITH_PLANNING_CONFLICT / OCCUPIED); aggregate stays pure.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).
