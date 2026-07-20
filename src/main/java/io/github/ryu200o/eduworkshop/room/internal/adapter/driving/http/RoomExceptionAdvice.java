@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -22,9 +23,15 @@ class RoomExceptionAdvice {
         return ex.getMessage();
     }
 
-    @ExceptionHandler(DuplicateRoomException.class)
+    @ExceptionHandler(DuplicateRoomCodeException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
-    String handleDuplicate(DuplicateRoomException ex) {
+    String handleDuplicateCode(DuplicateRoomCodeException ex) {
+        return ex.getMessage();
+    }
+
+    @ExceptionHandler(DuplicateRoomNameException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    String handleDuplicateName(DuplicateRoomNameException ex) {
         return ex.getMessage();
     }
 

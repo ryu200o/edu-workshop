@@ -3,10 +3,10 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -28,11 +28,18 @@ class CreateRoomCommandHandlerTest {
     @Mock
     private RoomRepository roomRepository;
 
+    @Mock
+    private RoomUniquenessPolicy uniquenessPolicy;
+
     private CreateRoomCommandHandler handler() {
-        return new CreateRoomCommandHandler(roomRepository);
+        return new CreateRoomCommandHandler(roomRepository, uniquenessPolicy);
     }
 
-    // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any DB call ──
+    // The handler is THIN: it builds VOs, delegates to the aggregate (which owns the invariant via the
+    // policy), and persists. Uniqueness is asserted inside RoomTest — the handler only passes the policy
+    // through. Here we verify the handler's own job: local VO guards and the load→build→save flow.
+
+    // ── Step 1: RAM guard (Local invariant) blocks malformed input BEFORE any IO ──
     @Test
     void ramGuard_rejectsBlankName_withoutTouchingPorts() {
         CreateRoomCommand badName = new CreateRoomCommand("F", 2, 1, "", 50);
@@ -40,7 +47,7 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badName))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomRepository);
+        verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
 
     @Test
@@ -50,7 +57,7 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badCode))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomRepository);
+        verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
 
     @Test
@@ -60,42 +67,17 @@ class CreateRoomCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(badFloor))
                 .isInstanceOf(RoomDomainException.class);
 
-        verifyNoInteractions(roomRepository);
+        verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
 
-    // ── Step 2: DB guard (Global invariant) blocks duplicates, never persists ──
+    // ── Happy path: builds VOs, delegates to aggregate (which enforces uniqueness internally),
+    //    then persists and returns the id. We stub the policy to "unique" since the invariant is the
+    //    aggregate's concern, not the handler's. ──
     @Test
-    void dbGuard_rejectsDuplicate_andDoesNotSave() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(true);
-
-        assertThatThrownBy(() -> handler().handle(command))
-                .isInstanceOf(DuplicateRoomException.class);
-
-        verify(roomRepository).existsByCoordinate(any(), anyInt());
-        verify(roomRepository, never()).save(any());
-    }
-
-    // ── Step 2b: DB guard (name) blocks duplicate name, never persists ──
-    @Test
-    void dbGuard_rejectsDuplicateName_andDoesNotSave() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(true);
-
-        assertThatThrownBy(() -> handler().handle(command))
-                .isInstanceOf(DuplicateRoomException.class);
-
-        verify(roomRepository).existsByName(any(), any());
-        verify(roomRepository, never()).save(any());
-    }
-
-    // ── Step 3: Happy path — passes both guards, persists, returns id ──
-    @Test
-    void happyPath_passesGuards_persists_andReturnsId() {
+    void happyPath_buildsVosDelegatesAndPersists() {
         CreateRoomCommand command = new CreateRoomCommand("f", 2, 1, "F-201", 50); // lowercase building
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CreateRoomCommand.Result result = handler().handle(command);
@@ -104,8 +86,8 @@ class CreateRoomCommandHandlerTest {
         verify(roomRepository).save(captor.capture());
         Room persisted = captor.getValue();
 
+        // Aggregate normalized the building (uppercase) and free-form name.
         assertThat(result.id()).isEqualTo(persisted.id().value());
-        assertThat(result.name()).isEqualTo(persisted.name().asString());
         assertThat(persisted.name()).isEqualTo(RoomName.of("F-201"));
         assertThat(persisted.location()).isEqualTo(RoomLocation.of("F", 2));
         assertThat(persisted.code()).isEqualTo(1);
@@ -113,17 +95,31 @@ class CreateRoomCommandHandlerTest {
     }
 
     @Test
-    void guardsRunInOrder_existenceCheckedBeforeSave() {
+    void happyPath_passesPolicyIntoAggregate_andSavesAfter() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(roomRepository.existsByCoordinate(any(), anyInt())).thenReturn(false);
-        when(roomRepository.existsByName(any(), any())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(command);
 
-        var inOrder = org.mockito.Mockito.inOrder(roomRepository);
-        inOrder.verify(roomRepository).existsByCoordinate(any(), anyInt());
-        inOrder.verify(roomRepository).existsByName(any(), any());
+        var inOrder = org.mockito.Mockito.inOrder(uniquenessPolicy, roomRepository);
+        // The handler asks the policy (delegated to the aggregate) BEFORE persisting.
+        inOrder.verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
+        inOrder.verify(uniquenessPolicy).isNameUnique(any(), any());
         inOrder.verify(roomRepository).save(any());
+    }
+
+    // The duplicate-rejection path is owned by the aggregate (RoomTest). The handler must NOT bypass it:
+    // if the policy reports a duplicate, the aggregate throws before save, so nothing is persisted.
+    @Test
+    void duplicateCode_doesNotPersist_becauseAggregateRejectsFirst() {
+        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
+
+        assertThatThrownBy(() -> handler().handle(command))
+                .isInstanceOf(io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException.class);
+
+        verify(roomRepository, never()).save(any());
     }
 }

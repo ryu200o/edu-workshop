@@ -6,38 +6,28 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * JPA-backed driven adapter implementing the Room write port ({@link RoomRepository}). Handles aggregate
  * mutation, load and the global-uniqueness gate on the hard business coordinates. Domain &harr; entity
- * mapping is performed entirely here, keeping the domain framework-free. Package-private; hidden inside
- * the module's {@code internal} boundary.
+ * mapping is performed entirely here, keeping the domain framework-free. Persistence exception translation
+ * is delegated to {@link JpaRoomPersistenceExceptionTranslator}. Package-private; hidden inside the
+ * module's {@code internal} boundary.
  */
 @Component
 class JpaRoomWriteAdapter implements RoomRepository {
 
     private final RoomJpaRepository repository;
+    private final JpaRoomPersistenceExceptionTranslator exceptionTranslator;
 
-    JpaRoomWriteAdapter(RoomJpaRepository repository) {
+    JpaRoomWriteAdapter(RoomJpaRepository repository,
+            JpaRoomPersistenceExceptionTranslator exceptionTranslator) {
         this.repository = repository;
-    }
-
-    @Override
-    public boolean existsByCoordinate(RoomLocation location, int code) {
-        // Adapter concern: decompose the domain location into the scalar columns the JPA entity persists.
-        return repository.existsByBuildingAndFloorAndCode(location.building(), location.floor(), code);
-    }
-
-    @Override
-    public boolean existsByName(RoomLocation location, RoomName name) {
-        // Adapter concern: decompose the domain location into the scalar columns the JPA entity persists.
-        return repository.existsByBuildingAndFloorAndName(location.building(), location.floor(), name.asString());
+        this.exceptionTranslator = exceptionTranslator;
     }
 
     @Override
@@ -51,21 +41,15 @@ class JpaRoomWriteAdapter implements RoomRepository {
             repository.saveAndFlush(toEntity(room));
         } catch (DataIntegrityViolationException ex) {
             // Race-proof gate (rào lần 2): the DB unique constraints are the authoritative guard against
-            // concurrent duplicate coordinates/names. The application handler's exists* checks are only
-            // fail-fast UX (rào lần 1). Translate the constraint violation into domain vocabulary with an
-            // accurate reason so the caller sees a clean, non-misleading business exception.
-            throw toDuplicateRoomException(ex, room);
+            // concurrent duplicate coordinates/names. The aggregate's policy check is only fail-fast UX
+            // (rào lần 1). The violation is translated into domain vocabulary with an accurate type so the
+            // caller sees a clean, non-misleading business exception.
+            throw exceptionTranslator.translate(ex, room);
         }
         return room;
     }
 
-    private static DuplicateRoomException toDuplicateRoomException(DataIntegrityViolationException ex, Room room) {
-        DuplicateRoomException.Reason reason = ex.getMessage() != null
-                && ex.getMessage().toUpperCase().contains("UK_ROOMS_BUILDING_FLOOR_NAME")
-                ? DuplicateRoomException.Reason.NAME
-                : DuplicateRoomException.Reason.CODE;
-        return new DuplicateRoomException(reason, room.code(), room.name(), room.location());
-    }
+    // ====================== MAPPER ======================
 
     private static RoomJpaEntity toEntity(Room room) {
         return new RoomJpaEntity(

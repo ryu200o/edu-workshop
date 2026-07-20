@@ -54,6 +54,7 @@ DIRS=(
   "internal/domain/service"            # domain service (nếu cần)
   "internal/domain/model/event"        # domain events (sealed RoomDomainEvent)
   "internal/domain/model/exception"    # domain exceptions
+  "internal/domain/model/policy"       # domain-owned policy interfaces (e.g. RoomUniquenessPolicy)
   # Aggregate Root, Value Objects, Factory, Policy, state enum live directly at
   # internal/domain/model/ (flat) — only event/ and exception/ are sub-packages.
   "internal/application/port/in/command"
