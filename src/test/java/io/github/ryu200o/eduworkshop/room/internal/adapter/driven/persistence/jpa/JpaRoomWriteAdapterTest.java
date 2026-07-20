@@ -5,7 +5,8 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -125,7 +126,7 @@ class JpaRoomWriteAdapterTest {
     }
 
     @Test
-    void save_duplicateCoordinate_raceProofGate_throwsDuplicateRoomException() {
+    void save_duplicateCoordinate_raceProofGate_throwsDuplicateRoomCodeException() {
         RoomLocation location = RoomLocation.of("F", 2);
 
         // First room owns the (building, floor, code) coordinate.
@@ -137,12 +138,12 @@ class JpaRoomWriteAdapterTest {
         Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-202"), location, 1, 50, Instant.now(), Instant.now(), ALWAYS_UNIQUE);
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
-                .isInstanceOf(DuplicateRoomException.class)
+                .isInstanceOf(DuplicateRoomCodeException.class)
                 .hasMessageContaining("code 1");
     }
 
     @Test
-    void save_duplicateNameInSameLocation_raceProofGate_throwsDuplicateRoomException() {
+    void save_duplicateNameInSameLocation_raceProofGate_throwsDuplicateRoomNameException() {
         RoomLocation location = RoomLocation.of("F", 2);
 
         // First room owns the (building, floor, name) coordinate.
@@ -152,7 +153,7 @@ class JpaRoomWriteAdapterTest {
         Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-201"), location, 2, 50, Instant.now(), Instant.now(), ALWAYS_UNIQUE);
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
-                .isInstanceOf(DuplicateRoomException.class)
+                .isInstanceOf(DuplicateRoomNameException.class)
                 .hasMessageContaining("named 'F-201'");
     }
 }

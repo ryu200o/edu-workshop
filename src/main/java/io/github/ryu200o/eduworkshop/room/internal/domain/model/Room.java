@@ -6,7 +6,8 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomain
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
@@ -83,10 +84,10 @@ public class Room {
         // Global invariant (set-based): enforced via the domain-owned policy. Idempotency is irrelevant
         // here (brand-new aggregate) — a self-collision cannot occur, so we check unconditionally.
         if (!policy.isCodeUnique(location, code)) {
-            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, code, name, location);
+            throw new DuplicateRoomCodeException(location, code);
         }
         if (!policy.isNameUnique(location, name)) {
-            throw new DuplicateRoomException(name, location);
+            throw new DuplicateRoomNameException(location, name);
         }
 
         Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
@@ -167,7 +168,7 @@ public class Room {
      *
      * @throws IllegalRoomStateException   if the room is {@link RoomState#DEACTIVATED}
      * @throws RoomDomainException         if the new code is not positive
-     * @throws DuplicateRoomException      if another room already owns the target coordinate
+     * @throws DuplicateRoomCodeException   if another room already owns the target coordinate
      */
     public void changeCode(int newCode, RoomUniquenessPolicy policy) {
         if (state == RoomState.DEACTIVATED) {
@@ -182,7 +183,7 @@ public class Room {
         }
 
         if (!policy.isCodeUnique(location, newCode)) {
-            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, newCode, name, location);
+            throw new DuplicateRoomCodeException(location, newCode);
         }
 
         this.code = newCode;
@@ -196,7 +197,7 @@ public class Room {
      * false-positive self-collision.
      *
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
-     * @throws DuplicateRoomException    if another room already owns the target name at this location
+     * @throws DuplicateRoomNameException  if another room already owns the target name at this location
      */
     public void changeName(String newName, RoomUniquenessPolicy policy) {
         if (state == RoomState.DEACTIVATED) {
@@ -211,7 +212,7 @@ public class Room {
         }
 
         if (!policy.isNameUnique(location, candidate)) {
-            throw new DuplicateRoomException(candidate, location);
+            throw new DuplicateRoomNameException(location, candidate);
         }
 
         RoomName previousName = this.name;
@@ -229,7 +230,8 @@ public class Room {
      * idempotency skip runs before any policy check to avoid a false-positive self-collision.
      *
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
-     * @throws DuplicateRoomException    if another room already owns the target coordinate or name
+     * @throws DuplicateRoomCodeException   if another room already owns the target coordinate
+     * @throws DuplicateRoomNameException  if another room already owns the target name
      */
     public void relocateTo(RoomLocation newLocation, RoomUniquenessPolicy policy) {
         if (state == RoomState.DEACTIVATED) {
@@ -241,10 +243,10 @@ public class Room {
             return;
         }
         if (!policy.isCodeUnique(newLocation, code)) {
-            throw new DuplicateRoomException(DuplicateRoomException.Reason.CODE, code, name, newLocation);
+            throw new DuplicateRoomCodeException(newLocation, code);
         }
         if (!policy.isNameUnique(newLocation, name)) {
-            throw new DuplicateRoomException(name, newLocation);
+            throw new DuplicateRoomNameException(newLocation, name);
         }
         RoomLocation previousLocation = this.location;
         this.location = newLocation;

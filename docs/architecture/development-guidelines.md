@@ -14,7 +14,7 @@
 │   ├── domain/
 │   │   ├── model/             # Aggregate Root, Value Objects, state enum — TẤT CẢ ở root (flat)
 │   │   │   ├── event/         # RoomCreated, RoomRenamedEvent, ... (sealed RoomDomainEvent)
-│   │   │   └── exception/     # DuplicateRoomException, RoomDomainException, IllegalRoomStateException, ...
+│   │   │   └── exception/     # DuplicateRoomCodeException, DuplicateRoomNameException, RoomDomainException, IllegalRoomStateException, ...
 │   │   └── service/           # domain service (nếu cần)
 │   ├── application/
 │   │   ├── port/
@@ -157,7 +157,7 @@ public interface RoomUniquenessPolicy {
 }
 ```
 The aggregate receives the policy as an argument on every uniqueness-sensitive op and throws
-`DuplicateRoomException` (with the correct `Reason`) itself:
+`DuplicateRoomCodeException` / `DuplicateRoomNameException` itself:
 ```java
 // Room.create / changeCode / changeName / relocateTo each take (..., RoomUniquenessPolicy policy)
 Room room = Room.create(name, location, code, capacity, uniquenessPolicy);   // checks both, then builds
@@ -206,7 +206,8 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
 
 **DB unique constraint = authoritative race-proof gate.** `uk_rooms_building_floor_code` +
 `uk_rooms_building_floor_name` remain the final integrity authority. `JpaRoomWriteAdapter.save()` still
-translates `DataIntegrityViolationException` → `DuplicateRoomException` (matched by constraint name, correct
+translates `DataIntegrityViolationException` → `DuplicateRoomCodeException` / `DuplicateRoomNameException`
+(matched by constraint name, correct
 `Reason`), so the TOCTOU race is still caught. Policy read and DB constraint are **complementary**, not
 substitutive. Reconstitution (`Room.reconstruct`) bypasses any uniqueness check.
 
@@ -352,8 +353,10 @@ class RoomQueryController {
 class RoomExceptionAdvice {
     @ExceptionHandler(RoomNotFoundException.class)   // 404
     public ResponseEntity<ErrorResponse> notFound(RoomNotFoundException e) {...}
-    @ExceptionHandler(DuplicateRoomException.class)   // 409
-    public ResponseEntity<ErrorResponse> duplicate(DuplicateRoomException e) {...}
+    @ExceptionHandler(DuplicateRoomCodeException.class)   // 409
+    public ResponseEntity<ErrorResponse> duplicateCode(DuplicateRoomCodeException e) {...}
+    @ExceptionHandler(DuplicateRoomNameException.class)   // 409
+    public ResponseEntity<ErrorResponse> duplicateName(DuplicateRoomNameException e) {...}
     @ExceptionHandler(RoomDomainException.class)     // 400
     public ResponseEntity<ErrorResponse> badRequest(RoomDomainException e) {...}
 }
@@ -393,5 +396,5 @@ class RoomExceptionAdvice {
 - [ ] `internal/` không bị outside import (chạy build/ArchitectureTest xanh).
 - [ ] Unique index `(building, floor, code)` (code INT) + `uk_rooms_building_floor_name` làm DB gate.
 - [ ] Global uniqueness nằm trong **Domain** (`RoomUniquenessPolicy` + aggregate tự throw
-  `DuplicateRoomException`); `RoomRepository` KHÔNG có `exists*`; handler "gầy" (chỉ truyền policy vào aggregate).
+  `DuplicateRoomCodeException` / `DuplicateRoomNameException`); `RoomRepository` KHÔNG có `exists*`; handler "gầy" (chỉ truyền policy vào aggregate).
 - [ ] `./mvnw test` xanh toàn bộ, không regression.

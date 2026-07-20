@@ -6,7 +6,9 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
@@ -47,12 +49,12 @@ class JpaRoomWriteAdapter implements RoomRepository {
         return room;
     }
 
-    private static DuplicateRoomException toDuplicateRoomException(DataIntegrityViolationException ex, Room room) {
-        DuplicateRoomException.Reason reason = ex.getMessage() != null
-                && ex.getMessage().toUpperCase().contains("UK_ROOMS_BUILDING_FLOOR_NAME")
-                ? DuplicateRoomException.Reason.NAME
-                : DuplicateRoomException.Reason.CODE;
-        return new DuplicateRoomException(reason, room.code(), room.name(), room.location());
+    private static RoomDomainException toDuplicateRoomException(DataIntegrityViolationException ex, Room room) {
+        boolean nameViolation = ex.getMessage() != null
+                && ex.getMessage().toUpperCase().contains("UK_ROOMS_BUILDING_FLOOR_NAME");
+        return nameViolation
+                ? new DuplicateRoomNameException(room.location(), room.name())
+                : new DuplicateRoomCodeException(room.location(), room.code());
     }
 
     private static RoomJpaEntity toEntity(Room room) {

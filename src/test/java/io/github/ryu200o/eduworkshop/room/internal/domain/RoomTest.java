@@ -7,7 +7,8 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapaci
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
@@ -182,38 +183,30 @@ class RoomTest {
     // ── Global invariant enforcement (the point of ADR 0005): the aggregate owns the decision ──
 
     @Test
-    void create_rejectsDuplicateCode_withCorrectReason() {
+    void create_rejectsDuplicateCode_withCorrectExceptionType() {
         var policy = FakeUniquenessPolicy.unique().occupiedCode(LOCATION, CODE);
 
-        DuplicateRoomException ex = catchThrowableOfType(
-                () -> Room.create(name(), LOCATION, CODE, CAPACITY, policy), DuplicateRoomException.class);
-
-        assertThat(ex).isNotNull();
-        assertThat(ex.getReason()).isEqualTo(DuplicateRoomException.Reason.CODE);
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, CAPACITY, policy))
+                .isInstanceOf(DuplicateRoomCodeException.class);
     }
 
     @Test
-    void create_rejectsDuplicateName_withCorrectReason() {
+    void create_rejectsDuplicateName_withCorrectExceptionType() {
         var policy = FakeUniquenessPolicy.unique().occupiedName(LOCATION, name());
 
-        DuplicateRoomException ex = catchThrowableOfType(
-                () -> Room.create(name(), LOCATION, CODE, CAPACITY, policy), DuplicateRoomException.class);
-
-        assertThat(ex).isNotNull();
-        assertThat(ex.getReason()).isEqualTo(DuplicateRoomException.Reason.NAME);
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, CAPACITY, policy))
+                .isInstanceOf(DuplicateRoomNameException.class);
     }
 
     @Test
     void create_checksBothInvariants_andRejectsOnCodeBeforeName() {
-        // Both occupied: the code gate must fire first with the CODE reason.
+        // Both occupied: the code gate must fire first with DuplicateRoomCodeException.
         var policy = FakeUniquenessPolicy.unique()
                 .occupiedCode(LOCATION, CODE)
                 .occupiedName(LOCATION, name());
 
-        DuplicateRoomException ex = catchThrowableOfType(
-                () -> Room.create(name(), LOCATION, CODE, CAPACITY, policy), DuplicateRoomException.class);
-
-        assertThat(ex.getReason()).isEqualTo(DuplicateRoomException.Reason.CODE);
+        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, CAPACITY, policy))
+                .isInstanceOf(DuplicateRoomCodeException.class);
         assertThat(policy.codeChecks()).isEqualTo(1);
         assertThat(policy.nameChecks()).isEqualTo(0); // short-circuits after code fails
     }
@@ -224,10 +217,8 @@ class RoomTest {
         // Another room already owns the SAME location with code 99 (changeCode keeps the location).
         var policy = FakeUniquenessPolicy.unique().occupiedCode(LOCATION, 99);
 
-        DuplicateRoomException ex = catchThrowableOfType(
-                () -> room.changeCode(99, policy), DuplicateRoomException.class);
-
-        assertThat(ex.getReason()).isEqualTo(DuplicateRoomException.Reason.CODE);
+        assertThatThrownBy(() -> room.changeCode(99, policy))
+                .isInstanceOf(DuplicateRoomCodeException.class);
         assertThat(room.code()).isEqualTo(CODE); // unchanged
         assertThat(room.recordedEvents()).noneMatch(e -> e instanceof RoomRenamedEvent);
     }
@@ -264,14 +255,12 @@ class RoomTest {
     }
 
     @Test
-    void changeName_rejectsDuplicateName_withCorrectReason() {
+    void changeName_rejectsDuplicateName_withCorrectExceptionType() {
         Room room = newRoom();
         var policy = FakeUniquenessPolicy.unique().occupiedName(LOCATION, RoomName.of("LAB-101"));
 
-        DuplicateRoomException ex = catchThrowableOfType(
-                () -> room.changeName("LAB-101", policy), DuplicateRoomException.class);
-
-        assertThat(ex.getReason()).isEqualTo(DuplicateRoomException.Reason.NAME);
+        assertThatThrownBy(() -> room.changeName("LAB-101", policy))
+                .isInstanceOf(DuplicateRoomNameException.class);
         assertThat(room.name()).isEqualTo(name()); // unchanged
     }
 
@@ -304,10 +293,8 @@ class RoomTest {
         RoomLocation target = RoomLocation.of("G", 3);
         var policy = FakeUniquenessPolicy.unique().occupiedCode(target, CODE); // another room owns (G,3,code=1)
 
-        DuplicateRoomException ex = catchThrowableOfType(
-                () -> room.relocateTo(target, policy), DuplicateRoomException.class);
-
-        assertThat(ex.getReason()).isEqualTo(DuplicateRoomException.Reason.CODE);
+        assertThatThrownBy(() -> room.relocateTo(target, policy))
+                .isInstanceOf(DuplicateRoomCodeException.class);
         assertThat(room.location()).isEqualTo(LOCATION); // unchanged
     }
 
@@ -317,10 +304,8 @@ class RoomTest {
         RoomLocation target = RoomLocation.of("G", 3);
         var policy = FakeUniquenessPolicy.unique().occupiedName(target, name()); // another room named F.0201 @ G,3
 
-        DuplicateRoomException ex = catchThrowableOfType(
-                () -> room.relocateTo(target, policy), DuplicateRoomException.class);
-
-        assertThat(ex.getReason()).isEqualTo(DuplicateRoomException.Reason.NAME);
+        assertThatThrownBy(() -> room.relocateTo(target, policy))
+                .isInstanceOf(DuplicateRoomNameException.class);
         assertThat(room.location()).isEqualTo(LOCATION); // unchanged
     }
 

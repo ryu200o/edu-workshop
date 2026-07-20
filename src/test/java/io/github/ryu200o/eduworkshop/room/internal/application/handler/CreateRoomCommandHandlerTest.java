@@ -118,7 +118,7 @@ class CreateRoomCommandHandlerTest {
         when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(command))
-                .isInstanceOf(io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomException.class);
+                .isInstanceOf(io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException.class);
 
         verify(roomRepository, never()).save(any());
     }

@@ -21,7 +21,8 @@ This invariant had leaked as a repeated naked guard in the application handlers:
 - `RelocateRoomCommandHandler`: `if (roomRepository.existsByCoordinate(...))` then `if (roomRepository.existsByName(...))`
 - `ChangeRoomCodeCommandHandler`: `if (roomRepository.existsByCoordinate(...))`
 
-Business knowledge lived in orchestration, quadruplicated; and `DuplicateRoomException` is already Domain
+Business knowledge lived in orchestration, quadruplicated; and `DuplicateRoomCodeException` /
+`DuplicateRoomNameException` are already Domain
 vocabulary (`domain.model.exception`) yet was thrown from the Application — semantically incoherent. The
 uniqueness check was also expressed as `exists*` methods on the **outbound repository port**
 (`RoomRepository`), mixing a global-invariant concern with persistence.
@@ -66,7 +67,8 @@ on a domain interface and knows nothing about the database.
 The policy is passed **into the aggregate** as an argument on every uniqueness-sensitive operation:
 
 - `Room.create(name, location, code, capacity, RoomUniquenessPolicy policy)` — checks both `isCodeUnique`
-  and `isNameUnique` before constructing; throws `DuplicateRoomException` (with the correct `Reason`) on
+  and `isNameUnique` before constructing; throws `DuplicateRoomCodeException` (code clash) or
+  `DuplicateRoomNameException` (name clash) on
   violation.
 - `Room.changeCode(int newCode, RoomUniquenessPolicy policy)` — checks `isCodeUnique` after the idempotency
   skip.
@@ -98,7 +100,8 @@ primitive persistence contract (`save`, `loadById`). Uniqueness IO moves exclusi
 ### 5. DB unique constraint = authoritative race-proof gate
 `uk_rooms_building_floor_code` and `uk_rooms_building_floor_name` remain the final integrity authority.
 The Policy's read is a fast-fail / UX optimization; `JpaRoomWriteAdapter.save()` still translates
-`DataIntegrityViolationException` → `DuplicateRoomException` (with the violated-constraint `Reason`), so
+`DataIntegrityViolationException` → `DuplicateRoomCodeException` / `DuplicateRoomNameException` (matched by
+the violated constraint name), so
 the TOCTOU race is still caught. The two mechanisms are **complementary, not substitutive**.
 
 ### 6. Dependency purity vs runtime IO (explicit)
