@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepo
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +28,7 @@ class PlaceRoomUnderMaintenanceCommandHandler implements CommandHandler<PlaceRoo
     @Transactional
     public PlaceRoomUnderMaintenanceCommand.Result handle(PlaceRoomUnderMaintenanceCommand command) {
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
-                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
+                .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         RoomState previous = room.state();
         room.placeUnderMaintenance();

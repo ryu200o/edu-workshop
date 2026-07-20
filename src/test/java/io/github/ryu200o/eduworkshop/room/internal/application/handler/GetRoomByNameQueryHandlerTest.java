@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.Get
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

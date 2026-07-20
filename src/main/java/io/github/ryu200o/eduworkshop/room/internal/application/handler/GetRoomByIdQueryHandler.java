@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.Get
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomDetailView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +26,6 @@ class GetRoomByIdQueryHandler implements QueryHandler<GetRoomByIdQuery, RoomDeta
     @Transactional(readOnly = true)
     public RoomDetailView handle(GetRoomByIdQuery query) {
         return roomReader.findById(RoomId.of(query.roomId()))
-                .orElseThrow(() -> new RoomNotFoundException("id=" + query.roomId()));
+                .orElseThrow(() -> new RoomNotFoundException("id", query.roomId()));
     }
 }

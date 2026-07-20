@@ -3,7 +3,7 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;

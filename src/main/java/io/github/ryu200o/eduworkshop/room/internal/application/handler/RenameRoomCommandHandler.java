@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.R
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
@@ -35,7 +35,7 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
     public RenameRoomCommand.Result handle(RenameRoomCommand command) {
         // Step 1 — Load the aggregate (write side).
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
-                .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
+                .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         // Step 2 — RAM guard (local invariant): the VO validates/normalizes the new name.
         RoomName candidate = RoomName.of(command.newName());

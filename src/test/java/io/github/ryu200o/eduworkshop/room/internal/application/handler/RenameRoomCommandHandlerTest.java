@@ -7,7 +7,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
