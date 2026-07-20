@@ -80,8 +80,23 @@ class JpaRoomWriteAdapter implements RoomRepository {
 
         Throwable rootCause = ex.getMostSpecificCause();
 
-        if (rootCause instanceof org.hibernate.exception.ConstraintViolationException cve) {
+        // Preferred: the constraint name reported by the ORM (reliable on real DBs via Hibernate).
+        if (rootCause instanceof org.hibernate.exception.ConstraintViolationException cve
+                && cve.getConstraintName() != null) {
             return cve.getConstraintName();
+        }
+
+        // Fallback: some drivers (e.g. H2) omit the constraint name, but the violation message still
+        // contains it (e.g. "PUBLIC.UK_ROOMS_BUILDING_FLOOR_CODE ..."). Match it so the gate stays
+        // accurate across providers.
+        String message = rootCause.getMessage();
+        if (message != null) {
+            if (message.toUpperCase().contains(CONSTRAINT_BUILDING_FLOOR_NAME.toUpperCase())) {
+                return CONSTRAINT_BUILDING_FLOOR_NAME;
+            }
+            if (message.toUpperCase().contains(CONSTRAINT_BUILDING_FLOOR_CODE.toUpperCase())) {
+                return CONSTRAINT_BUILDING_FLOOR_CODE;
+            }
         }
 
         return null;
