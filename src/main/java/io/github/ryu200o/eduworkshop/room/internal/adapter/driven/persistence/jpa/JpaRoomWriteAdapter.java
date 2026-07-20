@@ -13,7 +13,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * JPA-backed driven adapter implementing the Room write port ({@link RoomRepository}). Handles aggregate
@@ -23,6 +22,9 @@ import java.util.UUID;
  */
 @Component
 class JpaRoomWriteAdapter implements RoomRepository {
+
+    private static final String CONSTRAINT_BUILDING_FLOOR_NAME = "uk_rooms_building_floor_name";
+    private static final String CONSTRAINT_BUILDING_FLOOR_CODE = "uk_rooms_building_floor_code";
 
     private final RoomJpaRepository repository;
 
@@ -41,21 +43,51 @@ class JpaRoomWriteAdapter implements RoomRepository {
             repository.saveAndFlush(toEntity(room));
         } catch (DataIntegrityViolationException ex) {
             // Race-proof gate (rào lần 2): the DB unique constraints are the authoritative guard against
-            // concurrent duplicate coordinates/names. The application handler's exists* checks are only
-            // fail-fast UX (rào lần 1). Translate the constraint violation into domain vocabulary with an
-            // accurate reason so the caller sees a clean, non-misleading business exception.
+            // concurrent duplicate coordinates/names. The aggregate's policy check is only fail-fast UX
+            // (rào lần 1). Translate the constraint violation into domain vocabulary with an accurate type so
+            // the caller sees a clean, non-misleading business exception.
             throw toDuplicateRoomException(ex, room);
         }
         return room;
     }
 
+    // ====================== EXCEPTION TRANSLATION ======================
+
     private static RoomDomainException toDuplicateRoomException(DataIntegrityViolationException ex, Room room) {
-        boolean nameViolation = ex.getMessage() != null
-                && ex.getMessage().toUpperCase().contains("UK_ROOMS_BUILDING_FLOOR_NAME");
-        return nameViolation
-                ? new DuplicateRoomNameException(room.location(), room.name())
-                : new DuplicateRoomCodeException(room.location(), room.code());
+        String constraint = extractConstraint(ex);
+
+        if (CONSTRAINT_BUILDING_FLOOR_NAME.equalsIgnoreCase(constraint)) {
+            return new DuplicateRoomNameException(room.location(), room.name());
+        }
+
+        if (CONSTRAINT_BUILDING_FLOOR_CODE.equalsIgnoreCase(constraint)) {
+            return new DuplicateRoomCodeException(room.location(), room.code());
+        }
+
+        return new RoomDomainException(
+                String.format("Cannot save room at location '%s'. " +
+                                "A conflict was detected with an existing room (code or name). " +
+                                "Please check the information and try again.",
+                        room.location()),
+                ex
+        );
     }
+
+    private static String extractConstraint(DataIntegrityViolationException ex) {
+        if (ex == null) {
+            return null;
+        }
+
+        Throwable rootCause = ex.getMostSpecificCause();
+
+        if (rootCause instanceof org.hibernate.exception.ConstraintViolationException cve) {
+            return cve.getConstraintName();
+        }
+
+        return null;
+    }
+
+    // ====================== MAPPER ======================
 
     private static RoomJpaEntity toEntity(Room room) {
         return new RoomJpaEntity(
