@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.jpa;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
@@ -22,8 +23,8 @@ class JpaRoomUniquenessPolicy implements RoomUniquenessPolicy {
     }
 
     @Override
-    public boolean isCodeUnique(RoomLocation location, int code) {
-        return !repository.existsByBuildingAndFloorAndCode(location.building(), location.floor(), code);
+    public boolean isCodeUnique(RoomLocation location, RoomCode code) {
+        return !repository.existsByBuildingAndFloorAndCode(location.building(), location.floor(), code.value());
     }
 
     @Override

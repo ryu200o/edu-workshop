@@ -3,8 +3,8 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCodeCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
  * invariant is enforced inside the aggregate through the injected domain {@link RoomUniquenessPolicy};
  * the DB constraint plus the race-proof gate in the write adapter remain the authoritative authority.
  * Package-private: reachable only via the module {@code CommandBus}.
+ *
+ * <p>Per the VO-purity standard (ADR 0009) the handler only builds the {@link RoomCode} value object
+ * (which self-validates) and delegates to the aggregate; it performs no business-rule checks of its own.</p>
  */
 @Component
 class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeCommand, ChangeRoomCodeCommand.Result> {
@@ -36,26 +39,25 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
-        // Step 2 — Idempotency: same code ⇒ no change, no gate, no persist.
-        if (command.newCode() == room.code()) {
-            return toResult(room, room.code());
-        }
+        // Step 2 — Build the value object. The RoomCode VO self-validates (e.g. rejects non-positive);
+        //         there is no separate RAM guard here — the Application layer only constructs VOs.
+        RoomCode newCode = RoomCode.of(command.newCode());
 
-        // Step 3 — RAM guard (local invariant): positive code only.
-        if (command.newCode() <= 0) {
-            throw new RoomDomainException("Room code must be greater than zero.");
+        // Step 3 — Idempotency: same code ⇒ no change, no gate, no persist.
+        if (newCode.equals(room.code())) {
+            return toResult(room, room.code().value());
         }
 
         // Step 4 — Domain mutation (silent, no event). The aggregate enforces the (location, code) uniqueness
         //         invariant via the policy before mutating; then persist.
-        int oldCode = room.code();
-        room.changeCode(command.newCode(), uniquenessPolicy);
+        int oldCode = room.code().value();
+        room.changeCode(newCode, uniquenessPolicy);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldCode);
     }
 
     private static ChangeRoomCodeCommand.Result toResult(Room room, int oldCode) {
         return new ChangeRoomCodeCommand.Result(
-                room.id().value(), oldCode, room.code(), room.updatedAt());
+                room.id().value(), oldCode, room.code().value(), room.updatedAt());
     }
 }

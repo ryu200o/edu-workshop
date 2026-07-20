@@ -3,6 +3,8 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
@@ -17,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,7 +46,7 @@ class RenameRoomCommandHandlerTest {
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
     private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
         @Override
-        public boolean isCodeUnique(RoomLocation location, int code) {
+        public boolean isCodeUnique(RoomLocation location, RoomCode code) {
             return true;
         }
 
@@ -55,7 +58,9 @@ class RenameRoomCommandHandlerTest {
 
     private static Room existingRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        return Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE);
+        Instant now = Instant.now();
+        return Room.create(RoomId.generate(), RoomName.of("F-201"), location, RoomCode.of(1),
+                RoomCapacity.of(50), now, now, ALWAYS_UNIQUE);
     }
 
     // ── Step 1: load failure ──

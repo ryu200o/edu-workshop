@@ -2,6 +2,11 @@ package io.github.ryu200o.eduworkshop.room.internal.domain;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
@@ -12,9 +17,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.Duplic
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -45,7 +48,7 @@ class RoomTest {
             return new FakeUniquenessPolicy();
         }
 
-        FakeUniquenessPolicy occupiedCode(RoomLocation location, int code) {
+        FakeUniquenessPolicy occupiedCode(RoomLocation location, RoomCode code) {
             occupiedCodes.add(new CodeKey(location, code));
             return this;
         }
@@ -64,7 +67,7 @@ class RoomTest {
         }
 
         @Override
-        public boolean isCodeUnique(RoomLocation location, int code) {
+        public boolean isCodeUnique(RoomLocation location, RoomCode code) {
             codeChecks++;
             return !occupiedCodes.contains(new CodeKey(location, code));
         }
@@ -75,7 +78,7 @@ class RoomTest {
             return !occupiedNames.contains(new NameKey(location, name));
         }
 
-        private record CodeKey(RoomLocation location, int code) {}
+        private record CodeKey(RoomLocation location, RoomCode code) {}
         private record NameKey(RoomLocation location, RoomName name) {}
     }
 
@@ -90,17 +93,21 @@ class RoomTest {
 
     // Fixture: a room that is unique in the world (empty policy) — used by the behavior tests below.
     private static Room newRoom() {
-        return Room.create(name(), LOCATION, CODE, CAPACITY, FakeUniquenessPolicy.unique());
+        Instant now = Instant.now();
+        return Room.create(RoomId.generate(), name(), LOCATION, RoomCode.of(CODE), RoomCapacity.of(CAPACITY),
+                now, now, FakeUniquenessPolicy.unique());
     }
 
     @Test
     void create_yieldsActiveRoomAndEmitsRoomCreated() {
-        Room room = Room.create(name(), LOCATION, CODE, CAPACITY, FakeUniquenessPolicy.unique());
+        Instant now = Instant.now();
+        Room room = Room.create(RoomId.generate(), name(), LOCATION, RoomCode.of(CODE), RoomCapacity.of(CAPACITY),
+                now, now, FakeUniquenessPolicy.unique());
 
         assertThat(room.id()).isNotNull();
         assertThat(room.name()).isEqualTo(name());
-        assertThat(room.code()).isEqualTo(CODE);
-        assertThat(room.capacity()).isEqualTo(CAPACITY);
+        assertThat(room.code()).isEqualTo(RoomCode.of(CODE));
+        assertThat(room.capacity()).isEqualTo(RoomCapacity.of(CAPACITY));
         assertThat(room.location()).isEqualTo(LOCATION);
         assertThat(room.state()).isEqualTo(RoomState.ACTIVE);
         assertThat(room.createdAt()).isNotNull();
@@ -111,9 +118,10 @@ class RoomTest {
                 .isInstanceOf(RoomCreated.class)
                 .satisfies(e -> {
                     RoomCreated created = (RoomCreated) e;
-                    assertThat(created.roomId()).isEqualTo(room.id().value());
+                    assertThat(created.roomId()).isEqualTo(room.id());
                     assertThat(created.name()).isEqualTo(name());
-                    assertThat(created.code()).isEqualTo(CODE);
+                    assertThat(created.code()).isEqualTo(RoomCode.of(CODE));
+                    assertThat(created.capacity()).isEqualTo(RoomCapacity.of(CAPACITY));
                     assertThat(created.location()).isEqualTo(LOCATION);
                     assertThat(created.initialState()).isEqualTo(RoomState.ACTIVE);
                 });
@@ -125,7 +133,8 @@ class RoomTest {
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Instant updatedAt = Instant.parse("2026-01-01T00:00:00Z");
 
-        Room room = Room.create(roomId, name(), LOCATION, CODE, CAPACITY, createdAt, updatedAt, FakeUniquenessPolicy.unique());
+        Room room = Room.create(roomId, name(), LOCATION, RoomCode.of(CODE), RoomCapacity.of(CAPACITY),
+                createdAt, updatedAt, FakeUniquenessPolicy.unique());
 
         assertThat(room.id()).isEqualTo(roomId);
         assertThat(room.createdAt()).isEqualTo(createdAt);
@@ -140,7 +149,8 @@ class RoomTest {
         Instant createdAt = Instant.parse("2026-01-01T00:00:00Z");
         Instant updatedAt = Instant.parse("2026-06-01T00:00:00Z");
 
-        Room room = Room.reconstruct(roomId, name(), LOCATION, CODE, CAPACITY, RoomState.MAINTENANCE, createdAt, updatedAt);
+        Room room = Room.reconstruct(roomId, name(), LOCATION, RoomCode.of(CODE), RoomCapacity.of(CAPACITY),
+                RoomState.MAINTENANCE, createdAt, updatedAt);
 
         assertThat(room.id()).isEqualTo(roomId);
         assertThat(room.state()).isEqualTo(RoomState.MAINTENANCE);
@@ -154,47 +164,52 @@ class RoomTest {
         RoomId roomId = RoomId.of(UUID.randomUUID());
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
 
-        assertThatThrownBy(() -> Room.reconstruct(roomId, name(), LOCATION, CODE, CAPACITY, null, now, now))
+        assertThatThrownBy(() -> Room.reconstruct(roomId, name(), LOCATION, RoomCode.of(CODE),
+                RoomCapacity.of(CAPACITY), null, now, now))
                 .isInstanceOf(RoomDomainException.class);
     }
 
     @Test
     void create_rejectsNullName() {
-        assertThatThrownBy(() -> Room.create(null, LOCATION, CODE, CAPACITY, FakeUniquenessPolicy.unique()))
+        Instant now = Instant.now();
+        assertThatThrownBy(() -> Room.create(RoomId.generate(), null, LOCATION, RoomCode.of(CODE),
+                RoomCapacity.of(CAPACITY), now, now, FakeUniquenessPolicy.unique()))
                 .isInstanceOf(RoomDomainException.class);
     }
 
     @Test
     void create_rejectsNonPositiveCode() {
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, 0, CAPACITY, FakeUniquenessPolicy.unique()))
-                .isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, -5, CAPACITY, FakeUniquenessPolicy.unique()))
-                .isInstanceOf(RoomDomainException.class);
+        // The code invariant is owned by the RoomCode VO: building the VO rejects illegal values.
+        assertThatThrownBy(() -> RoomCode.of(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> RoomCode.of(-5)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void create_rejectsNonPositiveCapacity() {
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, 0, FakeUniquenessPolicy.unique()))
-                .isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, -5, FakeUniquenessPolicy.unique()))
-                .isInstanceOf(RoomDomainException.class);
+        // The capacity invariant is owned by the RoomCapacity VO: building the VO rejects illegal values.
+        assertThatThrownBy(() -> RoomCapacity.of(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> RoomCapacity.of(-5)).isInstanceOf(IllegalArgumentException.class);
     }
 
     // ── Global invariant enforcement (the point of ADR 0005): the aggregate owns the decision ──
 
     @Test
     void create_rejectsDuplicateCode_withCorrectExceptionType() {
-        var policy = FakeUniquenessPolicy.unique().occupiedCode(LOCATION, CODE);
+        var policy = FakeUniquenessPolicy.unique().occupiedCode(LOCATION, RoomCode.of(CODE));
+        Instant now = Instant.now();
 
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, CAPACITY, policy))
+        assertThatThrownBy(() -> Room.create(RoomId.generate(), name(), LOCATION, RoomCode.of(CODE),
+                RoomCapacity.of(CAPACITY), now, now, policy))
                 .isInstanceOf(DuplicateRoomCodeException.class);
     }
 
     @Test
     void create_rejectsDuplicateName_withCorrectExceptionType() {
         var policy = FakeUniquenessPolicy.unique().occupiedName(LOCATION, name());
+        Instant now = Instant.now();
 
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, CAPACITY, policy))
+        assertThatThrownBy(() -> Room.create(RoomId.generate(), name(), LOCATION, RoomCode.of(CODE),
+                RoomCapacity.of(CAPACITY), now, now, policy))
                 .isInstanceOf(DuplicateRoomNameException.class);
     }
 
@@ -202,10 +217,12 @@ class RoomTest {
     void create_checksBothInvariants_andRejectsOnCodeBeforeName() {
         // Both occupied: the code gate must fire first with DuplicateRoomCodeException.
         var policy = FakeUniquenessPolicy.unique()
-                .occupiedCode(LOCATION, CODE)
+                .occupiedCode(LOCATION, RoomCode.of(CODE))
                 .occupiedName(LOCATION, name());
+        Instant now = Instant.now();
 
-        assertThatThrownBy(() -> Room.create(name(), LOCATION, CODE, CAPACITY, policy))
+        assertThatThrownBy(() -> Room.create(RoomId.generate(), name(), LOCATION, RoomCode.of(CODE),
+                RoomCapacity.of(CAPACITY), now, now, policy))
                 .isInstanceOf(DuplicateRoomCodeException.class);
         assertThat(policy.codeChecks()).isEqualTo(1);
         assertThat(policy.nameChecks()).isEqualTo(0); // short-circuits after code fails
@@ -215,20 +232,19 @@ class RoomTest {
     void changeCode_rejectsDuplicateCode_andLeavesStateUnchanged() {
         Room room = newRoom();
         // Another room already owns the SAME location with code 99 (changeCode keeps the location).
-        var policy = FakeUniquenessPolicy.unique().occupiedCode(LOCATION, 99);
+        var policy = FakeUniquenessPolicy.unique().occupiedCode(LOCATION, RoomCode.of(99));
 
-        assertThatThrownBy(() -> room.changeCode(99, policy))
+        assertThatThrownBy(() -> room.changeCode(RoomCode.of(99), policy))
                 .isInstanceOf(DuplicateRoomCodeException.class);
-        assertThat(room.code()).isEqualTo(CODE); // unchanged
+        assertThat(room.code()).isEqualTo(RoomCode.of(CODE)); // unchanged
         assertThat(room.recordedEvents()).noneMatch(e -> e instanceof RoomRenamedEvent);
     }
 
     @Test
     void changeCode_rejectsNonPositiveCode() {
-        Room room = newRoom();
-
-        assertThatThrownBy(() -> room.changeCode(0, FakeUniquenessPolicy.unique())).isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> room.changeCode(-3, FakeUniquenessPolicy.unique())).isInstanceOf(RoomDomainException.class);
+        // The code invariant is owned by the RoomCode VO.
+        assertThatThrownBy(() -> RoomCode.of(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> RoomCode.of(-3)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -237,9 +253,9 @@ class RoomTest {
         int before = room.recordedEvents().size();
         var policy = FakeUniquenessPolicy.unique();
 
-        room.changeCode(CODE, policy);
+        room.changeCode(RoomCode.of(CODE), policy);
 
-        assertThat(room.code()).isEqualTo(CODE);
+        assertThat(room.code()).isEqualTo(RoomCode.of(CODE));
         assertThat(room.recordedEvents()).hasSize(before);
         assertThat(policy.codeChecks()).isZero(); // idempotency skip runs before the policy
     }
@@ -249,9 +265,9 @@ class RoomTest {
         Room room = newRoom();
         room.deactivate();
 
-        assertThatThrownBy(() -> room.changeCode(99, FakeUniquenessPolicy.unique()))
+        assertThatThrownBy(() -> room.changeCode(RoomCode.of(99), FakeUniquenessPolicy.unique()))
                 .isInstanceOf(IllegalRoomStateException.class);
-        assertThat(room.code()).isEqualTo(CODE);
+        assertThat(room.code()).isEqualTo(RoomCode.of(CODE));
     }
 
     @Test
@@ -291,7 +307,7 @@ class RoomTest {
     void relocateTo_rejectsDuplicateCodeAtTargetLocation() {
         Room room = newRoom();
         RoomLocation target = RoomLocation.of("G", 3);
-        var policy = FakeUniquenessPolicy.unique().occupiedCode(target, CODE); // another room owns (G,3,code=1)
+        var policy = FakeUniquenessPolicy.unique().occupiedCode(target, RoomCode.of(CODE)); // another room owns (G,3,code=1)
 
         assertThatThrownBy(() -> room.relocateTo(target, policy))
                 .isInstanceOf(DuplicateRoomCodeException.class);
@@ -339,7 +355,7 @@ class RoomTest {
                     RoomStateChanged changed = (RoomStateChanged) e;
                     assertThat(changed.previousState()).isEqualTo(RoomState.ACTIVE);
                     assertThat(changed.newState()).isEqualTo(RoomState.MAINTENANCE);
-                    assertThat(changed.roomId()).isEqualTo(room.id().value());
+                    assertThat(changed.roomId()).isEqualTo(room.id());
                 });
     }
 
@@ -459,9 +475,9 @@ class RoomTest {
     void changeCode_changesCodeSilently_noEvent() {
         Room room = newRoom();
 
-        room.changeCode(99, FakeUniquenessPolicy.unique());
+        room.changeCode(RoomCode.of(99), FakeUniquenessPolicy.unique());
 
-        assertThat(room.code()).isEqualTo(99);
+        assertThat(room.code()).isEqualTo(RoomCode.of(99));
         assertThat(room.name()).isEqualTo(name());
         assertThat(room.location()).isEqualTo(LOCATION);
         assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
@@ -478,7 +494,7 @@ class RoomTest {
 
         assertThat(room.name()).isEqualTo(RoomName.of("LAB-101"));
         assertThat(room.location()).isEqualTo(LOCATION);
-        assertThat(room.code()).isEqualTo(CODE);
+        assertThat(room.code()).isEqualTo(RoomCode.of(CODE));
         assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
         assertThat(room.recordedEvents())
                 .filteredOn(RoomRenamedEvent.class::isInstance)
@@ -486,7 +502,7 @@ class RoomTest {
                 .first()
                 .satisfies(e -> {
                     RoomRenamedEvent ev = (RoomRenamedEvent) e;
-                    assertThat(ev.roomId()).isEqualTo(room.id().value());
+                    assertThat(ev.roomId()).isEqualTo(room.id());
                     assertThat(ev.oldName()).isEqualTo(name());
                     assertThat(ev.newName()).isEqualTo(RoomName.of("LAB-101"));
                 });
@@ -511,7 +527,7 @@ class RoomTest {
 
         assertThat(room.location()).isEqualTo(newLocation);
         assertThat(room.name()).isEqualTo(name());
-        assertThat(room.code()).isEqualTo(CODE);
+        assertThat(room.code()).isEqualTo(RoomCode.of(CODE));
         assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
         assertThat(room.recordedEvents())
                 .filteredOn(RoomRelocatedEvent.class::isInstance)
@@ -519,7 +535,7 @@ class RoomTest {
                 .first()
                 .satisfies(e -> {
                     RoomRelocatedEvent ev = (RoomRelocatedEvent) e;
-                    assertThat(ev.roomId()).isEqualTo(room.id().value());
+                    assertThat(ev.roomId()).isEqualTo(room.id());
                     assertThat(ev.oldLocation()).isEqualTo(LOCATION);
                     assertThat(ev.newLocation()).isEqualTo(newLocation);
                 });
@@ -532,7 +548,7 @@ class RoomTest {
         room.relocateTo(RoomLocation.of("G", 3), FakeUniquenessPolicy.unique());
 
         assertThat(room.name()).isEqualTo(name());
-        assertThat(room.code()).isEqualTo(CODE);
+        assertThat(room.code()).isEqualTo(RoomCode.of(CODE));
     }
 
     @Test
@@ -557,9 +573,9 @@ class RoomTest {
     void changeCapacity_updatesCapacityAndEmitsRoomCapacityChanged() {
         Room room = newRoom();
 
-        room.changeCapacity(80);
+        room.changeCapacity(RoomCapacity.of(80));
 
-        assertThat(room.capacity()).isEqualTo(80);
+        assertThat(room.capacity()).isEqualTo(RoomCapacity.of(80));
         assertThat(room.updatedAt()).isAfterOrEqualTo(room.createdAt());
         assertThat(room.recordedEvents())
                 .filteredOn(RoomCapacityChanged.class::isInstance)
@@ -567,22 +583,18 @@ class RoomTest {
                 .first()
                 .satisfies(e -> {
                     RoomCapacityChanged ev = (RoomCapacityChanged) e;
-                    assertThat(ev.roomId()).isEqualTo(room.id().value());
-                    assertThat(ev.oldCapacity()).isEqualTo(CAPACITY);
-                    assertThat(ev.newCapacity()).isEqualTo(80);
+                    assertThat(ev.roomId()).isEqualTo(room.id());
+                    assertThat(ev.oldCapacity()).isEqualTo(RoomCapacity.of(CAPACITY));
+                    assertThat(ev.newCapacity()).isEqualTo(RoomCapacity.of(80));
                     assertThat(ev.occurredAt()).isEqualTo(room.updatedAt());
                 });
     }
 
     @Test
     void changeCapacity_rejectsNonPositive() {
-        Room room = newRoom();
-
-        assertThatThrownBy(() -> room.changeCapacity(0))
-                .isInstanceOf(RoomDomainException.class);
-        assertThatThrownBy(() -> room.changeCapacity(-5))
-                .isInstanceOf(RoomDomainException.class);
-        assertThat(room.capacity()).isEqualTo(CAPACITY);
+        // The capacity invariant is owned by the RoomCapacity VO.
+        assertThatThrownBy(() -> RoomCapacity.of(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> RoomCapacity.of(-5)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -590,9 +602,9 @@ class RoomTest {
         Room room = newRoom();
         int before = room.recordedEvents().size();
 
-        room.changeCapacity(CAPACITY);
+        room.changeCapacity(RoomCapacity.of(CAPACITY));
 
-        assertThat(room.capacity()).isEqualTo(CAPACITY);
+        assertThat(room.capacity()).isEqualTo(RoomCapacity.of(CAPACITY));
         assertThat(room.recordedEvents()).hasSize(before);
     }
 
@@ -601,8 +613,8 @@ class RoomTest {
         Room room = newRoom();
         room.deactivate();
 
-        assertThatThrownBy(() -> room.changeCapacity(80))
+        assertThatThrownBy(() -> room.changeCapacity(RoomCapacity.of(80)))
                 .isInstanceOf(IllegalRoomStateException.class);
-        assertThat(room.capacity()).isEqualTo(CAPACITY);
+        assertThat(room.capacity()).isEqualTo(RoomCapacity.of(CAPACITY));
     }
 }

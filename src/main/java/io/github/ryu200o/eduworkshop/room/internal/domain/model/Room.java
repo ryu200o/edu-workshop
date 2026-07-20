@@ -16,7 +16,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Aggregate Root of the Room module.
@@ -33,16 +32,16 @@ public class Room {
 
     private final RoomId id;
     private RoomName name;
-    private int capacity;
+    private RoomCapacity capacity;
     private RoomLocation location;
-    private int code;
+    private RoomCode code;
     private RoomState state;
     private final Instant createdAt;
     private Instant updatedAt;
 
     private final List<RoomDomainEvent> recordedEvents = new ArrayList<>();
 
-    private Room(RoomId id, RoomName name, int capacity, RoomLocation location, int code, RoomState state, Instant createdAt, Instant updatedAt) {
+    private Room(RoomId id, RoomName name, RoomCapacity capacity, RoomLocation location, RoomCode code, RoomState state, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
         this.capacity = capacity;
@@ -54,31 +53,15 @@ public class Room {
     }
 
     /**
-     * Factory: creates a new room with the default physical state {@link RoomState#ACTIVE}
-     * and emits a {@link RoomCreated} event. The {@code name} is a free-form display string (self-defense
-     * only: non-blank, normalized by {@link RoomName}); the {@code code} is an independent integer used
-     * for FE ordering and is decoupled from {@code name}/{@code location}.
-     *
-     * <p>Uniqueness (the global {@code (location, code)} and {@code (location, name)} invariants) is
-     * enforced through the injected {@link RoomUniquenessPolicy} before construction, so the decision
-     * stays on the aggregate and the rule lives in domain vocabulary. The policy implementation performs
-     * the IO; the aggregate remains framework/IO-free.</p>
-     */
-    public static Room create(RoomName name, RoomLocation location, int code, int capacity, RoomUniquenessPolicy policy) {
-        Instant now = Instant.now();
-        return create(RoomId.generate(), name, location, code, capacity, now, now, policy);
-    }
-
-    /**
      * Factory with explicit identity/timestamps — used when minting a new room from externally
      * supplied identifiers. Enforces the global uniqueness invariants through {@code policy} before
      * emitting a {@link RoomCreated} event.
      */
-    public static Room create(RoomId id, RoomName name, RoomLocation location, int code, int capacity,
+    public static Room create(RoomId id, RoomName name, RoomLocation location, RoomCode code, RoomCapacity capacity,
                               Instant createdAt, Instant updatedAt, RoomUniquenessPolicy policy) {
         requireNonNullName(name);
-        requireValidCode(code);
-        requirePositiveCapacity(capacity);
+        requireNonNullCode(code);
+        requireNonNullCapacity(capacity);
         requireNonNullLocation(location);
 
         // Global invariant (set-based): enforced via the domain-owned policy. Idempotency is irrelevant
@@ -92,7 +75,7 @@ public class Room {
 
         Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
         room.recordedEvents.add(new RoomCreated(
-                room.id.value(), room.name, room.capacity, room.location, room.code, room.state, room.createdAt));
+                room.id, room.name, room.capacity, room.location, room.code, room.state, room.createdAt));
         return room;
     }
 
@@ -100,11 +83,11 @@ public class Room {
      * Reconstructs an existing aggregate from persisted state. Pure data mapping only:
      * it must NOT impose creation rules nor record any event (no historical event re-dispatch).
      */
-    public static Room reconstruct(RoomId id, RoomName name, RoomLocation location, int code, int capacity,
+    public static Room reconstruct(RoomId id, RoomName name, RoomLocation location, RoomCode code, RoomCapacity capacity,
                                              RoomState state, Instant createdAt, Instant updatedAt) {
         requireNonNullName(name);
         requireNonNullLocation(location);
-        requirePositiveCapacity(capacity);
+        requireNonNullCapacity(capacity);
         requireNonNullState(state);
 
         return new Room(id, name, capacity, location, code, state, createdAt, updatedAt);
@@ -158,7 +141,7 @@ public class Room {
         RoomState previous = this.state;
         this.state = next;
         this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomStateChanged(this.id.value(), previous, next, this.updatedAt));
+        this.recordedEvents.add(new RoomStateChanged(this.id, previous, next, this.updatedAt));
     }
 
     /**
@@ -167,18 +150,18 @@ public class Room {
      * idempotency skip runs before the policy check to avoid a false-positive self-collision.
      *
      * @throws IllegalRoomStateException   if the room is {@link RoomState#DEACTIVATED}
-     * @throws RoomDomainException         if the new code is not positive
+     * @throws IllegalArgumentException      if the new code is not positive (self-validation by {@link RoomCode})
      * @throws DuplicateRoomCodeException   if another room already owns the target coordinate
      */
-    public void changeCode(int newCode, RoomUniquenessPolicy policy) {
+    public void changeCode(RoomCode newCode, RoomUniquenessPolicy policy) {
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room's code cannot be changed; the deactivation is permanent.");
         }
-        requireValidCode(newCode);
+        requireNonNullCode(newCode);
 
         // Idempotent no-op: same code means no change, no event, no persist, no IO.
-        if (newCode == this.code) {
+        if (newCode.equals(this.code)) {
             return;
         }
 
@@ -219,7 +202,7 @@ public class Room {
         this.name = candidate;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRenamedEvent(
-                id.value(), previousName, candidate, this.updatedAt));
+                id, previousName, candidate, this.updatedAt));
     }
 
     /**
@@ -252,7 +235,7 @@ public class Room {
         this.location = newLocation;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRelocatedEvent(
-                id.value(), previousLocation, newLocation, this.updatedAt));
+                id, previousLocation, newLocation, this.updatedAt));
     }
 
     /**
@@ -266,23 +249,23 @@ public class Room {
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
      * @throws RoomDomainException       if the new capacity is not a valid positive integer
      */
-    public void changeCapacity(int newCapacity) {
+    public void changeCapacity(RoomCapacity newCapacity) {
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room's capacity cannot be changed; the deactivation is permanent.");
         }
-        // RAM self-defense: reuse the exact creation rule for educational-space capacity boundaries.
-        requirePositiveCapacity(newCapacity);
+        // Domain only null-checks the VO; value validity is enforced by the VO itself.
+        requireNonNullCapacity(newCapacity);
 
         // Idempotent no-op: same capacity means no change, no event, no persist.
-        if (newCapacity == this.capacity) {
+        if (newCapacity.equals(this.capacity)) {
             return;
         }
 
-        int previousCapacity = this.capacity;
+        RoomCapacity previousCapacity = this.capacity;
         this.capacity = newCapacity;
         this.updatedAt = Instant.now();
-        this.recordedEvents.add(new RoomCapacityChanged(id.value(), previousCapacity, newCapacity, this.updatedAt));
+        this.recordedEvents.add(new RoomCapacityChanged(id, previousCapacity, newCapacity, this.updatedAt));
     }
 
     private static void requireNonNullName(RoomName name) {
@@ -297,15 +280,15 @@ public class Room {
         }
     }
 
-    private static void requirePositiveCapacity(int capacity) {
-        if (capacity <= 0) {
-            throw new RoomDomainException("Room capacity must be greater than zero.");
+    private static void requireNonNullCapacity(RoomCapacity capacity) {
+        if (capacity == null) {
+            throw new RoomDomainException("Room capacity must not be null.");
         }
     }
 
-    private static void requireValidCode(int code) {
-        if (code <= 0) {
-            throw new RoomDomainException("Room code must be greater than zero.");
+    private static void requireNonNullCode(RoomCode code) {
+        if (code == null) {
+            throw new RoomDomainException("Room code must not be null.");
         }
     }
 
@@ -323,11 +306,11 @@ public class Room {
         return name;
     }
 
-    public int capacity() {
+    public RoomCapacity capacity() {
         return capacity;
     }
 
-    public int code() {
+    public RoomCode code() {
         return code;
     }
 

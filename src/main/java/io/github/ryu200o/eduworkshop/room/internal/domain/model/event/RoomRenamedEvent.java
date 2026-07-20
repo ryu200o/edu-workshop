@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.event;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 
 import java.time.Instant;
@@ -11,7 +12,7 @@ import java.util.UUID;
  * separate concern and emits {@link RoomRelocatedEvent} instead — this event is purely about the name.
  */
 public record RoomRenamedEvent(
-        UUID roomId,
+        RoomId roomId,
         RoomName oldName,
         RoomName newName,
         Instant occurredAt

@@ -3,6 +3,8 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -16,7 +18,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -54,8 +55,9 @@ class CreateRoomCommandHandlerTest {
     void ramGuard_rejectsNonPositiveCode_withoutTouchingPorts() {
         CreateRoomCommand badCode = new CreateRoomCommand("F", 2, 0, "F-201", 50);
 
+        // The code invariant is owned by the RoomCode VO: the handler builds it and the VO self-validates.
         assertThatThrownBy(() -> handler().handle(badCode))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
@@ -76,7 +78,7 @@ class CreateRoomCommandHandlerTest {
     @Test
     void happyPath_buildsVosDelegatesAndPersists() {
         CreateRoomCommand command = new CreateRoomCommand("f", 2, 1, "F-201", 50); // lowercase building
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(true);
         when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -90,14 +92,14 @@ class CreateRoomCommandHandlerTest {
         assertThat(result.id()).isEqualTo(persisted.id().value());
         assertThat(persisted.name()).isEqualTo(RoomName.of("F-201"));
         assertThat(persisted.location()).isEqualTo(RoomLocation.of("F", 2));
-        assertThat(persisted.code()).isEqualTo(1);
-        assertThat(persisted.capacity()).isEqualTo(50);
+        assertThat(persisted.code()).isEqualTo(RoomCode.of(1));
+        assertThat(persisted.capacity()).isEqualTo(RoomCapacity.of(50));
     }
 
     @Test
     void happyPath_passesPolicyIntoAggregate_andSavesAfter() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(true);
         when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -105,7 +107,7 @@ class CreateRoomCommandHandlerTest {
 
         var inOrder = org.mockito.Mockito.inOrder(uniquenessPolicy, roomRepository);
         // The handler asks the policy (delegated to the aggregate) BEFORE persisting.
-        inOrder.verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
+        inOrder.verify(uniquenessPolicy).isCodeUnique(any(), any(RoomCode.class));
         inOrder.verify(uniquenessPolicy).isNameUnique(any(), any());
         inOrder.verify(roomRepository).save(any());
     }
@@ -115,7 +117,7 @@ class CreateRoomCommandHandlerTest {
     @Test
     void duplicateCode_doesNotPersist_becauseAggregateRejectsFirst() {
         CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException.class);

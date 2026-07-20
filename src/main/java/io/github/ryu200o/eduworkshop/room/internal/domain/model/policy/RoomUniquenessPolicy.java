@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.policy;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 
@@ -18,7 +19,7 @@ public interface RoomUniquenessPolicy {
     /**
      * @return {@code true} when NO other room occupies the {@code (location, code)} coordinate.
      */
-    boolean isCodeUnique(RoomLocation location, int code);
+    boolean isCodeUnique(RoomLocation location, RoomCode code);
 
     /**
      * @return {@code true} when NO other room occupies the {@code (location, name)} pair.

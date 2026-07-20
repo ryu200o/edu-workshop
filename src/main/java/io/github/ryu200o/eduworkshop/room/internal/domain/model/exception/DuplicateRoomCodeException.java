@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.exception;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 
 /**
@@ -10,7 +11,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
  */
 public class DuplicateRoomCodeException extends RoomDomainException {
 
-    public DuplicateRoomCodeException(RoomLocation location, int code) {
-        super("A room with code " + code + " already exists at " + location.asString() + ".");
+    public DuplicateRoomCodeException(RoomLocation location, RoomCode code) {
+        super("A room with code " + code.value() + " already exists at " + location.asString() + ".");
     }
 }

@@ -2,6 +2,8 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.j
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -57,8 +59,8 @@ class JpaRoomWriteAdapter implements RoomRepository {
                 room.name().asString(),
                 room.location().building(),
                 room.location().floor(),
-                room.code(),
-                room.capacity(),
+                room.code().value(),
+                room.capacity().value(),
                 room.state().name(),
                 room.createdAt(),
                 room.updatedAt()
@@ -69,7 +71,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
         RoomLocation location = RoomLocation.reconstruct(entity.getBuilding(), entity.getFloor());
         RoomName name = RoomName.of(entity.getName());
         RoomState state = RoomState.valueOf(entity.getState());
-        return Room.reconstruct(RoomId.of(entity.getId()), name, location, entity.getCode(),
-                entity.getCapacity(), state, entity.getCreatedAt(), entity.getUpdatedAt());
+        return Room.reconstruct(RoomId.of(entity.getId()), name, location, RoomCode.of(entity.getCode()),
+                RoomCapacity.of(entity.getCapacity()), state, entity.getCreatedAt(), entity.getUpdatedAt());
     }
 }
