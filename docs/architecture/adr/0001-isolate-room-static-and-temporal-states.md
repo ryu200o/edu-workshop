@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-09
 - **Deciders:** Room Module / Architecture Guild
-- **Related:** `docs/db/database.md`, `.AGENTS.md` (Domain Rule: Room State)
+- **Related:** `docs/db/database.md`, `AGENTS.md` (Domain Rule: Room State)
 
 ## Context
 
@@ -34,7 +34,7 @@ Dynamic availability is computed at runtime by the *consumer* module (Workshop) 
 room's physical `ACTIVE` state with the published workshop timeline. Cross-module communication uses
 logical UUID references and the `module_api` driving adapter — no shared temporal state.
 
-This is enforced as a hard architectural rule in `.AGENTS.md` and as the schema source of truth in
+This is enforced as a hard architectural rule in `AGENTS.md` and as the schema source of truth in
 `docs/db/database.md` (the `rooms.state` column).
 
 ## Consequences

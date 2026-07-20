@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-12
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** `docs/architecture/development-guidelines.md`, ADR 0001, ADR 0005, `.AGENTS.md`
+- **Related:** `docs/architecture/development-guidelines.md`, ADR 0001, ADR 0005, `AGENTS.md`
 
 ## Context
 

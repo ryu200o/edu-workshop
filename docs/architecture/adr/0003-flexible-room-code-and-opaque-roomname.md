@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-19 (supersedes the earlier "Flexible Room Code & Opaque RoomName" framing)
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** ADR 0001, ADR 0002, `.AGENTS.md`, `docs/db/database.md`, `docs/architecture/development-guidelines.md`
+- **Related:** ADR 0001, ADR 0002, `AGENTS.md`, `docs/db/database.md`, `docs/architecture/development-guidelines.md`
 
 ## Context
 

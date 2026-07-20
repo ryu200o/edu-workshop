@@ -75,25 +75,31 @@ Manages the lifecycle of workshops — from draft through scheduling, publishing
 | Column Name | Data Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PRIMARY KEY` | Unique identifier for the workshop. |
-| `title` | `VARCHAR(200)` | `NOT NULL` | Title of the workshop. |
-| `description` | `VARCHAR(2000)` | `NULLABLE` | Detailed overview of the workshop. |
-| `room_id` | `UUID` | `NULLABLE` | Logical reference to the room. **Nullable** — a workshop can exist in DRAFT state without a room assigned. |
-| `room_display_name_snapshot` | `VARCHAR(200)` | `NULLABLE` | Snapshot of the room's display name at scheduling/publishing time. |
-| `start_time` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Scheduled start time (UTC). |
-| `end_time` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Scheduled end time (UTC). |
-| `capacity` | `INTEGER` | `NOT NULL` | Business registration capacity limit (can differ from room capacity). |
-| `state` | `VARCHAR(20)` | `NOT NULL` | Workshop lifecycle state: `DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. |
+| `title` | `VARCHAR(200)` | `NOT NULL` | Title of the workshop. Matches `@Size(max = 200)` (fail-fast DB guard). |
+| `description` | `VARCHAR(2000)` | `NULLABLE` | Detailed overview of the workshop. Matches `@Size(max = 2000)`. |
+| `room_id` | `UUID` | `NULLABLE` | Logical reference to the room (no physical FK). **Nullable** — a workshop can exist in `DRAFT` state without a room assigned. |
+| `room_name_snapshot` | `VARCHAR(255)` | `NULLABLE` | Decoupled snapshot of the room's display name. Filled at `schedule()`, refreshed at `reschedule()`. Lets the read side render without a cross-module call. |
+| `room_location_snapshot` | `VARCHAR(255)` | `NULLABLE` | Decoupled snapshot of the room's location (building/floor). Filled/refreshed together with `room_name_snapshot`. |
+| `start_time` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Scheduled start time (UTC). Null until `schedule()`. |
+| `end_time` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Scheduled end time (UTC). Null until `schedule()`. |
+| `capacity` | `INTEGER` | `NOT NULL`, `CHECK (capacity > 0)` | Business registration capacity limit (can differ from room capacity). |
+| `state` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'DRAFT'` | Workshop lifecycle state: `DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. Width 50 leaves room for future reactive states (`ROOM_DEACTIVATED_PENDING`, `OVER_CAPACITY_PENDING`) without an `ALTER`. |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
 | `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
 
 **Indexes & Constraints**:
-*   `chk_workshops_time`: CHECK constraint to ensure `end_time > start_time`.
-*   `idx_workshops_room_id`: Index on `room_id` for room utilization queries.
+*   `chk_workshop_time`: CHECK constraint to ensure `end_time > start_time` (nullable-aware: passes when either side is null, so `DRAFT` with no schedule is valid).
+*   `idx_workshop_room_id`: Index on `room_id` for room utilization queries.
+*   `idx_workshop_state`: Index on `state` for lifecycle filtering.
+*   `idx_workshop_start_time`: Index on `start_time` for time-range queries.
+*   `idx_workshop_room_time`: **partial** index on `(room_id, start_time, end_time) WHERE room_id IS NOT NULL AND state != 'CANCELLED'` — serves the overlap scan during schedule/publish/reschedule without scanning cancelled or unscheduled rows.
 
-**Notes**:
-*   `room_id` is nullable because workshops can be created in `DRAFT` state without a room assigned. The room is assigned during `schedule()` or `publish()`.
-*   `capacity` is the business registration limit. It is independent of the room's physical capacity (the room may hold more people, but the workshop may be limited for pedagogical reasons).
-*   The `state` column (not `status`) represents the workshop lifecycle. The column was renamed from `status` to `state` via Flyway V5.
+**Architectural Notes (Module Boundary & Decoupling — ADR 0001)**:
+*   `room_id` is a **logical UUID only** — no physical foreign key to the `rooms` table (respects Spring Modulith boundaries). Room physical info is reached via `RoomExposeAPI`, never by JOIN.
+*   `room_name_snapshot` / `room_location_snapshot` are **selective denormalized copies** captured at `schedule()` (and refreshed at `reschedule()`). They let the read side / UI render room info without a runtime cross-module call, keeping the Workshop module self-contained for display. They are **not** updated by a `RoomEventHandler` in Phase 1 — Room events are recorded-only (no Event Bus yet); automatic snapshot refresh on `RoomRenamed` / `RoomLocationChanged` is deferred until the Event Bus / Outbox is enabled.
+*   `room_id` + both snapshot columns are **nullable in the DB** to allow a `DRAFT` workshop to exist before a room is assigned. The **domain aggregate enforces** that `room_id` and both snapshots are non-null before the workshop transitions to `PUBLISHED` (publishing invariant). `start_time` / `end_time` are likewise required at publish.
+*   `capacity` is the business registration limit; it is **independent** of the room's physical capacity (the room may physically hold more, but the workshop may be capped for pedagogical reasons). The runtime guard `workshop.capacity <= room.capacity` is enforced by the domain at publish (not a DB constraint, since room capacity can change after snapshot).
+*   The `state` column (not `status`) represents the workshop lifecycle.
 
 ---
 
@@ -105,7 +111,7 @@ Business audit log for workshop lifecycle events. One record per state change, c
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PRIMARY KEY` | Unique identifier for the history entry. |
 | `workshop_id` | `UUID` | `NOT NULL` | Logical reference to the workshop (no physical FK). |
-| `event_type` | `VARCHAR(50)` | `NOT NULL` | Type of event (e.g., `DRAFT_CREATED`, `PUBLISHED`, `ROOM_RENAMED`). |
+| `event_type` | `VARCHAR(50)` | `NOT NULL` | Type of event (see event-type list below). |
 | `event_data` | `JSONB` | `NOT NULL` | Event-specific payload capturing what changed. |
 | `reason` | `VARCHAR(255)` | `NULLABLE` | Human-readable reason for the event. |
 | `changed_by` | `UUID` | `NOT NULL` | Logical reference to the user who triggered the event. |
@@ -117,7 +123,7 @@ Business audit log for workshop lifecycle events. One record per state change, c
 *   `idx_workshop_histories_occurred_at`: Index on `occurred_at` for time-range queries.
 *   `idx_workshop_histories_event_type`: Index on `event_type` for filtering by event type.
 
-**Event types recorded**: `DRAFT_CREATED`, `CONTENT_UPDATED`, `SCHEDULED`, `PUBLISHED`, `RESCHEDULED`, `STARTED`, `COMPLETED`, `CANCELLED`, plus cross-module events from `RoomEventHandler` (`ROOM_RENAMED`, `ROOM_RENAMED_DURING_SESSION`, `ROOM_LOCATION_CHANGED`, `ROOM_LOCATION_CHANGED_EMERGENCY`, `ROOM_DEACTIVATED`).
+**Event types recorded**: lifecycle — `DRAFT_CREATED`, `CONTENT_UPDATED`, `SCHEDULED`, `PUBLISHED`, `RESCHEDULED`, `STARTED`, `COMPLETED`, `CANCELLED`, `ROOM_CHANGED`, `CAPACITY_CHANGED`; cross-module (from `RoomEventHandler`, deferred until Event Bus is enabled) — `ROOM_RENAMED`, `ROOM_RENAMED_DURING_SESSION`, `ROOM_LOCATION_CHANGED`, `ROOM_LOCATION_CHANGED_EMERGENCY`, `ROOM_DEACTIVATED`.
 
 ---
 
@@ -140,7 +146,7 @@ Immutable report created once when a workshop transitions to `COMPLETED`. Captur
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
 
 **Indexes**:
-*   `uk_workshop_snapshots_workshop`: Unique constraint on `workshop_id` (one snapshot per workshop).
+*   `uk_workshop_snapshot_workshop`: Unique constraint on `workshop_id` (one snapshot per workshop).
 *   `idx_workshop_snapshots_completed_at`: Index on `completed_at` for reporting queries.
 
 ---
@@ -221,8 +227,8 @@ All inter-module references use **logical UUIDs** — no physical foreign keys e
 | Registration | Workshop | `registrations.workshop_id` | None (logical UUID) |
 | Registration | User | `registrations.user_id` | None (logical UUID) |
 | Room History | Room | `room_histories.room_id` | None (logical UUID) |
-| Workshop History | Workshop | `workshop_histories.workshop_id` | None (logical UUID) |
-| Workshop Snapshot | Workshop | `workshop_snapshots.workshop_id` | None (logical UUID) |
+| Workshop History | Workshop | `workshop_histories.workshop_id` | Physical FK → `workshops(id)` ON DELETE CASCADE (same module) |
+| Workshop Snapshot | Workshop | `workshop_snapshots.workshop_id` | Physical FK → `workshops(id)` ON DELETE CASCADE (same module) |
 
 This approach respects Spring Modulith's module boundaries. Each module owns and manages its own tables independently.
 

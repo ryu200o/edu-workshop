@@ -1,4 +1,4 @@
-# .AGENTS.md — Agent System Instructions
+# AGENTS.md — Agent System Instructions
 
 This file defines the behavioral rules and architecture conventions that AI agents (and contributors)
 MUST follow when working in this repository. Read it before making changes.
@@ -75,6 +75,10 @@ Consult these before designing or coding. They are the source of truth:
   The Factory framing was dropped, but the policy is the current standard — follow this ADR.
 - `docs/architecture/adr/0006-shared-command-query-bus.md` — Shared Command/Query Bus (supersedes ADR 0002 §5):
   shared kernel owns the bus; modules own Commands/Queries/Handlers.
+- `docs/architecture/adr/0007-cross-module-data-decoupling-via-selective-snapshotting.md` — **Proposed**:
+  Workshop decouples from Room via logical `room_id` UUID + selective `room_name_snapshot` /
+  `room_location_snapshot` columns (no physical FK / cross-module JOIN); proactive sync via `RoomExposeAPI`,
+  reactive sync deferred until Room events are published.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).
