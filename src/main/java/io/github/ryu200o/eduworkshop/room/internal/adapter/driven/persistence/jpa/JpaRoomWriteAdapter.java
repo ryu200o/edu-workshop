@@ -56,7 +56,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
     private static RoomJpaEntity toEntity(Room room) {
         return new RoomJpaEntity(
                 room.id().value(),
-                room.name().asString(),
+                room.name().value(),
                 room.location().building(),
                 room.location().floor(),
                 room.code().value(),
@@ -68,7 +68,7 @@ class JpaRoomWriteAdapter implements RoomRepository {
     }
 
     private static Room toRoom(RoomJpaEntity entity) {
-        RoomLocation location = RoomLocation.reconstruct(entity.getBuilding(), entity.getFloor());
+        RoomLocation location = RoomLocation.of(entity.getBuilding(), entity.getFloor());
         RoomName name = RoomName.of(entity.getName());
         RoomState state = RoomState.valueOf(entity.getState());
         return Room.reconstruct(RoomId.of(entity.getId()), name, location, RoomCode.of(entity.getCode()),

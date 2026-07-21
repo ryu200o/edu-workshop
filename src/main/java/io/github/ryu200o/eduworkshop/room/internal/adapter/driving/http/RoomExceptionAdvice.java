@@ -35,6 +35,12 @@ class RoomExceptionAdvice {
         return ex.getMessage();
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    String handleIllegalArgument(IllegalArgumentException ex) {
+        return ex.getMessage();
+    }
+
     @ExceptionHandler(RoomDomainException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     String handleDomain(RoomDomainException ex) {

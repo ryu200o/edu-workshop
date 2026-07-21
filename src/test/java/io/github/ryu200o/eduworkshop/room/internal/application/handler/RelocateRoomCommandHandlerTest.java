@@ -8,7 +8,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
@@ -85,7 +84,7 @@ class RelocateRoomCommandHandlerTest {
         when(roomRepository.loadById(id)).thenReturn(Optional.of(existingRoom()));
 
         assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(id.value(), "G", 0)))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verify(roomRepository).loadById(any());
         verify(uniquenessPolicy, never()).isCodeUnique(any(), any(RoomCode.class));

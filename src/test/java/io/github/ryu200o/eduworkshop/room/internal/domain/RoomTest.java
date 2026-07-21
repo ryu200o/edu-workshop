@@ -556,7 +556,7 @@ class RoomTest {
         Room room = newRoom();
 
         assertThatThrownBy(() -> room.relocateTo(RoomLocation.of("G", 0), FakeUniquenessPolicy.unique()))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

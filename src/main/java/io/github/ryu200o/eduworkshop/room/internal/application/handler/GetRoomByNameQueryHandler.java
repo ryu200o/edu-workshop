@@ -28,6 +28,6 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
     public RoomSummaryView handle(GetRoomByNameQuery query) {
         RoomName name = RoomName.of(query.roomName()); // RAM self-defense; free-form, no reverse-parse
         return roomReader.findByName(name)
-                .orElseThrow(() -> new RoomNotFoundException("name", name.asString()));
+                .orElseThrow(() -> new RoomNotFoundException("name", name.value()));
     }
 }
