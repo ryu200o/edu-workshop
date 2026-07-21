@@ -21,6 +21,7 @@ public record RelocateRoomCommand(
         int newFloor
 ) implements Command<RelocateRoomCommand.Result> {
 
+    public record LocationDto (String building, int floor) {}
     /**
      * Lightweight write-side result for this command — carries only the fields directly affected by the
      * relocation (id, old/new location, and the update timestamp) to keep the write flow minimal.
@@ -30,6 +31,6 @@ public record RelocateRoomCommand(
      * @param newLocation the new location
      * @param updatedAt   the moment the relocation was applied
      */
-    public record Result(UUID id, RoomLocation oldLocation, RoomLocation newLocation, Instant updatedAt) {
+    public record Result(UUID id, LocationDto oldLocation, LocationDto newLocation, Instant updatedAt) {
     }
 }

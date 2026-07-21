@@ -118,8 +118,8 @@ class RelocateRoomCommandHandlerTest {
 
         RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "F", 2));
 
-        assertThat(response.oldLocation()).isEqualTo(room.location());
-        assertThat(response.newLocation()).isEqualTo(room.location());
+        assertThat(response.oldLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
+        assertThat(response.newLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
         assertThat(response.updatedAt()).isEqualTo(fixedUpdated);   // NOT Instant.now()
         verify(uniquenessPolicy, never()).isCodeUnique(any(), any(RoomCode.class));
         verify(roomRepository, never()).save(any());
@@ -145,8 +145,8 @@ class RelocateRoomCommandHandlerTest {
         assertThat(saved.code()).isEqualTo(RoomCode.of(1));          // code is preserved
         assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRelocatedEvent);
         assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.oldLocation()).isEqualTo(RoomLocation.of("F", 2));
-        assertThat(response.newLocation()).isEqualTo(RoomLocation.of("G", 3));
+        assertThat(response.oldLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
+        assertThat(response.newLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("G", 3));
     }
 
     @Test

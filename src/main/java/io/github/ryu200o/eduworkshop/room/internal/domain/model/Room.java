@@ -42,14 +42,14 @@ public class Room {
     private final List<RoomDomainEvent> recordedEvents = new ArrayList<>();
 
     private Room(RoomId id, RoomName name, RoomCapacity capacity, RoomLocation location, RoomCode code, RoomState state, Instant createdAt, Instant updatedAt) {
-        this.id = id;
-        this.name = name;
-        this.capacity = capacity;
-        this.location = location;
-        this.code = code;
-        this.state = state;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
+        this.id = requireNonNull(id, "RoomId cannot be null");
+        this.name = requireNonNull(name, "RoomName cannot be null");
+        this.capacity = requireNonNull(capacity, "RoomCapacity cannot be null");
+        this.location = requireNonNull(location, "RoomLocation cannot be null");
+        this.code = requireNonNull(code, "RoomCode cannot be null");
+        this.state = requireNonNull(state, "RoomState cannot be null");
+        this.createdAt = requireNonNull(createdAt, "CreatedAt cannot be null");
+        this.updatedAt = requireNonNull(updatedAt, "UpdatedAt cannot be null");
     }
 
     /**
@@ -59,10 +59,8 @@ public class Room {
      */
     public static Room create(RoomId id, RoomName name, RoomLocation location, RoomCode code, RoomCapacity capacity,
                               Instant createdAt, Instant updatedAt, RoomUniquenessPolicy policy) {
-        requireNonNullName(name);
-        requireNonNullCode(code);
-        requireNonNullCapacity(capacity);
-        requireNonNullLocation(location);
+
+        Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
 
         // Global invariant (set-based): enforced via the domain-owned policy. Idempotency is irrelevant
         // here (brand-new aggregate) — a self-collision cannot occur, so we check unconditionally.
@@ -73,9 +71,9 @@ public class Room {
             throw new DuplicateRoomNameException(location, name);
         }
 
-        Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
         room.recordedEvents.add(new RoomCreated(
                 room.id, room.name, room.capacity, room.location, room.code, room.state, room.createdAt));
+
         return room;
     }
 
@@ -85,10 +83,6 @@ public class Room {
      */
     public static Room reconstruct(RoomId id, RoomName name, RoomLocation location, RoomCode code, RoomCapacity capacity,
                                              RoomState state, Instant createdAt, Instant updatedAt) {
-        requireNonNullName(name);
-        requireNonNullLocation(location);
-        requireNonNullCapacity(capacity);
-        requireNonNullState(state);
 
         return new Room(id, name, capacity, location, code, state, createdAt, updatedAt);
     }
@@ -124,7 +118,6 @@ public class Room {
      * Permanently deactivates the room (frozen, irreversible). Idempotent when already
      * {@link RoomState#DEACTIVATED}.
      *
-     * @throws IllegalRoomStateException if the room is already deactivated
      */
     public void deactivate() {
         // Idempotent: a permanently deactivated room is already in its desired end state.
@@ -154,11 +147,12 @@ public class Room {
      * @throws DuplicateRoomCodeException   if another room already owns the target coordinate
      */
     public void changeCode(RoomCode newCode, RoomUniquenessPolicy policy) {
+        requireNonNull(newCode, "newCode cannot be null");
+
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room's code cannot be changed; the deactivation is permanent.");
         }
-        requireNonNullCode(newCode);
 
         // Idempotent no-op: same code means no change, no event, no persist, no IO.
         if (newCode.equals(this.code)) {
@@ -182,27 +176,28 @@ public class Room {
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
      * @throws DuplicateRoomNameException  if another room already owns the target name at this location
      */
-    public void changeName(String newName, RoomUniquenessPolicy policy) {
+    public void changeName(RoomName newName, RoomUniquenessPolicy policy) {
+
+        requireNonNull(newName, "New name cannot be null");
+
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room's name cannot be changed; the deactivation is permanent.");
         }
-        RoomName candidate = RoomName.of(newName);
 
-        // Idempotent no-op: same name means no change, no event, no persist, no IO.
-        if (candidate.equals(this.name)) {
+        if (newName.equals(this.name)) {
             return;
         }
 
-        if (!policy.isNameUnique(location, candidate)) {
-            throw new DuplicateRoomNameException(location, candidate);
+        if (!policy.isNameUnique(location, newName)) {
+            throw new DuplicateRoomNameException(location, newName);
         }
 
         RoomName previousName = this.name;
-        this.name = candidate;
+        this.name = newName;
         this.updatedAt = Instant.now();
         this.recordedEvents.add(new RoomRenamedEvent(
-                id, previousName, candidate, this.updatedAt));
+                id, previousName, newName, this.updatedAt));
     }
 
     /**
@@ -217,6 +212,7 @@ public class Room {
      * @throws DuplicateRoomNameException  if another room already owns the target name
      */
     public void relocateTo(RoomLocation newLocation, RoomUniquenessPolicy policy) {
+        requireNonNull(newLocation, "newLocation cannot be null");
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room cannot be relocated; the deactivation is permanent.");
@@ -250,12 +246,13 @@ public class Room {
      * @throws RoomDomainException       if the new capacity is not a valid positive integer
      */
     public void changeCapacity(RoomCapacity newCapacity) {
+        // Domain only null-checks the VO; value validity is enforced by the VO itself.
+        requireNonNull(newCapacity, "New capacity cannot be null");
+
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room's capacity cannot be changed; the deactivation is permanent.");
         }
-        // Domain only null-checks the VO; value validity is enforced by the VO itself.
-        requireNonNullCapacity(newCapacity);
 
         // Idempotent no-op: same capacity means no change, no event, no persist.
         if (newCapacity.equals(this.capacity)) {
@@ -268,36 +265,12 @@ public class Room {
         this.recordedEvents.add(new RoomCapacityChanged(id, previousCapacity, newCapacity, this.updatedAt));
     }
 
-    private static void requireNonNullName(RoomName name) {
-        if (name == null) {
-            throw new RoomDomainException("Room name must not be null.");
+    private static <T> T requireNonNull(T obj, String message) {
+        if (obj == null) {
+            throw new RoomDomainException(message);
         }
+        return obj;
     }
-
-    private static void requireNonNullLocation(RoomLocation location) {
-        if (location == null) {
-            throw new RoomDomainException("Room location must not be null.");
-        }
-    }
-
-    private static void requireNonNullCapacity(RoomCapacity capacity) {
-        if (capacity == null) {
-            throw new RoomDomainException("Room capacity must not be null.");
-        }
-    }
-
-    private static void requireNonNullCode(RoomCode code) {
-        if (code == null) {
-            throw new RoomDomainException("Room code must not be null.");
-        }
-    }
-
-    private static void requireNonNullState(RoomState state) {
-        if (state == null) {
-            throw new RoomDomainException("Room state must not be null.");
-        }
-    }
-
     public RoomId id() {
         return id;
     }

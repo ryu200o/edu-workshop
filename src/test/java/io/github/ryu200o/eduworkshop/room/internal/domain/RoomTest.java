@@ -275,7 +275,7 @@ class RoomTest {
         Room room = newRoom();
         var policy = FakeUniquenessPolicy.unique().occupiedName(LOCATION, RoomName.of("LAB-101"));
 
-        assertThatThrownBy(() -> room.changeName("LAB-101", policy))
+        assertThatThrownBy(() -> room.changeName(RoomName.of("LAB-101"), policy))
                 .isInstanceOf(DuplicateRoomNameException.class);
         assertThat(room.name()).isEqualTo(name()); // unchanged
     }
@@ -286,7 +286,7 @@ class RoomTest {
         int before = room.recordedEvents().size();
         var policy = FakeUniquenessPolicy.unique();
 
-        room.changeName(NAME, policy);
+        room.changeName(RoomName.of(NAME), policy);
 
         assertThat(room.name()).isEqualTo(name());
         assertThat(room.recordedEvents()).hasSize(before);
@@ -298,7 +298,7 @@ class RoomTest {
         Room room = newRoom();
         room.deactivate();
 
-        assertThatThrownBy(() -> room.changeName("LAB-101", FakeUniquenessPolicy.unique()))
+        assertThatThrownBy(() -> room.changeName(RoomName.of("LAB-101"), FakeUniquenessPolicy.unique()))
                 .isInstanceOf(IllegalRoomStateException.class);
         assertThat(room.name()).isEqualTo(name());
     }
@@ -490,7 +490,7 @@ class RoomTest {
     void changeName_recomputesNothingButEmitsRoomRenamedEvent() {
         Room room = newRoom();
 
-        room.changeName("LAB-101", FakeUniquenessPolicy.unique());
+        room.changeName(RoomName.of("LAB-101"), FakeUniquenessPolicy.unique());
 
         assertThat(room.name()).isEqualTo(RoomName.of("LAB-101"));
         assertThat(room.location()).isEqualTo(LOCATION);

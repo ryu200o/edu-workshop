@@ -34,19 +34,19 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
         // Step 2 — Idempotency: same capacity ⇒ no change, no save.
         //         Returns the current entity's updatedAt (NOT Instant.now()) — nothing changed.
         RoomCapacity newCapacity = RoomCapacity.of(command.newCapacity());
-        if (newCapacity.value() == room.capacity().value()) {
-            return toResult(room);
+        if (newCapacity.equals(room.capacity())) {
+            return toResult(room, room.capacity());
         }
 
         // Step 3 — Domain mutation (records RoomCapacityChanged) then persist.
         RoomCapacity oldCapacity = room.capacity();
         room.changeCapacity(newCapacity);
         Room saved = roomRepository.save(room);
-        return new ChangeRoomCapacityCommand.Result(saved.id().value(), oldCapacity.value(), saved.capacity().value(), saved.updatedAt());
+        return toResult(saved, oldCapacity);
     }
 
-    private static ChangeRoomCapacityCommand.Result toResult(Room room) {
+    private static ChangeRoomCapacityCommand.Result toResult(Room room, RoomCapacity oldCapacity) {
         return new ChangeRoomCapacityCommand.Result(
-                room.id().value(), room.capacity().value(), room.capacity().value(), room.updatedAt());
+                room.id().value(), oldCapacity.value(), room.capacity().value(), room.updatedAt());
     }
 }

@@ -55,6 +55,9 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
     private static RelocateRoomCommand.Result toResult(Room room, RoomLocation oldLocation) {
         return new RelocateRoomCommand.Result(
-                room.id().value(), oldLocation, room.location(), room.updatedAt());
+                room.id().value(),
+                new RelocateRoomCommand.LocationDto(oldLocation.building(), oldLocation.floor()),
+                new RelocateRoomCommand.LocationDto(room.location().building(), room.location().floor()),
+                room.updatedAt());
     }
 }

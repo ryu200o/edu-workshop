@@ -45,19 +45,19 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
 
         // Step 3 — Idempotency: same code ⇒ no change, no gate, no persist.
         if (newCode.equals(room.code())) {
-            return toResult(room, room.code().value());
+            return toResult(room, room.code());
         }
 
         // Step 4 — Domain mutation (silent, no event). The aggregate enforces the (location, code) uniqueness
         //         invariant via the policy before mutating; then persist.
-        int oldCode = room.code().value();
+        RoomCode oldCode = room.code();
         room.changeCode(newCode, uniquenessPolicy);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldCode);
     }
 
-    private static ChangeRoomCodeCommand.Result toResult(Room room, int oldCode) {
+    private static ChangeRoomCodeCommand.Result toResult(Room room, RoomCode oldCode) {
         return new ChangeRoomCodeCommand.Result(
-                room.id().value(), oldCode, room.code().value(), room.updatedAt());
+                room.id().value(), oldCode.value(), room.code().value(), room.updatedAt());
     }
 }
