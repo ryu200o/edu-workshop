@@ -38,25 +38,25 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         // Step 2 — RAM guard (local invariant): the VO validates/normalizes the new name.
-        RoomName candidate = RoomName.of(command.newName());
+        RoomName newName = RoomName.of(command.newName());
 
         // Step 3 — Idempotency: same name ⇒ no change, no gate, no persist.
-        if (candidate.equals(room.name())) {
-            return toResult(room, room.name().asString());
+        if (newName.equals(room.name())) {
+            return toResult(room, room.name());
         }
 
         // Step 4 — Domain mutation (records RoomRenamedEvent). The aggregate enforces the (location, name)
         //         uniqueness invariant via the policy before mutating; then persist.
-        String oldName = room.name().asString();
-        room.changeName(command.newName(), uniquenessPolicy);
+        RoomName oldName = room.name();
+        room.changeName(newName, uniquenessPolicy);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldName);
     }
 
-    private static RenameRoomCommand.Result toResult(Room room, String oldName) {
+    private static RenameRoomCommand.Result toResult(Room room,RoomName oldName) {
         return new RenameRoomCommand.Result(
                 room.id().value(),
-                oldName,
+                oldName.asString(),
                 room.name().asString(),
                 room.updatedAt());
     }

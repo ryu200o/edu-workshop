@@ -83,6 +83,11 @@ Consult these before designing or coding. They are the source of truth:
   allocation is *planning* at `SCHEDULED` (no exclusive reservation; overlapping schedules allowed) and
   *reservation* only at `PUBLISHED` (publish-time conflict check in Application layer). Room Availability
   has 3 states (AVAILABLE / AVAILABLE_WITH_PLANNING_CONFLICT / OCCUPIED); aggregate stays pure.
+- `docs/architecture/adr/0009-vo-purity-conditional-field-objectification.md` — **Proposed**: VO Purity
+  standard. Conditional fields → self-validating VO; unconditional fields → keep primitive; domain only
+  null-checks VOs (no business-rule re-checks); Application only builds VOs + calls domain. Global/set-based
+  invariants stay in a Policy (ADR 0005) — the sole exception. Room `capacity`/`code` primitives to be
+  objectized; Workshop domain is the reference implementation.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).

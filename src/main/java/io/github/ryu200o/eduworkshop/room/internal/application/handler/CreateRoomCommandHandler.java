@@ -2,14 +2,14 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.*;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
 
 /**
  * Use-case handler for creating a room. The global-uniqueness invariant (no two rooms share the same
@@ -34,15 +34,15 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
     @Transactional
     public CreateRoomCommand.Result handle(CreateRoomCommand command) {
         // Step 1 — RAM guard (Local invariants): value objects self-validate & normalize, no IO.
+        RoomId id = RoomId.generate();
         RoomLocation location = RoomLocation.of(command.building(), command.floor());
         RoomName name = RoomName.of(command.name());
-
-        if (command.code() <= 0) {
-            throw new RoomDomainException("Room code must be greater than zero.");
-        }
+        RoomCapacity capacity = RoomCapacity.of(command.capacity());
+        RoomCode code = RoomCode.of(command.code());
+        Instant now = Instant.now();
 
         // Step 2 — Domain owns the global invariant: the aggregate enforces uniqueness via the policy.
-        Room room = Room.create(name, location, command.code(), command.capacity(), uniquenessPolicy);
+        Room room = Room.create(id, name, location, code, capacity, now, now, uniquenessPolicy);
 
         // Step 3 — Persist.
         Room saved = roomRepository.save(room);

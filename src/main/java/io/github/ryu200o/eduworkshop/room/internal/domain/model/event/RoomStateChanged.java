@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.event;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 
 import java.time.Instant;
@@ -10,7 +11,7 @@ import java.util.UUID;
  * (e.g. {@code ACTIVE -> MAINTENANCE}, {@code MAINTENANCE -> ACTIVE}, {@code ACTIVE -> DEACTIVATED}).
  */
 public record RoomStateChanged(
-        UUID roomId,
+        RoomId roomId,
         RoomState previousState,
         RoomState newState,
         Instant occurredAt

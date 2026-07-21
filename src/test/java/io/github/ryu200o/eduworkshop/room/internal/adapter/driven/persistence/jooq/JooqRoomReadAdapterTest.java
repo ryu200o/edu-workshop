@@ -5,6 +5,8 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.vie
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
@@ -16,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -49,17 +52,19 @@ class JooqRoomReadAdapterTest {
     private static Room newRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
         RoomName name = RoomName.of("F-201");
-        return Room.create(name, location, 1, 50, new RoomUniquenessPolicy() {
-            @Override
-            public boolean isCodeUnique(RoomLocation location, int code) {
-                return true;
-            }
+        Instant now = Instant.now();
+        return Room.create(RoomId.generate(), name, location, RoomCode.of(1), RoomCapacity.of(50), now, now,
+                new RoomUniquenessPolicy() {
+                    @Override
+                    public boolean isCodeUnique(RoomLocation location, RoomCode code) {
+                        return true;
+                    }
 
-            @Override
-            public boolean isNameUnique(RoomLocation location, RoomName name) {
-                return true;
-            }
-        });
+                    @Override
+                    public boolean isNameUnique(RoomLocation location, RoomName name) {
+                        return true;
+                    }
+                });
     }
 
 

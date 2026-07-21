@@ -1,5 +1,8 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.event;
 
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -10,9 +13,9 @@ import java.util.UUID;
  * future integration (out of scope for the branch that introduced this event).
  */
 public record RoomCapacityChanged(
-        UUID roomId,
-        int oldCapacity,
-        int newCapacity,
+        RoomId roomId,
+        RoomCapacity oldCapacity,
+        RoomCapacity newCapacity,
         Instant occurredAt
 ) implements RoomDomainEvent {
 }

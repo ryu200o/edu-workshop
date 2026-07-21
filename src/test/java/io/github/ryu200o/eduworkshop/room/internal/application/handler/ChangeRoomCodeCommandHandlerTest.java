@@ -3,10 +3,11 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCodeCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -17,13 +18,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,7 +45,7 @@ class ChangeRoomCodeCommandHandlerTest {
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
     private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
         @Override
-        public boolean isCodeUnique(RoomLocation location, int code) {
+        public boolean isCodeUnique(RoomLocation location, RoomCode code) {
             return true;
         }
 
@@ -56,7 +57,9 @@ class ChangeRoomCodeCommandHandlerTest {
 
     private static Room existingRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        return Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE);
+        Instant now = Instant.now();
+        return Room.create(RoomId.generate(), RoomName.of("F-201"), location, RoomCode.of(1),
+                RoomCapacity.of(50), now, now, ALWAYS_UNIQUE);
     }
 
     // ── Step 1: load failure ──
@@ -78,11 +81,12 @@ class ChangeRoomCodeCommandHandlerTest {
         RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.of(existingRoom()));
 
+        // The code invariant is owned by the RoomCode VO: the handler builds it and the VO self-validates.
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCodeCommand(id.value(), 0)))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verify(roomRepository).loadById(any());
-        verify(uniquenessPolicy, never()).isCodeUnique(any(), anyInt());
+        verify(uniquenessPolicy, never()).isCodeUnique(any(), any(RoomCode.class));
         verify(roomRepository, never()).save(any());
     }
 
@@ -92,7 +96,7 @@ class ChangeRoomCodeCommandHandlerTest {
     void duplicateCode_doesNotPersist_becauseAggregateRejectsFirst() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(false);
+        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCodeCommand(room.id().value(), 2)))
                 .isInstanceOf(DuplicateRoomCodeException.class);
@@ -110,7 +114,7 @@ class ChangeRoomCodeCommandHandlerTest {
 
         assertThat(response.oldCode()).isEqualTo(1);
         assertThat(response.newCode()).isEqualTo(1);
-        verify(uniquenessPolicy, never()).isCodeUnique(any(), anyInt());
+        verify(uniquenessPolicy, never()).isCodeUnique(any(), any(RoomCode.class));
         verify(roomRepository, never()).save(any());
     }
 
@@ -119,7 +123,7 @@ class ChangeRoomCodeCommandHandlerTest {
     void happyPath_changesCodeSilently_persists_andReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ChangeRoomCodeCommand.Result response = handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
@@ -128,7 +132,7 @@ class ChangeRoomCodeCommandHandlerTest {
         verify(roomRepository).save(captor.capture());
         Room saved = captor.getValue();
 
-        assertThat(saved.code()).isEqualTo(99);
+        assertThat(saved.code()).isEqualTo(RoomCode.of(99));
         assertThat(saved.recordedEvents())
                 .filteredOn(RoomRenamedEvent.class::isInstance)
                 .isEmpty(); // silent — no rename event
@@ -141,14 +145,14 @@ class ChangeRoomCodeCommandHandlerTest {
     void happyPath_loadsThenDelegatesThenSaves() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isCodeUnique(any(), anyInt())).thenReturn(true);
+        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(true);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
 
         var ordered = org.mockito.Mockito.inOrder(roomRepository, uniquenessPolicy);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(uniquenessPolicy).isCodeUnique(any(), anyInt());
+        ordered.verify(uniquenessPolicy).isCodeUnique(any(), any(RoomCode.class));
         ordered.verify(roomRepository).save(any());
     }
 }

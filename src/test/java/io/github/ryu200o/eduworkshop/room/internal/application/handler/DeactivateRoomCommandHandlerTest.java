@@ -3,6 +3,8 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.DeactivateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -40,7 +42,7 @@ class DeactivateRoomCommandHandlerTest {
     private static Room existingRoom(RoomState state) {
         RoomLocation location = RoomLocation.of("F", 2);
         return Room.reconstruct(RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
-                location, 1, 50, state, Instant.parse("2026-01-01T00:00:00Z"),
+                location, RoomCode.of(1), RoomCapacity.of(50), state, Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-03-15T00:00:00Z"));
     }
 
