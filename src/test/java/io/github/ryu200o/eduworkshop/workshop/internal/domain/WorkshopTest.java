@@ -52,8 +52,8 @@ class WorkshopTest {
 
         assertThat(workshop.id()).isEqualTo(id);
         assertThat(workshop.state()).isEqualTo(WorkshopState.DRAFT);
-        assertThat(workshop.title().asString()).isEqualTo("Spring Boot Workshop");
-        assertThat(workshop.description().asString()).isEqualTo("Hands-on intro to Spring Modulith.");
+        assertThat(workshop.title().value()).isEqualTo("Spring Boot Workshop");
+        assertThat(workshop.description().value()).isEqualTo("Hands-on intro to Spring Modulith.");
         assertThat(workshop.roomReference()).isNull();
         assertThat(workshop.startTime()).isNull();
         assertThat(workshop.capacity()).isNull();
@@ -66,7 +66,7 @@ class WorkshopTest {
     @Test
     void create_rejectsBlankTitle() {
         assertThatThrownBy(() -> Workshop.create(newId(), WorkshopTitle.of("   "), description()))
-                .isInstanceOf(WorkshopDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // ----------------------------------------------------------------
@@ -162,9 +162,9 @@ class WorkshopTest {
     @Test
     void capacityVo_rejectsNonPositive() {
         assertThatThrownBy(() -> WorkshopCapacity.of(0))
-                .isInstanceOf(WorkshopDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> WorkshopCapacity.of(-5))
-                .isInstanceOf(WorkshopDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // ----------------------------------------------------------------

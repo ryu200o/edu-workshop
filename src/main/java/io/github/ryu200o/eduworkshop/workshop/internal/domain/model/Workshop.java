@@ -57,16 +57,16 @@ public class Workshop {
                      WorkshopState state,
                      Instant createdAt,
                      Instant updatedAt) {
-        this.id = id;
-        this.title = title;
-        this.description = description;
+        this.id = requireNonNull(id, "WorkshopId cannot be null");
+        this.title = requireNonNull(title, "WorkshopTitle cannot be null");
+        this.description = requireNonNull(description, "WorkshopDescription cannot be null");
         this.roomReference = roomReference;
         this.startTime = startTime;
         this.endTime = endTime;
         this.capacity = capacity;
-        this.state = state;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
+        this.state = requireNonNull(state, "WorkshopState cannot be null");
+        this.createdAt = requireNonNull(createdAt, "CreatedAt cannot be null");
+        this.updatedAt = requireNonNull(updatedAt, "UpdatedAt cannot be null");
     }
 
     /**
@@ -213,5 +213,12 @@ public class Workshop {
 
     public void clearDomainEvents() {
         recordedEvents.clear();
+    }
+
+    private static <T> T requireNonNull(T obj, String message) {
+        if (obj == null) {
+            throw new WorkshopDomainException(message);
+        }
+        return obj;
     }
 }
