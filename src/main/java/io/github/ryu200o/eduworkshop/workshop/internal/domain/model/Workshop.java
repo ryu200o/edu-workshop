@@ -84,6 +84,24 @@ public class Workshop {
     }
 
     /**
+     * Reconstitution factory: reconstructs a Workshop from persistent state. Bypasses creation validation
+     * and event recording — used exclusively by the persistence adapter when loading existing aggregates.
+     */
+    public static Workshop reconstruct(WorkshopId id,
+                                       WorkshopTitle title,
+                                       WorkshopDescription description,
+                                       RoomReference roomReference,
+                                       Instant startTime,
+                                       Instant endTime,
+                                       WorkshopCapacity capacity,
+                                       WorkshopState state,
+                                       Instant createdAt,
+                                       Instant updatedAt) {
+        return new Workshop(id, title, description, roomReference, startTime, endTime,
+                capacity, state, createdAt, updatedAt);
+    }
+
+    /**
      * Transitions DRAFT → SCHEDULED. Establishes the planning data and validates the <em>local</em>
      * invariants only:
      * <ol>
