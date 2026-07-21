@@ -12,6 +12,10 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -35,9 +39,15 @@ class PlaceRoomUnderMaintenanceCommandHandlerTest {
 
     @Mock
     private RoomRepository roomRepository;
+    private Clock clock;
+
+    @BeforeEach
+    void setUp() {
+        clock = Clock.fixed(Instant.parse("2026-07-21T10:00:00Z"), ZoneOffset.UTC);
+    }
 
     private PlaceRoomUnderMaintenanceCommandHandler handler() {
-        return new PlaceRoomUnderMaintenanceCommandHandler(roomRepository);
+        return new PlaceRoomUnderMaintenanceCommandHandler(roomRepository, clock);
     }
 
     private static Room existingRoom(RoomState state) {

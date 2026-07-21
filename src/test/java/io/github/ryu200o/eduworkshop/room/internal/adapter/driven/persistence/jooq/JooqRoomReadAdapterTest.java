@@ -53,7 +53,7 @@ class JooqRoomReadAdapterTest {
         RoomLocation location = RoomLocation.of("F", 2);
         RoomName name = RoomName.of("F-201");
         Instant now = Instant.now();
-        return Room.create(RoomId.generate(), name, location, RoomCode.of(1), RoomCapacity.of(50), now, now,
+        return Room.create(RoomId.generate(), name, location, RoomCode.of(1), RoomCapacity.of(50), now,
                 new RoomUniquenessPolicy() {
                     @Override
                     public boolean isCodeUnique(RoomLocation location, RoomCode code) {

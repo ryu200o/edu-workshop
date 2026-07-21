@@ -10,6 +10,9 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+
 /**
  * Use-case handler for reactivating a room back to normal operation. Loads the aggregate, delegates the
  * state transition to the domain (guard + idempotency owned there), then persists. Package-private:
@@ -19,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 class ReactivateRoomCommandHandler implements CommandHandler<ReactivateRoomCommand, ReactivateRoomCommand.Result> {
 
     private final RoomRepository roomRepository;
+    private final Clock clock;
 
-    ReactivateRoomCommandHandler(RoomRepository roomRepository) {
+    ReactivateRoomCommandHandler(RoomRepository roomRepository, Clock clock) {
         this.roomRepository = roomRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -31,7 +36,8 @@ class ReactivateRoomCommandHandler implements CommandHandler<ReactivateRoomComma
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         RoomState previous = room.state();
-        room.reactivate();
+        Instant now = Instant.now(clock);
+        room.reactivate(now);
         // Idempotency: a no-op transition (same state) does not touch the DB; return the entity's
         // existing updatedAt (NOT Instant.now()) to avoid a false "change" timestamp.
         if (previous == room.state()) {

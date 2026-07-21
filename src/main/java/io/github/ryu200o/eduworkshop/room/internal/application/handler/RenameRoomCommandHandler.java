@@ -11,6 +11,9 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+
 /**
  * Use-case handler for renaming a room (changing its free-form {@code name}; building/floor/code unchanged).
  * The domain mutation records a {@link io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent}
@@ -24,10 +27,12 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
 
     private final RoomRepository roomRepository;
     private final RoomUniquenessPolicy uniquenessPolicy;
+    private final Clock clock;
 
-    RenameRoomCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy) {
+    RenameRoomCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy, Clock clock) {
         this.roomRepository = roomRepository;
         this.uniquenessPolicy = uniquenessPolicy;
+        this.clock = clock;
     }
 
     @Override
@@ -48,7 +53,8 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
         // Step 4 — Domain mutation (records RoomRenamedEvent). The aggregate enforces the (location, name)
         //         uniqueness invariant via the policy before mutating; then persist.
         RoomName oldName = room.name();
-        room.changeName(newName, uniquenessPolicy);
+        Instant now = Instant.now(clock);
+        room.changeName(newName, uniquenessPolicy, now);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldName);
     }

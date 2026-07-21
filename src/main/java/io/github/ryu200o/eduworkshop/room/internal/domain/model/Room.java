@@ -58,9 +58,9 @@ public class Room {
      * emitting a {@link RoomCreated} event.
      */
     public static Room create(RoomId id, RoomName name, RoomLocation location, RoomCode code, RoomCapacity capacity,
-                              Instant createdAt, Instant updatedAt, RoomUniquenessPolicy policy) {
+                              Instant now, RoomUniquenessPolicy policy) {
 
-        Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, createdAt, updatedAt);
+        Room room = new Room(id, name, capacity, location, code, RoomState.ACTIVE, now, now);
 
         // Global invariant (set-based): enforced via the domain-owned policy. Idempotency is irrelevant
         // here (brand-new aggregate) — a self-collision cannot occur, so we check unconditionally.
@@ -92,12 +92,13 @@ public class Room {
      *
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
      */
-    public void placeUnderMaintenance() {
+    public void placeUnderMaintenance(Instant now) {
+        requireNonNull(now, "now cannot be null");
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, RoomState.MAINTENANCE,
                     "A deactivated room cannot be placed under maintenance; the deactivation is permanent.");
         }
-        transitionTo(RoomState.MAINTENANCE);
+        transitionTo(RoomState.MAINTENANCE, now);
     }
 
     /**
@@ -106,12 +107,13 @@ public class Room {
      *
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
      */
-    public void reactivate() {
+    public void reactivate(Instant now) {
+        requireNonNull(now, "now cannot be null");
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, RoomState.ACTIVE,
                     "A deactivated room cannot be reactivated; the deactivation is permanent.");
         }
-        transitionTo(RoomState.ACTIVE);
+        transitionTo(RoomState.ACTIVE, now);
     }
 
     /**
@@ -119,21 +121,22 @@ public class Room {
      * {@link RoomState#DEACTIVATED}.
      *
      */
-    public void deactivate() {
+    public void deactivate(Instant now) {
+        requireNonNull(now, "now cannot be null");
         // Idempotent: a permanently deactivated room is already in its desired end state.
         if (state == RoomState.DEACTIVATED) {
             return;
         }
-        transitionTo(RoomState.DEACTIVATED);
+        transitionTo(RoomState.DEACTIVATED, now);
     }
 
-    private void transitionTo(RoomState next) {
+    private void transitionTo(RoomState next, Instant now) {
         if (this.state == next) {
             return; // idempotent no-op: no state change, no event
         }
         RoomState previous = this.state;
         this.state = next;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
         this.recordedEvents.add(new RoomStateChanged(this.id, previous, next, this.updatedAt));
     }
 
@@ -146,8 +149,10 @@ public class Room {
      * @throws IllegalArgumentException      if the new code is not positive (self-validation by {@link RoomCode})
      * @throws DuplicateRoomCodeException   if another room already owns the target coordinate
      */
-    public void changeCode(RoomCode newCode, RoomUniquenessPolicy policy) {
+    public void changeCode(RoomCode newCode, RoomUniquenessPolicy policy, Instant now) {
         requireNonNull(newCode, "newCode cannot be null");
+        requireNonNull(policy, "policy cannot be null");
+        requireNonNull(now, "now cannot be null");
 
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
@@ -164,7 +169,7 @@ public class Room {
         }
 
         this.code = newCode;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
     }
 
     /**
@@ -176,9 +181,11 @@ public class Room {
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED}
      * @throws DuplicateRoomNameException  if another room already owns the target name at this location
      */
-    public void changeName(RoomName newName, RoomUniquenessPolicy policy) {
+    public void changeName(RoomName newName, RoomUniquenessPolicy policy, Instant now) {
 
         requireNonNull(newName, "New name cannot be null");
+        requireNonNull(policy, "policy cannot be null");
+        requireNonNull(now, "now cannot be null");
 
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
@@ -195,7 +202,7 @@ public class Room {
 
         RoomName previousName = this.name;
         this.name = newName;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
         this.recordedEvents.add(new RoomRenamedEvent(
                 id, previousName, newName, this.updatedAt));
     }
@@ -211,8 +218,11 @@ public class Room {
      * @throws DuplicateRoomCodeException   if another room already owns the target coordinate
      * @throws DuplicateRoomNameException  if another room already owns the target name
      */
-    public void relocateTo(RoomLocation newLocation, RoomUniquenessPolicy policy) {
+    public void relocateTo(RoomLocation newLocation, RoomUniquenessPolicy policy,  Instant now) {
         requireNonNull(newLocation, "newLocation cannot be null");
+        requireNonNull(policy, "policy cannot be null");
+        requireNonNull(now, "now cannot be null");
+
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
                     "A deactivated room cannot be relocated; the deactivation is permanent.");
@@ -229,7 +239,7 @@ public class Room {
         }
         RoomLocation previousLocation = this.location;
         this.location = newLocation;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
         this.recordedEvents.add(new RoomRelocatedEvent(
                 id, previousLocation, newLocation, this.updatedAt));
     }
@@ -245,9 +255,10 @@ public class Room {
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
      * @throws RoomDomainException       if the new capacity is not a valid positive integer
      */
-    public void changeCapacity(RoomCapacity newCapacity) {
+    public void changeCapacity(RoomCapacity newCapacity, Instant now) {
         // Domain only null-checks the VO; value validity is enforced by the VO itself.
         requireNonNull(newCapacity, "New capacity cannot be null");
+        requireNonNull(now, "now cannot be null");
 
         if (state == RoomState.DEACTIVATED) {
             throw new IllegalRoomStateException(id, state, null,
@@ -261,7 +272,7 @@ public class Room {
 
         RoomCapacity previousCapacity = this.capacity;
         this.capacity = newCapacity;
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
         this.recordedEvents.add(new RoomCapacityChanged(id, previousCapacity, newCapacity, this.updatedAt));
     }
 

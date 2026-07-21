@@ -11,6 +11,9 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+
 /**
  * Use-case handler for changing a room's independent {@code code} (an int used only for FE ordering).
  * This is a silent mutation — the domain emits NO event. The {@code (building, floor, code)} uniqueness
@@ -26,10 +29,12 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
 
     private final RoomRepository roomRepository;
     private final RoomUniquenessPolicy uniquenessPolicy;
+    private final Clock clock;
 
-    ChangeRoomCodeCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy) {
+    ChangeRoomCodeCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy, Clock clock) {
         this.roomRepository = roomRepository;
         this.uniquenessPolicy = uniquenessPolicy;
+        this.clock = clock;
     }
 
     @Override
@@ -51,7 +56,8 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
         // Step 4 — Domain mutation (silent, no event). The aggregate enforces the (location, code) uniqueness
         //         invariant via the policy before mutating; then persist.
         RoomCode oldCode = room.code();
-        room.changeCode(newCode, uniquenessPolicy);
+        Instant now = Instant.now(clock);
+        room.changeCode(newCode, uniquenessPolicy, now);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldCode);
     }

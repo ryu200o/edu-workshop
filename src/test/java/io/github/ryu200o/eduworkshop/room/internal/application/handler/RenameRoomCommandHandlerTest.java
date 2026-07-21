@@ -12,6 +12,10 @@ import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNot
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,9 +41,15 @@ class RenameRoomCommandHandlerTest {
 
     @Mock
     private RoomUniquenessPolicy uniquenessPolicy;
+    private Clock clock;
+
+    @BeforeEach
+    void setUp() {
+        clock = Clock.fixed(Instant.parse("2026-07-21T10:00:00Z"), ZoneOffset.UTC);
+    }
 
     private RenameRoomCommandHandler handler() {
-        return new RenameRoomCommandHandler(roomRepository, uniquenessPolicy);
+        return new RenameRoomCommandHandler(roomRepository, uniquenessPolicy, clock);
     }
 
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
@@ -59,7 +69,7 @@ class RenameRoomCommandHandlerTest {
         RoomLocation location = RoomLocation.of("F", 2);
         Instant now = Instant.now();
         return Room.create(RoomId.generate(), RoomName.of("F-201"), location, RoomCode.of(1),
-                RoomCapacity.of(50), now, now, ALWAYS_UNIQUE);
+                RoomCapacity.of(50), now, ALWAYS_UNIQUE);
     }
 
     // ── Step 1: load failure ──
