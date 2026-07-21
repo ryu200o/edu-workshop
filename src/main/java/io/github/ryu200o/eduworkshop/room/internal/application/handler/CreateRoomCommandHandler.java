@@ -9,6 +9,7 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 
 /**
@@ -24,10 +25,12 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
 
     private final RoomRepository roomRepository;
     private final RoomUniquenessPolicy uniquenessPolicy;
+    private final Clock clock;
 
-    CreateRoomCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy) {
+    CreateRoomCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy, Clock clock) {
         this.roomRepository = roomRepository;
         this.uniquenessPolicy = uniquenessPolicy;
+        this.clock = clock;
     }
 
     @Override
@@ -39,10 +42,10 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
         RoomName name = RoomName.of(command.name());
         RoomCapacity capacity = RoomCapacity.of(command.capacity());
         RoomCode code = RoomCode.of(command.code());
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
 
         // Step 2 — Domain owns the global invariant: the aggregate enforces uniqueness via the policy.
-        Room room = Room.create(id, name, location, code, capacity, now, now, uniquenessPolicy);
+        Room room = Room.create(id, name, location, code, capacity, now, uniquenessPolicy);
 
         // Step 3 — Persist.
         Room saved = roomRepository.save(room);

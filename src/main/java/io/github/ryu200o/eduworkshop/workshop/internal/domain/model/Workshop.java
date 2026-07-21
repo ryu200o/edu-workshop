@@ -73,8 +73,7 @@ public class Workshop {
      * Factory: creates a new workshop in {@link WorkshopState#DRAFT} and emits a {@link WorkshopCreated}
      * event. Title/description are validated by their VOs; room/time/capacity are deliberately absent.
      */
-    public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description) {
-        Instant now = Instant.now();
+    public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description, Instant now) {
         Workshop workshop = new Workshop(
                 id, title, description,
                 null, null, null, null,
@@ -115,20 +114,19 @@ public class Workshop {
      * workshop that is already SCHEDULED (with identical or different data) is rejected; plan changes belong
      * to a future {@code reschedule()} transition. Emits {@link WorkshopScheduled} with the new values only.
      */
-    public void schedule(RoomReference room, Instant start, Instant end, WorkshopCapacity capacity) {
-        requireState(WorkshopState.DRAFT, "schedule");
+    public void schedule(RoomReference room, Instant start, Instant end, WorkshopCapacity capacity, Instant now) {
+        requireNonNull(room, "WorkShop room must be assigned before scheduling");
+        requireNonNull(capacity, "Workshop capacity must be set before scheduling");
+        requireNonNull(now, "Workshop now must be assigned before scheduling");
 
-        if (room == null) {
-            throw new WorkshopDomainException("Workshop room must be assigned before scheduling.");
-        }
         if (start == null || end == null) {
             throw new WorkshopDomainException("Workshop start and end time must be set before scheduling.");
         }
+
+        requireState(WorkshopState.DRAFT, "schedule");
+
         if (!end.isAfter(start)) {
             throw new WorkshopDomainException("Workshop end time must be after the start time.");
-        }
-        if(capacity == null) {
-            throw new WorkshopDomainException("Workshop capacity must be set before scheduling.");
         }
 
         this.roomReference = room;
@@ -136,7 +134,7 @@ public class Workshop {
         this.endTime = end;
         this.capacity = capacity;
         this.state = WorkshopState.SCHEDULED;
-        this.touch();
+        this.touch(now);
 
         record(new WorkshopScheduled(id, room, start, end, capacity, updatedAt));
     }
@@ -147,11 +145,12 @@ public class Workshop {
      * workshop already owns the room/time window) is performed by the Application layer BEFORE this method
      * is called; on conflict the aggregate is left unchanged. Emits {@link WorkshopPublished}.
      */
-    public void publish() {
+    public void publish(Instant now) {
+        requireNonNull(now, "Workshop now must be assigned before publishing");
         requireState(WorkshopState.SCHEDULED, "publish");
 
         this.state = WorkshopState.PUBLISHED;
-        this.touch();
+        this.touch(now);
 
         record(new WorkshopPublished(id, updatedAt));
     }
@@ -169,8 +168,8 @@ public class Workshop {
         }
     }
 
-    private void touch() {
-        this.updatedAt = Instant.now();
+    private void touch(Instant now) {
+        this.updatedAt = now;
     }
 
     private void record(WorkshopDomainEvent event) {

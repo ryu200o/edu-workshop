@@ -11,6 +11,9 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+
 /**
  * Use-case handler for relocating a room (changing its building/floor; code unchanged). The global
  * uniqueness invariant is enforced inside the aggregate through the injected domain
@@ -23,10 +26,12 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
     private final RoomRepository roomRepository;
     private final RoomUniquenessPolicy uniquenessPolicy;
+    private final Clock clock;
 
-    RelocateRoomCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy) {
+    RelocateRoomCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy, Clock clock) {
         this.roomRepository = roomRepository;
         this.uniquenessPolicy = uniquenessPolicy;
+        this.clock = clock;
     }
 
     @Override
@@ -48,7 +53,8 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
         // Step 4 — Domain mutation (keeps name/code, records RoomRelocatedEvent). The aggregate enforces the
         //         (location, code) and (location, name) invariants via the policy before mutating; then persist.
         RoomLocation oldLocation = room.location();
-        room.relocateTo(newLocation, uniquenessPolicy);
+        Instant now = Instant.now(clock);
+        room.relocateTo(newLocation, uniquenessPolicy, now);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldLocation);
     }

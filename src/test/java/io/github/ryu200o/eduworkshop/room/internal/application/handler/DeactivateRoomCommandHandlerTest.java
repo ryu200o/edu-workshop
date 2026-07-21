@@ -17,6 +17,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import org.junit.jupiter.api.BeforeEach;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,9 +38,15 @@ class DeactivateRoomCommandHandlerTest {
 
     @Mock
     private RoomRepository roomRepository;
+    private Clock clock;
+
+    @BeforeEach
+    void setUp() {
+        clock = Clock.fixed(Instant.parse("2026-07-21T10:00:00Z"), ZoneOffset.UTC);
+    }
 
     private DeactivateRoomCommandHandler handler() {
-        return new DeactivateRoomCommandHandler(roomRepository);
+        return new DeactivateRoomCommandHandler(roomRepository, clock);
     }
 
     private static Room existingRoom(RoomState state) {

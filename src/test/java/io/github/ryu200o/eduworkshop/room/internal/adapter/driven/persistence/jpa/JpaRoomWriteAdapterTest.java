@@ -54,7 +54,7 @@ class JpaRoomWriteAdapterTest {
         RoomName name = RoomName.of("F-201");
         Instant now = Instant.now();
         return Room.create(RoomId.generate(), name, location, RoomCode.of(1), RoomCapacity.of(50),
-                now, now, ALWAYS_UNIQUE);
+                now, ALWAYS_UNIQUE);
     }
 
     @Test
@@ -120,7 +120,7 @@ class JpaRoomWriteAdapterTest {
         assertThat(loaded).isPresent();
 
         Room room = loaded.get();
-        room.changeCode(RoomCode.of(99), ALWAYS_UNIQUE);
+        room.changeCode(RoomCode.of(99), ALWAYS_UNIQUE, Instant.now());
         roomRepository.save(room);
 
         Optional<Room> renamed = roomRepository.loadById(saved.id());
@@ -140,7 +140,7 @@ class JpaRoomWriteAdapterTest {
         // slipped past the policy's isCodeUnique (rào lần 1). The DB unique constraint (rào lần 2)
         // must reject it and the adapter must translate it into domain vocabulary.
         Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-202"), location,
-                RoomCode.of(1), RoomCapacity.of(50), Instant.now(), Instant.now(), ALWAYS_UNIQUE);
+                RoomCode.of(1), RoomCapacity.of(50), Instant.now(), ALWAYS_UNIQUE);
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
                 .isInstanceOf(DuplicateRoomCodeException.class)
@@ -156,7 +156,7 @@ class JpaRoomWriteAdapterTest {
 
         // Same name (different code) at the same location must collide on uk_rooms_building_floor_name.
         Room duplicate = Room.create(RoomId.of(UUID.randomUUID()), RoomName.of("F-201"), location,
-                RoomCode.of(2), RoomCapacity.of(50), Instant.now(), Instant.now(), ALWAYS_UNIQUE);
+                RoomCode.of(2), RoomCapacity.of(50), Instant.now(), ALWAYS_UNIQUE);
 
         assertThatThrownBy(() -> roomRepository.save(duplicate))
                 .isInstanceOf(DuplicateRoomNameException.class)
@@ -166,6 +166,6 @@ class JpaRoomWriteAdapterTest {
     private Room newPersistedRoom(RoomName name, RoomLocation location, int code) {
         Instant now = Instant.now();
         return roomRepository.save(Room.create(RoomId.generate(), name, location,
-                RoomCode.of(code), RoomCapacity.of(50), now, now, ALWAYS_UNIQUE));
+                RoomCode.of(code), RoomCapacity.of(50), now, ALWAYS_UNIQUE));
     }
 }

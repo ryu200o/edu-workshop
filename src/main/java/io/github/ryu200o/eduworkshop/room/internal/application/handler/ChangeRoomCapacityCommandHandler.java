@@ -10,6 +10,9 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+
 /**
  * Use-case handler for changing a room's capacity. Enforces the guard pipeline in performance order:
  * load (write side) → RAM (self-defense on the new capacity) → idempotency → domain mutation → persist.
@@ -19,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapacityCommand, ChangeRoomCapacityCommand.Result> {
 
     private final RoomRepository roomRepository;
+    private final Clock clock;
 
-    ChangeRoomCapacityCommandHandler(RoomRepository roomRepository) {
+    ChangeRoomCapacityCommandHandler(RoomRepository roomRepository,  Clock clock) {
         this.roomRepository = roomRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -40,7 +45,8 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
 
         // Step 3 — Domain mutation (records RoomCapacityChanged) then persist.
         RoomCapacity oldCapacity = room.capacity();
-        room.changeCapacity(newCapacity);
+        Instant now = Instant.now(clock);
+        room.changeCapacity(newCapacity, now);
         Room saved = roomRepository.save(room);
         return toResult(saved, oldCapacity);
     }
