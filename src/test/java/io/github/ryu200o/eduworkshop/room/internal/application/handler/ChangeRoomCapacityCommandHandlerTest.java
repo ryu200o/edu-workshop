@@ -3,9 +3,10 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
@@ -42,7 +43,7 @@ class ChangeRoomCapacityCommandHandlerTest {
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
     private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
         @Override
-        public boolean isCodeUnique(RoomLocation location, int code) {
+        public boolean isCodeUnique(RoomLocation location, RoomCode code) {
             return true;
         }
 
@@ -54,7 +55,9 @@ class ChangeRoomCapacityCommandHandlerTest {
 
     private static Room existingRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
-        return Room.create(RoomName.of("F-201"), location, 1, 50, ALWAYS_UNIQUE);
+        Instant now = Instant.now();
+        return Room.create(RoomId.generate(), RoomName.of("F-201"), location, RoomCode.of(1),
+                RoomCapacity.of(50), now, now, ALWAYS_UNIQUE);
     }
 
     // ── Step 1: load failure ──
@@ -69,17 +72,17 @@ class ChangeRoomCapacityCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── capacity invariant: the DOMAIN (Room.changeCapacity) rejects non-positive capacity ──
-    // (Double-guard removed in refactor: handler no longer re-checks capacity>0, domain is the single source.)
+    // ── capacity invariant: owned by the RoomCapacity VO. The handler builds the VO from the command,
+    //    so a non-positive value is rejected when the VO self-validates (IllegalArgumentException). ──
     @Test
     void domainRejectsNonPositiveCapacity_withoutSaving() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 0)))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> handler().handle(new ChangeRoomCapacityCommand(room.id().value(), -3)))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verify(roomRepository, never()).save(any());
     }
@@ -90,7 +93,7 @@ class ChangeRoomCapacityCommandHandlerTest {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
         Room room = Room.reconstruct(
                 RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
-                RoomLocation.of("F", 2), 1, 50, RoomState.ACTIVE,
+                RoomLocation.of("F", 2), RoomCode.of(1), RoomCapacity.of(50), RoomState.ACTIVE,
                 Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
@@ -115,7 +118,7 @@ class ChangeRoomCapacityCommandHandlerTest {
         verify(roomRepository).save(captor.capture());
         Room saved = captor.getValue();
 
-        assertThat(saved.capacity()).isEqualTo(80);
+        assertThat(saved.capacity()).isEqualTo(RoomCapacity.of(80));
         assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomCapacityChanged);
         assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldCapacity()).isEqualTo(50);
