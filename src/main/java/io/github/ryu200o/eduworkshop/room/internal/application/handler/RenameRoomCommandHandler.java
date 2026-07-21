@@ -56,8 +56,8 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
     private static RenameRoomCommand.Result toResult(Room room,RoomName oldName) {
         return new RenameRoomCommand.Result(
                 room.id().value(),
-                oldName.asString(),
-                room.name().asString(),
+                oldName.value(),
+                room.name().value(),
                 room.updatedAt());
     }
 }

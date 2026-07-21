@@ -8,7 +8,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
@@ -83,7 +82,7 @@ class RenameRoomCommandHandlerTest {
         when(roomRepository.loadById(id)).thenReturn(Optional.of(existingRoom()));
 
         assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(id.value(), "")))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verify(roomRepository).loadById(any());
         verify(roomRepository, never()).save(any());

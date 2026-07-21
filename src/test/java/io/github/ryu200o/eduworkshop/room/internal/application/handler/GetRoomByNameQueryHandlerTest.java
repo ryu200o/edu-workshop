@@ -3,7 +3,6 @@ package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByNameQuery;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import org.junit.jupiter.api.Test;
@@ -45,7 +44,7 @@ class GetRoomByNameQueryHandlerTest {
     @Test
     void blankName_rejectedInRam_beforeTouchingPort() {
         assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("   ")))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(roomReader);
     }
@@ -63,7 +62,7 @@ class GetRoomByNameQueryHandlerTest {
     @Test
     void blankName_neverCallsPort() {
         assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("")))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verify(roomReader, never()).findByName(any());
     }

@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model.value;
 
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,21 +20,21 @@ class RoomLocationTest {
     @Test
     void of_rejectsNonPositiveFloor() {
         assertThatThrownBy(() -> RoomLocation.of("F", 0))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> RoomLocation.of("F", -1))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void of_rejectsBlankBuilding() {
         assertThatThrownBy(() -> RoomLocation.of("   ", 2))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void of_rejectsBuildingContainingDot() {
         assertThatThrownBy(() -> RoomLocation.of("F.B", 2))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

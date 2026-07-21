@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-07-19 (revised; supersedes the earlier factory-based framing of ADR 0005)
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** ADR 0002, ADR 0003, ADR 0004, `.AGENTS.md`, `docs/db/database.md`
+- **Related:** ADR 0002, ADR 0003, ADR 0004, `AGENTS.md`, `docs/db/database.md`
 
 ## Context
 

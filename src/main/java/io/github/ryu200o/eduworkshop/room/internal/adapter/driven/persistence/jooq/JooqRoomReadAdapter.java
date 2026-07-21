@@ -55,7 +55,7 @@ class JooqRoomReadAdapter implements RoomReader {
                         ROOMS.BUILDING,
                         ROOMS.FLOOR)
                 .from(ROOMS)
-                .where(ROOMS.NAME.eq(name.asString()))
+                .where(ROOMS.NAME.eq(name.value()))
                 .fetchOptional()
                 .map(JooqRoomReadAdapter::toSummaryView);
     }

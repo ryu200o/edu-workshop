@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-07-18) — supersedes ADR 0002 §5
 - **Date:** 2026-07-18
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** ADR 0002 (§5 superseded), ADR 0001, `docs/architecture/development-guidelines.md`, `.AGENTS.md`, PR #17
+- **Related:** ADR 0002 (§5 superseded), ADR 0001, `docs/architecture/development-guidelines.md`, `AGENTS.md`, PR #17
 
 ---
 

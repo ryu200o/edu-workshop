@@ -29,6 +29,6 @@ class JpaRoomUniquenessPolicy implements RoomUniquenessPolicy {
 
     @Override
     public boolean isNameUnique(RoomLocation location, RoomName name) {
-        return !repository.existsByBuildingAndFloorAndName(location.building(), location.floor(), name.asString());
+        return !repository.existsByBuildingAndFloorAndName(location.building(), location.floor(), name.value());
     }
 }

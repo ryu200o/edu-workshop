@@ -1,4 +1,4 @@
-# .AGENTS.md — Agent System Instructions
+# AGENTS.md — Agent System Instructions
 
 This file defines the behavioral rules and architecture conventions that AI agents (and contributors)
 MUST follow when working in this repository. Read it before making changes.
@@ -75,6 +75,14 @@ Consult these before designing or coding. They are the source of truth:
   The Factory framing was dropped, but the policy is the current standard — follow this ADR.
 - `docs/architecture/adr/0006-shared-command-query-bus.md` — Shared Command/Query Bus (supersedes ADR 0002 §5):
   shared kernel owns the bus; modules own Commands/Queries/Handlers.
+- `docs/architecture/adr/0007-cross-module-data-decoupling-via-selective-snapshotting.md` — **Proposed**:
+  Workshop decouples from Room via logical `room_id` UUID + selective `room_name_snapshot` /
+  `room_location_snapshot` columns (no physical FK / cross-module JOIN); proactive sync via `RoomExposeAPI`,
+  reactive sync deferred until Room events are published.
+- `docs/architecture/adr/0008-room-allocation-policy-planning-vs-reservation.md` — **Proposed**: Room
+  allocation is *planning* at `SCHEDULED` (no exclusive reservation; overlapping schedules allowed) and
+  *reservation* only at `PUBLISHED` (publish-time conflict check in Application layer). Room Availability
+  has 3 states (AVAILABLE / AVAILABLE_WITH_PLANNING_CONFLICT / OCCUPIED); aggregate stays pure.
 - `docs/architecture/adr/0009-vo-purity-conditional-field-objectification.md` — **Proposed**: VO Purity
   standard. Conditional fields → self-validating VO; unconditional fields → keep primitive; domain only
   null-checks VOs (no business-rule re-checks); Application only builds VOs + calls domain. Global/set-based

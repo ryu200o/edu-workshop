@@ -12,6 +12,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 public class DuplicateRoomNameException extends RoomDomainException {
 
     public DuplicateRoomNameException(RoomLocation location, RoomName name) {
-        super("A room named '" + name.asString() + "' already exists at " + location.asString() + ".");
+        super("A room named '" + name.value() + "' already exists at " + location.asString() + ".");
     }
 }

@@ -5,7 +5,6 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepo
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
@@ -46,7 +45,7 @@ class CreateRoomCommandHandlerTest {
         CreateRoomCommand badName = new CreateRoomCommand("F", 2, 1, "", 50);
 
         assertThatThrownBy(() -> handler().handle(badName))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(roomRepository, uniquenessPolicy);
     }
@@ -67,7 +66,7 @@ class CreateRoomCommandHandlerTest {
         CreateRoomCommand badFloor = new CreateRoomCommand("F", 0, 1, "F-201", 50);
 
         assertThatThrownBy(() -> handler().handle(badFloor))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(roomRepository, uniquenessPolicy);
     }

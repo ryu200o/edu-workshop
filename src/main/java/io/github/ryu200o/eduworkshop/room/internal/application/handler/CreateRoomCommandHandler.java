@@ -46,6 +46,6 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
 
         // Step 3 — Persist.
         Room saved = roomRepository.save(room);
-        return new CreateRoomCommand.Result(saved.id().value(), saved.name().asString());
+        return new CreateRoomCommand.Result(saved.id().value(),                 saved.name().value());
     }
 }
