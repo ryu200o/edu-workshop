@@ -23,10 +23,10 @@ import java.util.List;
  * <p>Lifecycle (this slice): {@code DRAFT → SCHEDULED → PUBLISHED}.</p>
  *
  * <ul>
- *   <li>{@code DRAFT}: title/description set, no room/time/capacity yet.</li>
- *   <li>{@code SCHEDULED}: room/time/capacity assigned and locally validated. Per ADR 0008 this is
- *       <em>planning</em> — it does NOT reserve the room, and overlapping schedules for the same room are
- *       allowed. No cross-workshop / room-availability check is performed here.</li>
+ *   <li>{@code DRAFT}: title, description, start/end time and capacity are known; only room is missing.</li>
+ *   <li>{@code SCHEDULED}: room assigned. Per ADR 0008 this is <em>planning</em> — it does NOT reserve
+ *       the room, and overlapping schedules for the same room are allowed. No cross-workshop / room-availability
+ *       check is performed here.</li>
  *   <li>{@code PUBLISHED}: the room is <em>reserved</em>. The global room-availability conflict check is a
  *       system-wide invariant owned by the Application layer (enforced before calling {@code publish()});
  *       the aggregate itself only guards the state transition.</li>
@@ -61,9 +61,9 @@ public class Workshop {
         this.title = requireNonNull(title, "WorkshopTitle cannot be null");
         this.description = requireNonNull(description, "WorkshopDescription cannot be null");
         this.roomReference = roomReference;
-        this.startTime = startTime;
-        this.endTime = endTime;
-        this.capacity = capacity;
+        this.startTime = requireNonNull(startTime, "startTime cannot be null");
+        this.endTime = requireNonNull(endTime, "endTime cannot be null");
+        this.capacity = requireNonNull(capacity, "capacity cannot be null");
         this.state = requireNonNull(state, "WorkshopState cannot be null");
         this.createdAt = requireNonNull(createdAt, "CreatedAt cannot be null");
         this.updatedAt = requireNonNull(updatedAt, "UpdatedAt cannot be null");
@@ -71,14 +71,19 @@ public class Workshop {
 
     /**
      * Factory: creates a new workshop in {@link WorkshopState#DRAFT} and emits a {@link WorkshopCreated}
-     * event. Title/description are validated by their VOs; room/time/capacity are deliberately absent.
+     * event. Title, description, time window and capacity are known at this point; only room is absent
+     * (assigned later via {@link #schedule(RoomReference, Instant)}).
      */
-    public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description, Instant now) {
+    public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description,
+                                   Instant startTime, Instant endTime, WorkshopCapacity capacity, Instant now) {
+        if (!endTime.isAfter(startTime)) {
+            throw new WorkshopDomainException("endTime must be after startTime");
+        }
         Workshop workshop = new Workshop(
                 id, title, description,
-                null, null, null, null,
+                null, startTime, endTime, capacity,
                 WorkshopState.DRAFT, now, now);
-        workshop.record(new WorkshopCreated(id.value(), id, now));
+        workshop.record(new WorkshopCreated(id.value(), id, startTime, endTime, capacity, now));
         return workshop;
     }
 
@@ -101,42 +106,24 @@ public class Workshop {
     }
 
     /**
-     * Transitions DRAFT → SCHEDULED. Establishes the planning data and validates the <em>local</em>
-     * invariants only:
-     * <ol>
-     *   <li>room must be assigned (not null),</li>
-     *   <li>start/end must be present,</li>
-     *   <li>end must be strictly after start,</li>
-     *   <li>capacity is validated by {@link WorkshopCapacity} at construction.</li>
-     * </ol>
-     * This is a planning act — it does NOT check room availability against other workshops (that is a
-     * global invariant enforced at publish time by the Application layer, per ADR 0008). Re-scheduling a
-     * workshop that is already SCHEDULED (with identical or different data) is rejected; plan changes belong
-     * to a future {@code reschedule()} transition. Emits {@link WorkshopScheduled} with the new values only.
+     * Transitions DRAFT → SCHEDULED. Assigns a room to this workshop (planning act, not reservation —
+     * see ADR 0008). Room/time/capacity are locally validated (start/end/capacity were already set
+     * at creation). This is a planning act — it does NOT check room availability against other workshops
+     * (that is a global invariant enforced at publish time by the Application layer). Re-scheduling a
+     * workshop that is already SCHEDULED is rejected; plan changes belong to a future {@code reschedule()}
+     * transition. Emits {@link WorkshopScheduled}.
      */
-    public void schedule(RoomReference room, Instant start, Instant end, WorkshopCapacity capacity, Instant now) {
-        requireNonNull(room, "WorkShop room must be assigned before scheduling");
-        requireNonNull(capacity, "Workshop capacity must be set before scheduling");
-        requireNonNull(now, "Workshop now must be assigned before scheduling");
-
-        if (start == null || end == null) {
-            throw new WorkshopDomainException("Workshop start and end time must be set before scheduling.");
-        }
+    public void schedule(RoomReference room, Instant now) {
+        requireNonNull(room, "room must be assigned before scheduling");
+        requireNonNull(now, "now cannot be null");
 
         requireState(WorkshopState.DRAFT, "schedule");
 
-        if (!end.isAfter(start)) {
-            throw new WorkshopDomainException("Workshop end time must be after the start time.");
-        }
-
         this.roomReference = room;
-        this.startTime = start;
-        this.endTime = end;
-        this.capacity = capacity;
         this.state = WorkshopState.SCHEDULED;
         this.touch(now);
 
-        record(new WorkshopScheduled(id, room, start, end, capacity, updatedAt));
+        record(new WorkshopScheduled(id, room, updatedAt));
     }
 
     /**

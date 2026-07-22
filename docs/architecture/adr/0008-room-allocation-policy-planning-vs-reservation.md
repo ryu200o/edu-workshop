@@ -39,8 +39,8 @@ implementations converge.
 
 When a workshop enters `SCHEDULED`:
 
-- `room` (via `RoomReference`), `startTime`, `endTime`, `capacity` are fully assigned and locally validated by
-  the aggregate (room != null, `end.isAfter(start)`, capacity > 0 — see `Workshop.schedule()`).
+- Only `room` (via `RoomReference`) is assigned. `startTime`, `endTime`, `capacity` are already known at
+  creation time (DRAFT), so they are not re-validated at `schedule()` — only room non-null is enforced.
 
 However, `SCHEDULED` **does NOT grant exclusive ownership** of the room. Multiple workshops may legitimately
 exist in `SCHEDULED` for the **same room and overlapping time window**.

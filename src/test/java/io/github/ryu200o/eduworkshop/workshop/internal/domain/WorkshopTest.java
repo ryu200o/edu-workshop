@@ -42,6 +42,10 @@ class WorkshopTest {
         return WorkshopDescription.of("Hands-on intro to Spring Modulith.");
     }
 
+    private Workshop createDraft() {
+        return Workshop.create(newId(), title(), description(), START, END, CAPACITY, NOW);
+    }
+
     // ----------------------------------------------------------------
     // create
     // ----------------------------------------------------------------
@@ -49,25 +53,38 @@ class WorkshopTest {
     @Test
     void create_producesDraftWithCreatedEvent() {
         WorkshopId id = newId();
-        Workshop workshop = Workshop.create(id, title(), description(), NOW);
+        Workshop workshop = Workshop.create(id, title(), description(), START, END, CAPACITY, NOW);
 
         assertThat(workshop.id()).isEqualTo(id);
         assertThat(workshop.state()).isEqualTo(WorkshopState.DRAFT);
         assertThat(workshop.title().value()).isEqualTo("Spring Boot Workshop");
         assertThat(workshop.description().value()).isEqualTo("Hands-on intro to Spring Modulith.");
         assertThat(workshop.roomReference()).isNull();
-        assertThat(workshop.startTime()).isNull();
-        assertThat(workshop.capacity()).isNull();
+        assertThat(workshop.startTime()).isEqualTo(START);
+        assertThat(workshop.endTime()).isEqualTo(END);
+        assertThat(workshop.capacity()).isEqualTo(CAPACITY);
 
         assertThat(workshop.recordedEvents())
                 .hasSize(1)
                 .hasOnlyElementsOfType(WorkshopCreated.class);
+
+        WorkshopCreated event = (WorkshopCreated) workshop.recordedEvents().get(0);
+        assertThat(event.startTime()).isEqualTo(START);
+        assertThat(event.endTime()).isEqualTo(END);
+        assertThat(event.capacity()).isEqualTo(CAPACITY);
     }
 
     @Test
     void create_rejectsBlankTitle() {
-        assertThatThrownBy(() -> Workshop.create(newId(), WorkshopTitle.of("   "), description(), NOW))
+        assertThatThrownBy(() -> Workshop.create(newId(), WorkshopTitle.of("   "), description(), START, END, CAPACITY, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void create_rejectsEndNotAfterStart() {
+        assertThatThrownBy(() -> Workshop.create(newId(), title(), description(), START, END_BEFORE_START, CAPACITY, NOW))
+                .isInstanceOf(WorkshopDomainException.class)
+                .hasMessageContaining("after startTime");
     }
 
     // ----------------------------------------------------------------
@@ -75,13 +92,15 @@ class WorkshopTest {
     // ----------------------------------------------------------------
 
     @Test
-    void schedule_fromDraft_assignsDataAndEmitsScheduled() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
+    void schedule_fromDraft_assignsRoomAndEmitsScheduled() {
+        Workshop workshop = createDraft();
 
-        workshop.schedule(ROOM, START, END, CAPACITY, NOW);
+        workshop.schedule(ROOM, NOW);
 
         assertThat(workshop.state()).isEqualTo(WorkshopState.SCHEDULED);
         assertThat(workshop.roomReference()).isEqualTo(ROOM);
+
+        // Time/capacity unchanged from creation
         assertThat(workshop.startTime()).isEqualTo(START);
         assertThat(workshop.endTime()).isEqualTo(END);
         assertThat(workshop.capacity()).isEqualTo(CAPACITY);
@@ -93,9 +112,6 @@ class WorkshopTest {
         WorkshopScheduled event = (WorkshopScheduled) workshop.recordedEvents().get(1);
         assertThat(event.workshopId()).isEqualTo(workshop.id());
         assertThat(event.roomReference()).isEqualTo(ROOM);
-        assertThat(event.startTime()).isEqualTo(START);
-        assertThat(event.endTime()).isEqualTo(END);
-        assertThat(event.capacity()).isEqualTo(CAPACITY);
         assertThat(event.occurredAt()).isNotNull();
     }
 
@@ -103,12 +119,12 @@ class WorkshopTest {
     void schedule_preventsOverlappingSchedulingByAllowingIt() {
         // ADR 0008: SCHEDULED is planning-only. Two workshops may share a room + overlap.
         // This test asserts the aggregate does NOT reject such a schedule (conflict is a publish-time concern).
-        Workshop a = Workshop.create(newId(), title(), description(), NOW);
-        Workshop b = Workshop.create(newId(), WorkshopTitle.of("Other WS"), description(), NOW);
+        Workshop a = createDraft();
+        Workshop b = Workshop.create(newId(), WorkshopTitle.of("Other WS"), description(), START, END, CAPACITY, NOW);
         RoomReference sameRoom = RoomReference.of(ROOM.roomId(), "Room 201", "Floor 2");
 
-        a.schedule(sameRoom, START, END, CAPACITY, NOW);
-        b.schedule(sameRoom, START, END, CAPACITY, NOW);
+        a.schedule(sameRoom, NOW);
+        b.schedule(sameRoom, NOW);
 
         assertThat(a.state()).isEqualTo(WorkshopState.SCHEDULED);
         assertThat(b.state()).isEqualTo(WorkshopState.SCHEDULED);
@@ -116,42 +132,20 @@ class WorkshopTest {
 
     @Test
     void schedule_rejectsNullRoom() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
+        Workshop workshop = createDraft();
 
-        assertThatThrownBy(() -> workshop.schedule(null, START, END, CAPACITY, NOW))
+        assertThatThrownBy(() -> workshop.schedule(null, NOW))
                 .isInstanceOf(WorkshopDomainException.class)
                 .hasMessageContaining("room must be assigned");
     }
 
     @Test
-    void schedule_rejectsNullTime() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
-
-        assertThatThrownBy(() -> workshop.schedule(ROOM, null, END, CAPACITY, NOW))
-                .isInstanceOf(WorkshopDomainException.class)
-                .hasMessageContaining("start and end time");
-
-        assertThatThrownBy(() -> workshop.schedule(ROOM, START, null, CAPACITY, NOW))
-                .isInstanceOf(WorkshopDomainException.class)
-                .hasMessageContaining("start and end time");
-    }
-
-    @Test
-    void schedule_rejectsEndNotAfterStart() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
-
-        assertThatThrownBy(() -> workshop.schedule(ROOM, START, END_BEFORE_START, CAPACITY, NOW))
-                .isInstanceOf(WorkshopDomainException.class)
-                .hasMessageContaining("after the start time");
-    }
-
-    @Test
     void schedule_rejectsNonDraftState() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
-        workshop.schedule(ROOM, START, END, CAPACITY, NOW);
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, NOW);
 
-        // Already SCHEDULED — re-schedule (same or different data) must be rejected.
-        assertThatThrownBy(() -> workshop.schedule(ROOM, START, END, CAPACITY, NOW))
+        // Already SCHEDULED — re-schedule must be rejected.
+        assertThatThrownBy(() -> workshop.schedule(ROOM, NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class)
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
@@ -174,8 +168,8 @@ class WorkshopTest {
 
     @Test
     void publish_fromScheduled_reservesAndEmitsPublished() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
-        workshop.schedule(ROOM, START, END, CAPACITY, NOW);
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, NOW);
 
         workshop.publish(NOW);
 
@@ -190,7 +184,7 @@ class WorkshopTest {
 
     @Test
     void publish_fromDraft_isRejected() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
+        Workshop workshop = createDraft();
 
         assertThatThrownBy(() -> workshop.publish(NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class)
@@ -205,8 +199,8 @@ class WorkshopTest {
     void publish_doesNotRevalidateRoomTimeCapacity() {
         // The aggregate trusts schedule()'s invariants; publish() only transitions state.
         // (Global availability conflict is an Application-layer concern, not enforced here.)
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
-        workshop.schedule(ROOM, START, END, CAPACITY, NOW);
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, NOW);
 
         workshop.publish(NOW);
 
@@ -222,8 +216,8 @@ class WorkshopTest {
 
     @Test
     void publish_twiceFromScheduled_isRejected() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
-        workshop.schedule(ROOM, START, END, CAPACITY, NOW);
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, NOW);
         workshop.publish(NOW);
 
         assertThatThrownBy(() -> workshop.publish(NOW))
@@ -232,10 +226,10 @@ class WorkshopTest {
 
     @Test
     void updatedAt_advancesOnTransition() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
+        Workshop workshop = createDraft();
         Instant created = workshop.updatedAt();
 
-        workshop.schedule(ROOM, START, END, CAPACITY, NOW);
+        workshop.schedule(ROOM, NOW);
         assertThat(workshop.updatedAt()).isAfterOrEqualTo(created);
 
         Instant scheduledUpdate = workshop.updatedAt();
@@ -245,7 +239,7 @@ class WorkshopTest {
 
     @Test
     void recordedEvents_areClearable() {
-        Workshop workshop = Workshop.create(newId(), title(), description(), NOW);
+        Workshop workshop = createDraft();
         assertThat(workshop.recordedEvents()).isNotEmpty();
 
         workshop.clearDomainEvents();
