@@ -13,10 +13,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
  * Centralized error handling for the Workshop module's HTTP driving adapters. Scoped strictly to the
- * Workshop write controller via {@code assignableTypes} so business-specific translations never leak
+ * Workshop controllers via {@code assignableTypes} so business-specific translations never leak
  * into the shared kernel — preserving module encapsulation per Spring Modulith.
  */
-@RestControllerAdvice(assignableTypes = {WorkshopCommandController.class})
+@RestControllerAdvice(assignableTypes = {WorkshopCommandController.class, WorkshopQueryController.class})
 class WorkshopExceptionAdvice {
 
     @ExceptionHandler(InvalidWorkshopStateException.class)
