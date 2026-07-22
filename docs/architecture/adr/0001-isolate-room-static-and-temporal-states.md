@@ -32,7 +32,7 @@ The Room module **owns and persists ONLY the static/physical state** of a venue.
 
 Dynamic availability is computed at runtime by the *consumer* module (Workshop) by intersecting a
 room's physical `ACTIVE` state with the published workshop timeline. Cross-module communication uses
-logical UUID references and the `module_api` driving adapter — no shared temporal state.
+logical UUID references and the `facade` driving adapter — no shared temporal state.
 
 This is enforced as a hard architectural rule in `AGENTS.md` and as the schema source of truth in
 `docs/db/database.md` (the `rooms.state` column).

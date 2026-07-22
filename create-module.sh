@@ -63,7 +63,7 @@ DIRS=(
   "internal/application/handler"
   "internal/application/event"
   "internal/application/mapper"
-  "internal/adapter/driving/module_api"
+  "internal/facade"
   "internal/adapter/driving/http"
   "internal/adapter/driven/persistence"
 )
@@ -86,16 +86,17 @@ public interface $API_IFACE {
 }
 EOF
 
-# --- Generate ExposeAPIImpl (package-private, module_api adapter) -----------
-API_IMPL_FILE="$MODULE_ROOT/internal/adapter/driving/module_api/$API_IMPL.java"
+# --- Generate ExposeAPIImpl (package-private, Module Facade in internal/facade/) -----------
+API_IMPL_FILE="$MODULE_ROOT/internal/facade/$API_IMPL.java"
 cat > "$API_IMPL_FILE" <<EOF
-package $MOD_PKG.internal.adapter.driving.module_api;
+package $MOD_PKG.internal.facade;
 
 import $MOD_PKG.$API_IFACE;
 
 /**
- * Package-private implementation of {@link $API_IFACE}.
- * Resides inside the information-hiding boundary (internal/.../module_api).
+ * Package-private implementation of {@link $API_IFACE} — the Module Facade for ${MODULE_NAME}.
+ * Resides inside the information-hiding boundary (internal/facade/). Coordinates directly
+ * with application ports — no Command/Query Bus involved (per ADR 0010).
  */
 class $API_IMPL implements $API_IFACE {
 }
@@ -103,4 +104,4 @@ EOF
 
 echo "Created module '$MODULE_NAME' at $MODULE_ROOT"
 echo "  - $API_IFACE.java (public interface, module root)"
-echo "  - internal/adapter/driving/module_api/$API_IMPL.java (package-private impl)"
+echo "  - internal/facade/$API_IMPL.java (package-private Module Facade impl)"
