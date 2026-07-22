@@ -15,6 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 
+/**
+ * Handler for {@link CreateWorkshopCommand}. Validates raw input into domain value objects,
+ * delegates to {@link Workshop#create(WorkshopId, WorkshopTitle, WorkshopDescription, Instant, Instant, WorkshopCapacity, Instant)},
+ * persists via {@link WorkshopRepository}, and returns a lightweight result.
+ */
 @Component
 class CreateWorkshopCommandHandler implements CommandHandler<CreateWorkshopCommand, CreateWorkshopCommand.Result> {
 

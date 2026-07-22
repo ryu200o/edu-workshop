@@ -10,13 +10,13 @@ package io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception;
  * therefore lives in {@code workshop.internal.application.exception} (extending the shared
  * {@code ResourceNotFoundException}). The domain never imports it.</p>
  */
-public class WorkshopDomainException extends RuntimeException {
+public abstract class WorkshopDomainException extends RuntimeException {
 
-    public WorkshopDomainException(String message) {
+    protected WorkshopDomainException(String message) {
         super(message);
     }
 
-    public WorkshopDomainException(String message, Throwable cause) {
+    protected WorkshopDomainException(String message, Throwable cause) {
         super(message, cause);
     }
 }

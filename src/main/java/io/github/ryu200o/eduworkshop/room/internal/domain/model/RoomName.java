@@ -1,5 +1,10 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
+/**
+ * Value object for a room's free-form display name. Normalized to uppercase+trim on construction.
+ * Invariant: non-blank. Name uniqueness at the (building, floor) level is a global invariant
+ * enforced by the domain policy and the DB unique constraint.
+ */
 public record RoomName(String value) {
 
     public RoomName {

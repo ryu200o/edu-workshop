@@ -135,7 +135,7 @@ class WorkshopTest {
         Workshop workshop = createDraft();
 
         assertThatThrownBy(() -> workshop.schedule(null, NOW))
-                .isInstanceOf(WorkshopDomainException.class)
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("room must be assigned");
     }
 

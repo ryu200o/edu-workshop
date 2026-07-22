@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.driven.persistence.jpa;
 
+import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopPersistenceException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
@@ -8,11 +9,17 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDesc
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
-import java.util.UUID;
 
+/**
+ * JPA-backed driven adapter implementing the Workshop write port ({@link WorkshopRepository}). Handles
+ * aggregate mutation and load. Domain ↔ entity mapping is performed entirely here, keeping the domain
+ * framework-free. Persistence failures are wrapped in {@link WorkshopPersistenceException}.
+ * Package-private; hidden inside the module's {@code internal} boundary.
+ */
 @Component
 class JpaWorkshopWriteAdapter implements WorkshopRepository {
 
@@ -24,8 +31,15 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
 
     @Override
     public Workshop save(Workshop workshop) {
-        repository.saveAndFlush(toEntity(workshop));
-        return workshop;
+        try {
+            repository.saveAndFlush(toEntity(workshop));
+            return workshop;
+        } catch (DataIntegrityViolationException ex) {
+            throw new WorkshopPersistenceException(
+                    "Failed to persist workshop.",
+                    ex
+            );
+        }
     }
 
     @Override

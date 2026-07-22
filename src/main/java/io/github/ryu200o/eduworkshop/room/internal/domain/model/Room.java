@@ -253,7 +253,8 @@ public class Room {
      * persistence layer, so the write path owns the full state transition before it is persisted.</p>
      *
      * @throws IllegalRoomStateException if the room is {@link RoomState#DEACTIVATED} (permanently frozen)
-     * @throws RoomDomainException       if the new capacity is not a valid positive integer
+     * @throws IllegalArgumentException  if the new capacity is not a valid positive integer (raised by
+     *                                   the self-validating {@link RoomCapacity} value object)
      */
     public void changeCapacity(RoomCapacity newCapacity, Instant now) {
         // Domain only null-checks the VO; value validity is enforced by the VO itself.
@@ -278,7 +279,7 @@ public class Room {
 
     private static <T> T requireNonNull(T obj, String message) {
         if (obj == null) {
-            throw new RoomDomainException(message);
+            throw new IllegalArgumentException(message);
         }
         return obj;
     }

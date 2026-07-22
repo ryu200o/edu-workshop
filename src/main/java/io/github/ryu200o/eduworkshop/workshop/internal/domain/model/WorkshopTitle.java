@@ -1,5 +1,8 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.domain.model;
 
+/**
+ * Value object for a workshop's title. Invariants: non-blank, at most 200 characters.
+ */
 public record WorkshopTitle(String value) {
 
     private static final int MAX_LENGTH = 200;

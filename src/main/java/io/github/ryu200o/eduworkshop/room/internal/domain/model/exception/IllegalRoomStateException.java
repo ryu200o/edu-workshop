@@ -9,7 +9,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
  * <p>Example: attempting to place a {@link RoomState#DEACTIVATED} room under maintenance,
  * or trying to reactivate a permanently deactivated room.</p>
  */
-public class IllegalRoomStateException extends RoomDomainException {
+public final class IllegalRoomStateException extends RoomDomainException {
 
     private final RoomId roomId;
     private final RoomState currentState;
