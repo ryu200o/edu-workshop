@@ -10,7 +10,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopStat
  * {@code reschedule()} slice), or calling {@code publish()} on a workshop that is not SCHEDULED
  * (e.g. still DRAFT).</p>
  */
-public class InvalidWorkshopStateException extends WorkshopDomainException {
+public final class InvalidWorkshopStateException extends WorkshopDomainException {
 
     private final WorkshopId workshopId;
     private final WorkshopState currentState;

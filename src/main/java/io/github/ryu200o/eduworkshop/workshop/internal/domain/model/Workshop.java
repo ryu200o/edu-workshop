@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -77,7 +77,7 @@ public class Workshop {
     public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description,
                                    Instant startTime, Instant endTime, WorkshopCapacity capacity, Instant now) {
         if (!endTime.isAfter(startTime)) {
-            throw new WorkshopDomainException("endTime must be after startTime");
+            throw new InvalidWorkshopTimeRangeException("endTime must be after startTime");
         }
         Workshop workshop = new Workshop(
                 id, title, description,
@@ -221,7 +221,7 @@ public class Workshop {
 
     private static <T> T requireNonNull(T obj, String message) {
         if (obj == null) {
-            throw new WorkshopDomainException(message);
+            throw new IllegalArgumentException(message);
         }
         return obj;
     }

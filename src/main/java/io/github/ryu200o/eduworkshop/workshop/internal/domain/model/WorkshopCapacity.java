@@ -1,5 +1,8 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.domain.model;
 
+/**
+ * Value object for a workshop's maximum participant capacity. Invariant: must be a positive integer.
+ */
 public record WorkshopCapacity(int value) {
 
     public WorkshopCapacity {

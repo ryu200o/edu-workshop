@@ -1,10 +1,11 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomPersistenceException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
-import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -51,6 +52,12 @@ class RoomExceptionAdvice {
     @ExceptionHandler(RoomDomainException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     String handleDomain(RoomDomainException ex) {
+        return ex.getMessage();
+    }
+
+    @ExceptionHandler(RoomPersistenceException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    String handlePersistence(RoomPersistenceException ex) {
         return ex.getMessage();
     }
 }

@@ -166,7 +166,7 @@ class RoomTest {
 
         assertThatThrownBy(() -> Room.reconstruct(roomId, name(), LOCATION, RoomCode.of(CODE),
                 RoomCapacity.of(CAPACITY), null, now, now))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -174,7 +174,7 @@ class RoomTest {
         Instant now = Instant.now();
         assertThatThrownBy(() -> Room.create(RoomId.generate(), null, LOCATION, RoomCode.of(CODE),
                 RoomCapacity.of(CAPACITY), now,  FakeUniquenessPolicy.unique()))
-                .isInstanceOf(RoomDomainException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

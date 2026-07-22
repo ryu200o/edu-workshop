@@ -9,7 +9,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
  * aggregate itself (via the injected {@link RoomUniquenessPolicy}), and carries only the data needed
  * to describe the collision — the location and the occupied code.
  */
-public class DuplicateRoomCodeException extends RoomDomainException {
+public final class DuplicateRoomCodeException extends RoomDomainException {
 
     public DuplicateRoomCodeException(RoomLocation location, RoomCode code) {
         super("A room with code " + code.value() + " already exists at " + location.asString() + ".");

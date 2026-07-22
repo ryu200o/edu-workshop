@@ -2,6 +2,10 @@ package io.github.ryu200o.eduworkshop.workshop.internal.domain.model;
 
 import java.util.Objects;
 
+/**
+ * Value object for a workshop's description. Optional (nullable). Invariant: at most 2000 characters
+ * when present.
+ */
 public record WorkshopDescription(String value) {
 
     private static final int MAX_LENGTH = 2000;

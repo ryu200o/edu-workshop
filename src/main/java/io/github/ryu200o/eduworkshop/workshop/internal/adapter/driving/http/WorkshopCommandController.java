@@ -12,6 +12,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 
+/**
+ * Driving HTTP adapter for the Workshop WRITE side (Command). Accepts only state-changing HTTP methods
+ * (POST) and talks exclusively to the shared {@link CommandBus}. Package-private and confined to the
+ * module's internal boundary. Error handling is centralized in {@link WorkshopExceptionAdvice}.
+ */
 @RestController
 @RequestMapping("/api/v1/workshops")
 class WorkshopCommandController {

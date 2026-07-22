@@ -1,15 +1,17 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.jpa;
 
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomPersistenceException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 /**
- * Dedicated infrastructure translator converting persistence-specific failures into the ubiquitous
- * language of the Room domain. It reasons in terms of <em>business conflicts</em> (a duplicate room
+ * Converts persistence-provider failures into exceptions meaningful to upper layers.
+ * Business conflicts are translated into Domain exceptions;
+ * unexpected persistence failures become Application persistence exceptions.
+ * It reasons in terms of <em>business conflicts</em> (a duplicate room
  * name, a duplicate room code) rather than database metadata. All JPA / Hibernate / H2 detection
  * mechanics are encapsulated behind business-oriented helpers and never surface as constraint names.
  */
@@ -19,7 +21,7 @@ class JpaRoomPersistenceExceptionTranslator {
     private static final String CONSTRAINT_BUILDING_FLOOR_NAME = "uk_rooms_building_floor_name";
     private static final String CONSTRAINT_BUILDING_FLOOR_CODE = "uk_rooms_building_floor_code";
 
-    RoomDomainException translate(DataIntegrityViolationException ex, Room room) {
+     RuntimeException translate(DataIntegrityViolationException ex, Room room) {
         if (representsDuplicateRoomName(ex)) {
             return new DuplicateRoomNameException(room.location(), room.name());
         }
@@ -28,7 +30,7 @@ class JpaRoomPersistenceExceptionTranslator {
             return new DuplicateRoomCodeException(room.location(), room.code());
         }
 
-        return new RoomDomainException(
+        return new RoomPersistenceException(
                 String.format("Cannot save room at location '%s'. " +
                                 "A conflict was detected with an existing room (code or name). " +
                                 "Please check the information and try again.",

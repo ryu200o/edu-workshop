@@ -1,5 +1,11 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
+/**
+ * Value object for a room's physical location (building + floor). Building is normalized to uppercase
+ * and must not contain dots (reserved as a separator in the canonical name). Floor must be a positive
+ * integer. The (building, floor) pair is part of the global uniqueness coordinate for both
+ * {@code code} and {@code name}.
+ */
 public record RoomLocation(String building, int floor) {
 
     public RoomLocation {

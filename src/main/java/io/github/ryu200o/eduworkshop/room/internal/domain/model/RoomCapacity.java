@@ -1,5 +1,9 @@
 package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 
+/**
+ * Value object for a room's physical capacity (maximum number of occupants).
+ * Invariant: must be a positive integer.
+ */
 public record RoomCapacity (int value) {
     public RoomCapacity {
         if (value <= 0) {

@@ -9,7 +9,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
  * itself (via the injected {@link RoomUniquenessPolicy}), and carries only the data needed to describe
  * the collision — the location and the occupied name.
  */
-public class DuplicateRoomNameException extends RoomDomainException {
+public final class DuplicateRoomNameException extends RoomDomainException {
 
     public DuplicateRoomNameException(RoomLocation location, RoomName name) {
         super("A room named '" + name.value() + "' already exists at " + location.asString() + ".");
