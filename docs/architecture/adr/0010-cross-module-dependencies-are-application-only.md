@@ -108,6 +108,71 @@ Exceptions from another module (e.g. `RoomNotFoundException`) must be caught at 
 and translated if necessary, or simply not exposed across the boundary at all (use `Optional`
 in the API instead).
 
+### 6. Contract Visibility Rule
+
+Types intended for cross-module communication (DTOs, immutable snapshots, contracts) are part of
+the module's **public API** and therefore must NOT reside under `internal/`. They belong at the
+module root (e.g. `room/contract/RoomSnapshot.java`).
+
+Only **implementation details** belong under `internal/`. This includes:
+
+- The `ExposeAPI` implementation (`internal/facade/`)
+- Application handlers, ports, and adapters
+- Domain model, services, events, exceptions
+- Persistence adapters and configuration
+
+The rule ensures that the module's public surface is explicit and discoverable. A developer
+looking at `room/` can immediately see what Room exposes to other modules (`RoomExposeAPI`,
+`contract/`), and everything under `internal/` can be freely refactored without affecting
+consumers.
+
+```
+room/
+├── RoomExposeAPI.java        // Public Facade interface
+├── contract/
+│   └── RoomSnapshot.java      // Public cross-module DTO
+└── internal/
+    ├── facade/                 // Facade implementation (package-private)
+    ├── application/
+    ├── domain/
+    └── adapter/
+```
+
+### 7. Module Facade Principle
+
+The `*ExposeAPI` + its implementation in `internal/facade/` constitute the **Module Facade**.
+This is a distinct architectural element with its own semantics:
+
+1. **It is NOT a Driving Adapter.** A Driving Adapter receives external input (HTTP, gRPC, message
+   listener) and translates it into application calls. The Module Facade, by contrast, is called
+   directly by another module's Application layer — it is a **programmatic API between trusted
+   collaborators**, not an entry point from the outside world.
+
+2. **It is NOT an Application Handler.** An Application Handler processes a `Command` or `Query`
+   through the shared Command/Query Bus. The Module Facade bypasses the bus entirely because:
+   - It is called by another module's Application code (trusted caller), not by an external adapter.
+   - It performs a specific, stable contract operation — not a generic use-case dispatch.
+   - Routing through the bus would add indirection with no security or orchestration benefit.
+
+3. **It may coordinate directly with Application Ports** (e.g. `RoomReader`, `RoomRepository`,
+   domain services) **without going through the Command/Query Bus**. This is a trusted intra-module
+   interaction, not an external entry point.
+
+4. **It stays package-private.** Only the `*ExposeAPI` interface is `public`; the implementation is
+   hidden inside `internal/facade/`.
+
+Package location:
+
+```
+room/
+├── RoomExposeAPI.java          // public, module root
+└── internal/
+      └── facade/
+            └── RoomExposeAPIImpl.java  // package-private
+```
+
+Not `internal/adapter/driving/module_api/` — the Facade is conceptually distinct from adapters.
+
 ---
 
 ## Consequences
@@ -125,6 +190,10 @@ in the API instead).
   this module's Domain is concerned.
 - **Testability.** Domain tests never need to mock `ExposeAPI` or set up foreign DTOs.
   All cross-module concerns are tested at the handler (Application) level.
+- **Discoverable public surface.** The module root (`contract/`, `*ExposeAPI`) shows exactly
+  what is exposed to other modules — no digging through `internal/` to find shared types.
+- **Facade clarity.** The `internal/facade/` package makes the Module Facade explicit and
+  distinct from driving adapters.
 
 ### Negative / Trade-offs (Cons)
 

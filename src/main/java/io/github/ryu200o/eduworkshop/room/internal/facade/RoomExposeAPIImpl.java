@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.module_api;
+package io.github.ryu200o.eduworkshop.room.internal.facade;
 
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomSnapshot;
@@ -11,9 +11,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Package-private implementation of {@link RoomExposeAPI}.
- * Resides inside the information-hiding boundary (internal/.../module_api).
- * Delegates to {@link RoomReader} (jOOQ read adapter) for the actual query.
+ * Package-private implementation of {@link RoomExposeAPI} — the Module Facade for Room.
+ * Resides inside the information-hiding boundary (internal/facade/). Coordinates directly
+ * with application ports ({@link RoomReader}) — no Command/Query Bus involved, because this
+ * is a trusted cross-module collaboration, not an external entry point (per ADR 0010).
+ *
+ * <p>Delegates to {@link RoomReader} (jOOQ read adapter) for the actual query.
  */
 @Component
 class RoomExposeAPIImpl implements RoomExposeAPI {

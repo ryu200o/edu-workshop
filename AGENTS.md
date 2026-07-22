@@ -12,11 +12,11 @@ MUST follow when working in this repository. Read it before making changes.
 
 ### Conceptual layering
 
-- `contract/` — public contracts shared *across* modules (DTOs, integration events).
-- `internal/` — the encapsulated core of a module (domain, application, adapters). Information hiding
-  boundary: by default everything here is **package-private**.
-- Cross-module request handling lives in `internal/adapter/driving/module_api/` and MUST be named
-  using an **underscore** (`module_api`), never a hyphen.
+- `contract/` — public contracts shared *across* modules (DTOs, integration events). These are
+  part of the module's public API and must NOT reside under `internal/` (per ADR 0010).
+- `internal/` — the encapsulated core of a module (domain, application, adapters, facade). Information
+  hiding boundary: by default everything here is **package-private**.
+- Cross-module request handling lives in `internal/facade/` (the Module Facade, per ADR 0010).
 
 ## Branch Strategy
 
@@ -28,10 +28,13 @@ MUST follow when working in this repository. Read it before making changes.
 
 - The `internal/` zone is an information-hiding boundary. Default visibility is **package-private**;
   only explicitly intended types are `public`.
-- The cross-module incoming-request layer MUST be named **`module_api`** (underscore, not hyphen).
+- The Module Facade layer MUST be named **`facade`** (underscore, not hyphen) and lives at
+  `internal/facade/` — conceptually distinct from driving adapters (per ADR 0010).
 - Module API communication interface is exposed as `[ModuleName]ExposeAPI` (public, at module root);
-  its implementation `[ModuleName]ExposeAPIImpl` lives in `internal/adapter/driving/module_api/`
-  and stays package-private.
+  its implementation `[ModuleName]ExposeAPIImpl` lives in `internal/facade/` and stays package-private.
+- The Facade may coordinate directly with Application Ports (Reader, Repository, Domain Service)
+  **without going through the Command/Query Bus** — this is a trusted cross-module collaboration,
+  not an external entry point (per ADR 0010).
 - **Exception layering:** a domain aggregate raises only **invariant violations** (e.g.
   `RoomDomainException`, `DuplicateRoomCodeException`, `IllegalRoomStateException`) — these stay in
   `internal/domain/model/exception/`. A **failed lookup / not-found** is an *application* concern, not a
@@ -88,6 +91,10 @@ Consult these before designing or coding. They are the source of truth:
   null-checks VOs (no business-rule re-checks); Application only builds VOs + calls domain. Global/set-based
   invariants stay in a Policy (ADR 0005) — the sole exception. Room `capacity`/`code` primitives to be
   objectized; Workshop domain is the reference implementation.
+- `docs/architecture/adr/0010-cross-module-dependencies-are-application-only.md` — **Accepted**:
+  Cross-module dependencies are Application-only. Contract types stay outside `internal/`;
+  Module Facade (`internal/facade/`) is distinct from driving adapters. Domain must never import
+  another module's API or contract DTOs. The Application layer acts as Anti-Corruption Layer (ACL).
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).

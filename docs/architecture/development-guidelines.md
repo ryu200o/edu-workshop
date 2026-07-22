@@ -10,33 +10,42 @@
 
 ```
 <module>/
-├── internal/
-│   ├── domain/
-│   │   ├── model/             # Aggregate Root, Value Objects, state enum — TẤT CẢ ở root (flat)
-│   │   │   ├── event/         # RoomCreated, RoomRenamedEvent, ... (sealed RoomDomainEvent)
-│   │   │   └── exception/     # DuplicateRoomCodeException, DuplicateRoomNameException, RoomDomainException, IllegalRoomStateException, ...
-│   │   └── service/           # domain service (nếu cần)
-│   ├── application/
-│   │   ├── port/
-│   │   │   ├── in/
-│   │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
-│   │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
-│   │   │   └── out/           # RoomRepository (write), RoomReader (read, CQRS bypass)
-│   │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
-│   └── adapter/
-│       ├── driving/
-│       │   ├── http/          # *CommandController, *QueryController, *ExceptionAdvice
-│       │   └── event/         # Event Bus consumer (tương lai)
-│       └── driven/
-│           └── persistence/
-│               ├── jpa/        # JpaRoomWriteAdapter (impl RoomRepository, C) + RoomJpaRepository/Entity
-│               └── jooq/       # JooqRoomReadAdapter (impl RoomReader, Q) + generated jooq.tables.Rooms
-└── RoomExposeAPI.java         # public API (cross-module surface, để trống nếu chưa công bố)
+├── contract/                  # Public contracts shared *across* modules (DTOs, integration events)
+│                              # These are part of the module's public API (per ADR 0010)
+├── RoomExposeAPI.java         # Public Facade interface (cross-module surface)
+├── WorkshopExposeAPI.java
+└── internal/
+    ├── facade/                # ExposeAPIImpl — Module Facade (package-private, per ADR 0010)
+    │                          # Coordinates directly with Application ports, no Command/Query Bus
+    ├── domain/
+    │   ├── model/             # Aggregate Root, Value Objects, state enum — TẤT CẢ ở root (flat)
+    │   │   ├── event/         # RoomCreated, RoomRenamedEvent, ... (sealed RoomDomainEvent)
+    │   │   └── exception/     # DuplicateRoomCodeException, DuplicateRoomNameException, ...
+    │   └── service/           # domain service (nếu cần)
+    ├── application/
+    │   ├── port/
+    │   │   ├── in/
+    │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
+    │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
+    │   │   └── out/           # RoomRepository (write), RoomReader (read, CQRS bypass)
+    │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
+    └── adapter/
+        ├── driving/
+        │   ├── http/          # *CommandController, *QueryController, *ExceptionAdvice
+        │   └── event/         # Event Bus consumer (tương lai)
+        └── driven/
+            └── persistence/
+                ├── jpa/        # JpaRoomWriteAdapter (impl RoomRepository) + RoomJpaRepository/Entity
+                └── jooq/       # JooqRoomReadAdapter (impl RoomReader) + generated jooq.tables.Rooms
 ```
 
-**Quy tắc bất di bất dịch (ADR 0001 + 0002):**
+**Quy tắc bất di bất dịch (ADR 0001 + 0002 + 0010):**
 - `internal/` là package-private. Lớp ngoài `internal/` **không được** import class trong `internal/`
   (trừ `RoomExposeAPI` đã được whitelist). `@ApplicationModule` tự động kiểm tra.
+- Types intended for cross-module communication (`contract/`, `*ExposeAPI`) là public API —
+  chúng **không** được đặt trong `internal/` (Contract Visibility Rule, ADR 0010).
+- The Module Facade (`internal/facade/`) là trusted collaboration, không phải Driving Adapter.
+  Nó được phép điều phối trực tiếp Application Ports mà không qua Command/Query Bus (ADR 0010).
 - Bất kỳ class nào expose ra ngoài module **phải** là `public` & `final`.
 - Một chiều: `internal → outside` được; `outside → internal` không được (trừ API whitelist).
 
@@ -293,6 +302,60 @@ read-only nên không có behavior chain.
 
 ---
 
+## 3.7 Module Facade — Cross-Module API (ADR 0010)
+
+The `*ExposeAPI` + its implementation in `internal/facade/` constitute the **Module Facade**:
+
+- **Not a Driving Adapter:** It is called programmatically by another module's Application layer,
+  not by external HTTP/event input.
+- **Not an Application Handler:** It bypasses the Command/Query Bus because it's a trusted
+  cross-module collaboration, not an external entry point.
+- **Coordinates directly with Application Ports:** The Facade may call `RoomReader`,
+  `RoomRepository`, or domain services directly — no bus required.
+
+Example — RoomExposeAPI providing snapshot data:
+
+```java
+// room/RoomExposeAPI.java (public interface, module root)
+public interface RoomExposeAPI {
+    Optional<RoomSnapshot> findRoomSnapshot(UUID roomId);
+}
+
+// room/contract/RoomSnapshot.java (public DTO, module root/contract/)
+public record RoomSnapshot(UUID roomId, String name, Location location) {
+    public record Location(String building, int floor) {}
+}
+
+// room/internal/facade/RoomExposeAPIImpl.java (package-private implementation)
+@Component
+class RoomExposeAPIImpl implements RoomExposeAPI {
+    private final RoomReader roomReader;
+
+    @Override
+    public Optional<RoomSnapshot> findRoomSnapshot(UUID roomId) {
+        return roomReader.findById(RoomId.of(roomId))
+                .map(view -> new RoomSnapshot(view.id(), view.name(),
+                        new RoomSnapshot.Location(view.building(), view.floor())));
+    }
+}
+```
+
+Workshop Application handler consumes the Facade (never imports the impl):
+
+```java
+// workshop/internal/application/handler/ScheduleWorkshopCommandHandler.java
+import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
+import io.github.ryu200o.eduworkshop.room.contract.RoomSnapshot;
+
+RoomSnapshot snapshot = roomExposeApi.findRoomSnapshot(roomId)
+        .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", roomId));
+
+String locationSnapshot = snapshot.location().building() + "/" + snapshot.location().floor();
+RoomReference roomRef = RoomReference.of(snapshot.roomId(), snapshot.name(), locationSnapshot);
+```
+
+---
+
 ## 4. Driving HTTP Adapter — tách rõ C/Q + Advice scoped (ADR 0004)
 
 ### 4.1 Tách 2 controller, mỗi cái chỉ cầm 1 bus
@@ -386,15 +449,14 @@ class RoomExceptionAdvice {
 
 ---
 
-## 6. Checklist trước khi tạo PR
+## 7. Checklist trước khi tạo PR
 
-- [ ] Mọi class trong `internal/` là package-private (handler, port impl, mapper...), chỉ API công khai là `public final`.
+- [ ] Mọi class trong `internal/` là package-private (handler, port impl, mapper, facade impl...), chỉ API công khai (`*ExposeAPI`, `contract/*`) là `public`.
+- [ ] Contract DTO dùng chung giữa các module nằm ở `contract/` (module root), **không** trong `internal/` (ADR 0010).
+- [ ] Module Facade (`internal/facade/`): implementation package-private, gọi trực tiếp Application Ports, không qua Command/Query Bus (ADR 0010).
 - [ ] Command có nested `Result`; Query View nằm trong `port.in.query.view`. **Không còn** `XResponse` chung.
 - [ ] Driving adapter: `RoomCommandController` (CommandBus) + `RoomQueryController` (QueryBus) tách rõ;
       `var x = new XCommand(...)` trước `execute`; request body qua nested `XxxRequest`.
 - [ ] Exception nghiệp vụ tập trung ở `*ExceptionAdvice` scoped `assignableTypes`, nằm trong module.
 - [ ] `internal/` không bị outside import (chạy build/ArchitectureTest xanh).
-- [ ] Unique index `(building, floor, code)` (code INT) + `uk_rooms_building_floor_name` làm DB gate.
-- [ ] Global uniqueness nằm trong **Domain** (`RoomUniquenessPolicy` + aggregate tự throw
-  `DuplicateRoomCodeException` / `DuplicateRoomNameException`); `RoomRepository` KHÔNG có `exists*`; handler "gầy" (chỉ truyền policy vào aggregate).
 - [ ] `./mvnw test` xanh toàn bộ, không regression.
