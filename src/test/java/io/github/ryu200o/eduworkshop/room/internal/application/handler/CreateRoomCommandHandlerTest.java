@@ -8,6 +8,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -34,6 +35,9 @@ class CreateRoomCommandHandlerTest {
 
     @Mock
     private RoomUniquenessPolicy uniquenessPolicy;
+
+    @Mock
+    private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -42,7 +46,7 @@ class CreateRoomCommandHandlerTest {
     }
 
     private CreateRoomCommandHandler handler() {
-        return new CreateRoomCommandHandler(roomRepository, uniquenessPolicy, clock);
+        return new CreateRoomCommandHandler(roomRepository, uniquenessPolicy, clock, domainEventPublisher);
     }
 
     // The handler is THIN: it builds VOs, delegates to the aggregate (which owns the invariant via the

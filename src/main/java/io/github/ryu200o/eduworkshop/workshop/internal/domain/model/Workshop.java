@@ -27,7 +27,7 @@ public class Workshop {
     private final Instant createdAt;
     private Instant updatedAt;
 
-    private final List<WorkshopDomainEvent> recordedEvents = new ArrayList<>();
+    private List<WorkshopDomainEvent> recordedEvents = new ArrayList<>();
 
     private Workshop(WorkshopId id,
                      WorkshopTitle title,
@@ -103,6 +103,32 @@ public class Workshop {
         this.touch(now);
 
         record(new WorkshopPublished(id, updatedAt));
+    }
+
+    public void updateRoomSnapshot(RoomReference updatedRef, Instant now) {
+        requireNonNull(updatedRef, "room snapshot must not be null");
+        requireNonNull(now, "now cannot be null");
+        if (state != WorkshopState.SCHEDULED && state != WorkshopState.PUBLISHED) {
+            throw new InvalidWorkshopStateException(
+                    id, state, WorkshopState.SCHEDULED,
+                    "Cannot update room snapshot in state " + state);
+        }
+        this.roomReference = updatedRef;
+        this.touch(now);
+    }
+
+    public void markMaintenanceWarning(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.SCHEDULED, "markMaintenanceWarning");
+        this.hasRoomWarning = true;
+        this.touch(now);
+    }
+
+    public void clearMaintenanceWarning(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.SCHEDULED, "clearMaintenanceWarning");
+        this.hasRoomWarning = false;
+        this.touch(now);
     }
 
     public void returnToDraft(Instant now) {
@@ -191,7 +217,7 @@ public class Workshop {
     }
 
     public void clearDomainEvents() {
-        recordedEvents.clear();
+        recordedEvents = new ArrayList<>();
     }
 
     private static <T> T requireNonNull(T obj, String message) {

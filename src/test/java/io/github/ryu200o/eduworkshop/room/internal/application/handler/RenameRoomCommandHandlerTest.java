@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNot
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,6 +43,9 @@ class RenameRoomCommandHandlerTest {
 
     @Mock
     private RoomUniquenessPolicy uniquenessPolicy;
+
+    @Mock
+    private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -49,7 +54,7 @@ class RenameRoomCommandHandlerTest {
     }
 
     private RenameRoomCommandHandler handler() {
-        return new RenameRoomCommandHandler(roomRepository, uniquenessPolicy, clock);
+        return new RenameRoomCommandHandler(roomRepository, uniquenessPolicy, clock, domainEventPublisher);
     }
 
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
@@ -140,7 +145,9 @@ class RenameRoomCommandHandlerTest {
         Room saved = captor.getValue();
 
         assertThat(saved.name()).isEqualTo(RoomName.of("LAB-101"));
-        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRenamedEvent);
+        ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
+        verify(domainEventPublisher).publishEvents(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomRenamedEvent);
         assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldName()).isEqualTo("F-201");
         assertThat(response.newName()).isEqualTo("LAB-101");

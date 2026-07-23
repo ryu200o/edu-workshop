@@ -7,47 +7,45 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
 
-/**
- * Use-case handler for changing a room's capacity. Enforces the guard pipeline in performance order:
- * load (write side) → RAM (self-defense on the new capacity) → idempotency → domain mutation → persist.
- * Package-private: reachable only via the module {@code CommandBus}.
- */
 @Component
 class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapacityCommand, ChangeRoomCapacityCommand.Result> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
+    private final SpringDomainEventPublisher domainEventPublisher;
 
-    ChangeRoomCapacityCommandHandler(RoomRepository roomRepository,  Clock clock) {
+    ChangeRoomCapacityCommandHandler(RoomRepository roomRepository, Clock clock,
+                                     SpringDomainEventPublisher domainEventPublisher) {
         this.roomRepository = roomRepository;
         this.clock = clock;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
     @Override
     @Transactional
     public ChangeRoomCapacityCommand.Result handle(ChangeRoomCapacityCommand command) {
-        // Step 1 — Load the aggregate (write side).
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
-        // Step 2 — Idempotency: same capacity ⇒ no change, no save.
-        //         Returns the current entity's updatedAt (NOT Instant.now()) — nothing changed.
         RoomCapacity newCapacity = RoomCapacity.of(command.newCapacity());
         if (newCapacity.equals(room.capacity())) {
             return toResult(room, room.capacity());
         }
 
-        // Step 3 — Domain mutation (records RoomCapacityChanged) then persist.
         RoomCapacity oldCapacity = room.capacity();
         Instant now = Instant.now(clock);
         room.changeCapacity(newCapacity, now);
         Room saved = roomRepository.save(room);
+        domainEventPublisher.publishEvents(room.recordedEvents());
+        room.clearDomainEvents();
         return toResult(saved, oldCapacity);
     }
 

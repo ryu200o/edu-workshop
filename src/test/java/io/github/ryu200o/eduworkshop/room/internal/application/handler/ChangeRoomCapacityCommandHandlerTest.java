@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,6 +41,9 @@ class ChangeRoomCapacityCommandHandlerTest {
 
     @Mock
     private RoomRepository roomRepository;
+
+    @Mock
+    private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -47,7 +52,7 @@ class ChangeRoomCapacityCommandHandlerTest {
     }
 
     private ChangeRoomCapacityCommandHandler handler() {
-        return new ChangeRoomCapacityCommandHandler(roomRepository, clock);
+        return new ChangeRoomCapacityCommandHandler(roomRepository, clock, domainEventPublisher);
     }
 
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
@@ -129,7 +134,9 @@ class ChangeRoomCapacityCommandHandlerTest {
         Room saved = captor.getValue();
 
         assertThat(saved.capacity()).isEqualTo(RoomCapacity.of(80));
-        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomCapacityChanged);
+        ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
+        verify(domainEventPublisher).publishEvents(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomCapacityChanged);
         assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldCapacity()).isEqualTo(50);
         assertThat(response.newCapacity()).isEqualTo(80);

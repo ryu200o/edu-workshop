@@ -7,26 +7,26 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
 
-/**
- * Use-case handler for permanently deactivating a room. Loads the aggregate, delegates the (irreversible)
- * state transition to the domain (guard + idempotency owned there), then persists. Package-private:
- * reachable only via the module {@code CommandBus}.
- */
 @Component
 class DeactivateRoomCommandHandler implements CommandHandler<DeactivateRoomCommand, DeactivateRoomCommand.Result> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
+    private final SpringDomainEventPublisher domainEventPublisher;
 
-    DeactivateRoomCommandHandler(RoomRepository roomRepository, Clock clock) {
+    DeactivateRoomCommandHandler(RoomRepository roomRepository, Clock clock,
+                                 SpringDomainEventPublisher domainEventPublisher) {
         this.roomRepository = roomRepository;
         this.clock = clock;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
     @Override
@@ -38,13 +38,13 @@ class DeactivateRoomCommandHandler implements CommandHandler<DeactivateRoomComma
         RoomState previous = room.state();
         Instant now = Instant.now(clock);
         room.deactivate(now);
-        // Idempotency: a no-op transition (already DEACTIVATED) does not touch the DB; return the entity's
-        // existing updatedAt (NOT Instant.now()) to avoid a false "change" timestamp.
         if (previous == room.state()) {
             return new DeactivateRoomCommand.Result(
                     room.id().value(), previous, room.state(), room.updatedAt());
         }
         Room saved = roomRepository.save(room);
+        domainEventPublisher.publishEvents(room.recordedEvents());
+        room.clearDomainEvents();
         return new DeactivateRoomCommand.Result(
                 saved.id().value(), previous, saved.state(), saved.updatedAt());
     }

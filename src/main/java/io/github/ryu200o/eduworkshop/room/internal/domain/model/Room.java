@@ -39,7 +39,7 @@ public class Room {
     private final Instant createdAt;
     private Instant updatedAt;
 
-    private final List<RoomDomainEvent> recordedEvents = new ArrayList<>();
+    private List<RoomDomainEvent> recordedEvents = new ArrayList<>();
 
     private Room(RoomId id, RoomName name, RoomCapacity capacity, RoomLocation location, RoomCode code, RoomState state, Instant createdAt, Instant updatedAt) {
         this.id = requireNonNull(id, "RoomId cannot be null");
@@ -324,6 +324,6 @@ public class Room {
     }
 
     public void clearDomainEvents() {
-        recordedEvents.clear();
+        recordedEvents = new ArrayList<>();
     }
 }

@@ -12,7 +12,9 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitl
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 class JpaWorkshopWriteAdapter implements WorkshopRepository {
@@ -39,6 +41,13 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
     @Override
     public Optional<Workshop> loadById(WorkshopId id) {
         return repository.findById(id.value()).map(this::toWorkshop);
+    }
+
+    @Override
+    public List<Workshop> loadByRoomId(UUID roomId) {
+        return repository.findByRoomId(roomId).stream()
+                .map(this::toWorkshop)
+                .toList();
     }
 
     private WorkshopJpaEntity toEntity(Workshop workshop) {

@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -22,6 +23,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,6 +40,9 @@ class DeactivateRoomCommandHandlerTest {
 
     @Mock
     private RoomRepository roomRepository;
+
+    @Mock
+    private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -46,7 +51,7 @@ class DeactivateRoomCommandHandlerTest {
     }
 
     private DeactivateRoomCommandHandler handler() {
-        return new DeactivateRoomCommandHandler(roomRepository, clock);
+        return new DeactivateRoomCommandHandler(roomRepository, clock, domainEventPublisher);
     }
 
     private static Room existingRoom(RoomState state) {
@@ -78,7 +83,9 @@ class DeactivateRoomCommandHandlerTest {
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
         assertThat(captor.getValue().state()).isEqualTo(RoomState.DEACTIVATED);
-        assertThat(captor.getValue().recordedEvents()).anyMatch(e -> e instanceof RoomStateChanged);
+        ArgumentCaptor<List> captor2 = ArgumentCaptor.forClass(List.class);
+        verify(domainEventPublisher).publishEvents(captor2.capture());
+        assertThat(captor2.getValue()).anyMatch(e -> e instanceof RoomStateChanged);
         assertThat(response.previousState()).isEqualTo(RoomState.ACTIVE);
         assertThat(response.newState()).isEqualTo(RoomState.DEACTIVATED);
     }
