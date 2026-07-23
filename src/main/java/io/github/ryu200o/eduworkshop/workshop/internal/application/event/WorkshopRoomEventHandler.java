@@ -14,6 +14,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -35,7 +36,7 @@ public class WorkshopRoomEventHandler {
     }
 
     @TransactionalEventListener
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handleRoomEvent(RoomDomainEvent event) {
         try {
             switch (event) {
