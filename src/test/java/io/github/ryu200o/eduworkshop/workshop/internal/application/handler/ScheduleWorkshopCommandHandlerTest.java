@@ -1,7 +1,9 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
-import io.github.ryu200o.eduworkshop.room.contract.RoomSnapshot;
+import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
+import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.RoomPlanningData;
+import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.RoomPlanningData.Location;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopPersistenceException;
@@ -68,22 +70,26 @@ class ScheduleWorkshopCommandHandlerTest {
         );
     }
 
-    private static RoomSnapshot aRoomSnapshot(UUID roomId) {
-        return new RoomSnapshot(
-                roomId,
-                "F.0201",
-                new RoomSnapshot.Location("F", 2)
-        );
+    private static RoomPlanningPermission aPermission(UUID roomId) {
+        return new RoomPlanningPermission(
+                RoomPlanningPermission.PlanningStatus.ALLOWED,
+                null,
+                new RoomPlanningData(
+                        roomId,
+                        "F.0201",
+                        new Location("F", 2),
+                        50
+                ));
     }
 
     @Test
     void happyPath_schedulesWorkshop() {
         Workshop workshop = aDraftWorkshop();
         UUID roomId = UUID.randomUUID();
-        RoomSnapshot snapshot = aRoomSnapshot(roomId);
+        RoomPlanningPermission permission = aPermission(roomId);
 
         when(workshopRepository.loadById(workshop.id())).thenReturn(Optional.of(workshop));
-        when(roomExposeApi.findRoomSnapshot(roomId)).thenReturn(Optional.of(snapshot));
+        when(roomExposeApi.checkPlanningPermission(roomId)).thenReturn(Optional.of(permission));
         when(workshopRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ScheduleWorkshopCommand.Result result = handler().handle(
@@ -119,44 +125,44 @@ class ScheduleWorkshopCommandHandlerTest {
         UUID roomId = UUID.randomUUID();
 
         when(workshopRepository.loadById(workshop.id())).thenReturn(Optional.of(workshop));
-        when(roomExposeApi.findRoomSnapshot(roomId)).thenReturn(Optional.empty());
+        when(roomExposeApi.checkPlanningPermission(roomId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(
                 new ScheduleWorkshopCommand(workshop.id().value(), roomId)))
                 .isInstanceOf(ReferencedRoomNotFoundException.class);
 
         verify(workshopRepository).loadById(workshop.id());
-        verify(roomExposeApi).findRoomSnapshot(roomId);
+        verify(roomExposeApi).checkPlanningPermission(roomId);
     }
 
     @Test
     void invalidState_throwsInvalidWorkshopStateException() {
         Workshop workshop = aDraftWorkshop();
         UUID roomId = UUID.randomUUID();
-        RoomSnapshot snapshot = aRoomSnapshot(roomId);
+        RoomPlanningPermission permission = aPermission(roomId);
         workshop.schedule(
                 RoomReference.of(roomId, "F.0201", "F/2"),
                 Instant.parse("2026-07-15T00:00:00Z"));
 
         when(workshopRepository.loadById(workshop.id())).thenReturn(Optional.of(workshop));
-        when(roomExposeApi.findRoomSnapshot(roomId)).thenReturn(Optional.of(snapshot));
+        when(roomExposeApi.checkPlanningPermission(roomId)).thenReturn(Optional.of(permission));
 
         assertThatThrownBy(() -> handler().handle(
                 new ScheduleWorkshopCommand(workshop.id().value(), roomId)))
                 .isInstanceOf(InvalidWorkshopStateException.class);
 
         verify(workshopRepository).loadById(workshop.id());
-        verify(roomExposeApi).findRoomSnapshot(roomId);
+        verify(roomExposeApi).checkPlanningPermission(roomId);
     }
 
     @Test
     void persistenceFailure_throwsWorkshopPersistenceException() {
         Workshop workshop = aDraftWorkshop();
         UUID roomId = UUID.randomUUID();
-        RoomSnapshot snapshot = aRoomSnapshot(roomId);
+        RoomPlanningPermission permission = aPermission(roomId);
 
         when(workshopRepository.loadById(workshop.id())).thenReturn(Optional.of(workshop));
-        when(roomExposeApi.findRoomSnapshot(roomId)).thenReturn(Optional.of(snapshot));
+        when(roomExposeApi.checkPlanningPermission(roomId)).thenReturn(Optional.of(permission));
         when(workshopRepository.save(any())).thenThrow(new WorkshopPersistenceException("DB failure", new RuntimeException()));
 
         assertThatThrownBy(() -> handler().handle(

@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
-import io.github.ryu200o.eduworkshop.room.contract.RoomSnapshot;
+import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
@@ -17,14 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 
-/**
- * Handler for {@link ScheduleWorkshopCommand}. Orchestrates the DRAFT → SCHEDULED transition:
- * loads the workshop, fetches room snapshot via {@link RoomExposeAPI}, builds a
- * {@link RoomReference}, delegates to the domain aggregate, and persists.
- *
- * <p>Per ADR 0010, cross-module data access stays entirely in the Application layer —
- * the handler maps the Room contract DTO into Workshop's domain VO.</p>
- */
 @Component
 public class ScheduleWorkshopCommandHandler
         implements CommandHandler<ScheduleWorkshopCommand, ScheduleWorkshopCommand.Result> {
@@ -50,11 +42,15 @@ public class ScheduleWorkshopCommandHandler
         Workshop workshop = workshopRepository.loadById(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
-        RoomSnapshot snapshot = roomExposeApi.findRoomSnapshot(command.roomId())
+        RoomPlanningPermission permission = roomExposeApi.checkPlanningPermission(command.roomId())
                 .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", command.roomId()));
 
-        String locationSnapshot = snapshot.location().building() + "/" + snapshot.location().floor();
-        RoomReference roomRef = RoomReference.of(snapshot.roomId(), snapshot.name(), locationSnapshot);
+        String locationSnapshot = permission.planning().location().building()
+                + "/" + permission.planning().location().floor();
+        RoomReference roomRef = RoomReference.of(
+                permission.planning().roomId(),
+                permission.planning().roomName(),
+                locationSnapshot);
 
         workshop.schedule(roomRef, now);
 
@@ -63,7 +59,6 @@ public class ScheduleWorkshopCommandHandler
         return new ScheduleWorkshopCommand.Result(
                 workshop.id().value(),
                 workshop.roomReference().roomId(),
-                workshop.updatedAt()
-        );
+                workshop.updatedAt());
     }
 }
