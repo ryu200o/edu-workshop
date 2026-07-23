@@ -7,26 +7,26 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
 
-/**
- * Use-case handler for placing a room under maintenance. Loads the aggregate, delegates the state
- * transition to the domain (guard + idempotency owned there), then persists. Package-private: reachable
- * only via the module {@code CommandBus}.
- */
 @Component
 class PlaceRoomUnderMaintenanceCommandHandler implements CommandHandler<PlaceRoomUnderMaintenanceCommand, PlaceRoomUnderMaintenanceCommand.Result> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
+    private final SpringDomainEventPublisher domainEventPublisher;
 
-    PlaceRoomUnderMaintenanceCommandHandler(RoomRepository roomRepository, Clock clock) {
+    PlaceRoomUnderMaintenanceCommandHandler(RoomRepository roomRepository, Clock clock,
+                                            SpringDomainEventPublisher domainEventPublisher) {
         this.roomRepository = roomRepository;
         this.clock = clock;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
     @Override
@@ -38,13 +38,13 @@ class PlaceRoomUnderMaintenanceCommandHandler implements CommandHandler<PlaceRoo
         RoomState previous = room.state();
         Instant now = Instant.now(clock);
         room.placeUnderMaintenance(now);
-        // Idempotency: a no-op transition (same state) does not touch the DB; return the entity's
-        // existing updatedAt (NOT Instant.now()) to avoid a false "change" timestamp.
         if (previous == room.state()) {
             return new PlaceRoomUnderMaintenanceCommand.Result(
                     room.id().value(), previous, room.state(), room.updatedAt());
         }
         Room saved = roomRepository.save(room);
+        domainEventPublisher.publishEvents(room.recordedEvents());
+        room.clearDomainEvents();
         return new PlaceRoomUnderMaintenanceCommand.Result(
                 saved.id().value(), previous, saved.state(), saved.updatedAt());
     }

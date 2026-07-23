@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNot
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -41,6 +42,9 @@ class ChangeRoomCodeCommandHandlerTest {
 
     @Mock
     private RoomUniquenessPolicy uniquenessPolicy;
+
+    @Mock
+    private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -49,7 +53,7 @@ class ChangeRoomCodeCommandHandlerTest {
     }
 
     private ChangeRoomCodeCommandHandler handler() {
-        return new ChangeRoomCodeCommandHandler(roomRepository, uniquenessPolicy, clock);
+        return new ChangeRoomCodeCommandHandler(roomRepository, uniquenessPolicy, clock, domainEventPublisher);
     }
 
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".

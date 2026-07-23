@@ -14,13 +14,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * JOOQ-backed driven adapter implementing the Workshop read port ({@link WorkshopReader}). Queries the
- * {@code workshops} table directly via the generated {@link Workshops} model and maps flat columns into
- * the read-side {@code *View} projections — no JPA entity, no domain aggregate reconstruction (CQRS bypass).
- * Shares the module's single datasource with the write adapter. Package-private; hidden inside the
- * module's {@code internal} boundary.
- */
 @Component
 class JooqWorkshopReadAdapter implements WorkshopReader {
 
@@ -41,6 +34,8 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                         WORKSHOPS.ROOM_ID,
                         WORKSHOPS.ROOM_NAME_SNAPSHOT,
                         WORKSHOPS.ROOM_LOCATION_SNAPSHOT,
+                        WORKSHOPS.ROOM_CAPACITY_SNAPSHOT,
+                        WORKSHOPS.HAS_ROOM_WARNING,
                         WORKSHOPS.START_TIME,
                         WORKSHOPS.END_TIME,
                         WORKSHOPS.CAPACITY,
@@ -74,6 +69,8 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                 record.get(WORKSHOPS.ROOM_ID),
                 record.get(WORKSHOPS.ROOM_NAME_SNAPSHOT),
                 record.get(WORKSHOPS.ROOM_LOCATION_SNAPSHOT),
+                record.get(WORKSHOPS.ROOM_CAPACITY_SNAPSHOT),
+                record.get(WORKSHOPS.HAS_ROOM_WARNING) != null && record.get(WORKSHOPS.HAS_ROOM_WARNING),
                 toInstant(record.get(WORKSHOPS.START_TIME)),
                 toInstant(record.get(WORKSHOPS.END_TIME)),
                 record.get(WORKSHOPS.CAPACITY),

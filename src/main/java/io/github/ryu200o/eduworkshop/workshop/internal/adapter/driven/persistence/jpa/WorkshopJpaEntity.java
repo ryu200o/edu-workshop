@@ -33,6 +33,12 @@ class WorkshopJpaEntity {
     @Column(name = "room_location_snapshot", length = 255)
     private String roomLocationSnapshot;
 
+    @Column(name = "room_capacity_snapshot")
+    private Integer roomCapacitySnapshot;
+
+    @Column(name = "has_room_warning", nullable = false)
+    private boolean hasRoomWarning;
+
     @Column(name = "start_time", nullable = false)
     private Instant startTime;
 
@@ -101,6 +107,22 @@ class WorkshopJpaEntity {
 
     void setRoomLocationSnapshot(String roomLocationSnapshot) {
         this.roomLocationSnapshot = roomLocationSnapshot;
+    }
+
+    public Integer getRoomCapacitySnapshot() {
+        return roomCapacitySnapshot;
+    }
+
+    void setRoomCapacitySnapshot(Integer roomCapacitySnapshot) {
+        this.roomCapacitySnapshot = roomCapacitySnapshot;
+    }
+
+    public boolean isHasRoomWarning() {
+        return hasRoomWarning;
+    }
+
+    void setHasRoomWarning(boolean hasRoomWarning) {
+        this.hasRoomWarning = hasRoomWarning;
     }
 
     public Instant getStartTime() {

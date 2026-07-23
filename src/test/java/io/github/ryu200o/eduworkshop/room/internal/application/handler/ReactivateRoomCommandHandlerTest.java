@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,6 +41,9 @@ class ReactivateRoomCommandHandlerTest {
 
     @Mock
     private RoomRepository roomRepository;
+
+    @Mock
+    private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -47,7 +52,7 @@ class ReactivateRoomCommandHandlerTest {
     }
 
     private ReactivateRoomCommandHandler handler() {
-        return new ReactivateRoomCommandHandler(roomRepository, clock);
+        return new ReactivateRoomCommandHandler(roomRepository, clock, domainEventPublisher);
     }
 
     private static Room existingRoom(RoomState state) {
@@ -79,7 +84,9 @@ class ReactivateRoomCommandHandlerTest {
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
         assertThat(captor.getValue().state()).isEqualTo(RoomState.ACTIVE);
-        assertThat(captor.getValue().recordedEvents()).anyMatch(e -> e instanceof RoomStateChanged);
+        ArgumentCaptor<List> captor2 = ArgumentCaptor.forClass(List.class);
+        verify(domainEventPublisher).publishEvents(captor2.capture());
+        assertThat(captor2.getValue()).anyMatch(e -> e instanceof RoomStateChanged);
         assertThat(response.previousState()).isEqualTo(RoomState.MAINTENANCE);
         assertThat(response.newState()).isEqualTo(RoomState.ACTIVE);
     }

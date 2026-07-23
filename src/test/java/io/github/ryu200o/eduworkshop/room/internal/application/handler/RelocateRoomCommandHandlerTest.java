@@ -13,6 +13,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -24,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,6 +45,9 @@ class RelocateRoomCommandHandlerTest {
 
     @Mock
     private RoomUniquenessPolicy uniquenessPolicy;
+
+    @Mock
+    private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -51,7 +56,7 @@ class RelocateRoomCommandHandlerTest {
     }
 
     private RelocateRoomCommandHandler handler() {
-        return new RelocateRoomCommandHandler(roomRepository, uniquenessPolicy, clock);
+        return new RelocateRoomCommandHandler(roomRepository, uniquenessPolicy, clock, domainEventPublisher);
     }
 
     // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
@@ -152,7 +157,9 @@ class RelocateRoomCommandHandlerTest {
         assertThat(saved.location()).isEqualTo(RoomLocation.of("G", 3));
         assertThat(saved.name()).isEqualTo(RoomName.of("F-201")); // name is preserved (decoupled)
         assertThat(saved.code()).isEqualTo(RoomCode.of(1));          // code is preserved
-        assertThat(saved.recordedEvents()).anyMatch(e -> e instanceof RoomRelocatedEvent);
+        ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
+        verify(domainEventPublisher).publishEvents(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomRelocatedEvent);
         assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
         assertThat(response.newLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("G", 3));
