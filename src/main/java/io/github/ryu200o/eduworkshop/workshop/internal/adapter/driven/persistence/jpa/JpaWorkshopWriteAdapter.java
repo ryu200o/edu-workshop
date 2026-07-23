@@ -14,12 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
-/**
- * JPA-backed driven adapter implementing the Workshop write port ({@link WorkshopRepository}). Handles
- * aggregate mutation and load. Domain ↔ entity mapping is performed entirely here, keeping the domain
- * framework-free. Persistence failures are wrapped in {@link WorkshopPersistenceException}.
- * Package-private; hidden inside the module's {@code internal} boundary.
- */
 @Component
 class JpaWorkshopWriteAdapter implements WorkshopRepository {
 
@@ -55,6 +49,8 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
         entity.setRoomId(workshop.roomReference() != null ? workshop.roomReference().roomId() : null);
         entity.setRoomNameSnapshot(workshop.roomReference() != null ? workshop.roomReference().roomNameSnapshot() : null);
         entity.setRoomLocationSnapshot(workshop.roomReference() != null ? workshop.roomReference().roomLocationSnapshot() : null);
+        entity.setRoomCapacitySnapshot(workshop.roomReference() != null ? workshop.roomReference().roomCapacitySnapshot() : null);
+        entity.setHasRoomWarning(workshop.hasRoomWarning());
         entity.setStartTime(workshop.startTime());
         entity.setEndTime(workshop.endTime());
         entity.setCapacity(workshop.capacity().value());
@@ -70,11 +66,16 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
                 WorkshopTitle.of(entity.getTitle()),
                 WorkshopDescription.of(entity.getDescription()),
                 entity.getRoomId() != null
-                        ? RoomReference.of(entity.getRoomId(), entity.getRoomNameSnapshot(), entity.getRoomLocationSnapshot())
+                        ? RoomReference.of(
+                                entity.getRoomId(),
+                                entity.getRoomNameSnapshot(),
+                                entity.getRoomLocationSnapshot(),
+                                entity.getRoomCapacitySnapshot() != null ? entity.getRoomCapacitySnapshot() : 0)
                         : null,
                 entity.getStartTime(),
                 entity.getEndTime(),
                 WorkshopCapacity.of(entity.getCapacity()),
+                entity.isHasRoomWarning(),
                 entity.getState(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()

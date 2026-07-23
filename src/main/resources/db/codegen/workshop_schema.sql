@@ -8,6 +8,8 @@ CREATE TABLE workshops (
     room_id UUID,
     room_name_snapshot VARCHAR(255),
     room_location_snapshot VARCHAR(255),
+    room_capacity_snapshot INTEGER,
+    has_room_warning BOOLEAN NOT NULL DEFAULT FALSE,
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     capacity INTEGER NOT NULL,

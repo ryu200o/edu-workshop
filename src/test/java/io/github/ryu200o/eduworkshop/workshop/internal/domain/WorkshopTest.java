@@ -27,7 +27,7 @@ class WorkshopTest {
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
     private static final Instant END = Instant.parse("2026-09-01T11:00:00Z");
     private static final Instant END_BEFORE_START = Instant.parse("2026-09-01T08:00:00Z");
-    private static final RoomReference ROOM = RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2");
+    private static final RoomReference ROOM = RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50);
     private static final WorkshopCapacity CAPACITY = WorkshopCapacity.of(30);
 
     private WorkshopId newId() {
@@ -95,7 +95,7 @@ class WorkshopTest {
     void schedule_fromDraft_assignsRoomAndEmitsScheduled() {
         Workshop workshop = createDraft();
 
-        workshop.schedule(ROOM, NOW);
+        workshop.schedule(ROOM, false, NOW);
 
         assertThat(workshop.state()).isEqualTo(WorkshopState.SCHEDULED);
         assertThat(workshop.roomReference()).isEqualTo(ROOM);
@@ -121,10 +121,10 @@ class WorkshopTest {
         // This test asserts the aggregate does NOT reject such a schedule (conflict is a publish-time concern).
         Workshop a = createDraft();
         Workshop b = Workshop.create(newId(), WorkshopTitle.of("Other WS"), description(), START, END, CAPACITY, NOW);
-        RoomReference sameRoom = RoomReference.of(ROOM.roomId(), "Room 201", "Floor 2");
+        RoomReference sameRoom = RoomReference.of(ROOM.roomId(), "Room 201", "Floor 2", 50);
 
-        a.schedule(sameRoom, NOW);
-        b.schedule(sameRoom, NOW);
+        a.schedule(sameRoom, false, NOW);
+        b.schedule(sameRoom, false, NOW);
 
         assertThat(a.state()).isEqualTo(WorkshopState.SCHEDULED);
         assertThat(b.state()).isEqualTo(WorkshopState.SCHEDULED);
@@ -134,7 +134,7 @@ class WorkshopTest {
     void schedule_rejectsNullRoom() {
         Workshop workshop = createDraft();
 
-        assertThatThrownBy(() -> workshop.schedule(null, NOW))
+        assertThatThrownBy(() -> workshop.schedule(null, false, NOW))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("room must be assigned");
     }
@@ -142,10 +142,10 @@ class WorkshopTest {
     @Test
     void schedule_rejectsNonDraftState() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, NOW);
+        workshop.schedule(ROOM, false, NOW);
 
         // Already SCHEDULED — re-schedule must be rejected.
-        assertThatThrownBy(() -> workshop.schedule(ROOM, NOW))
+        assertThatThrownBy(() -> workshop.schedule(ROOM, false, NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class)
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
@@ -169,7 +169,7 @@ class WorkshopTest {
     @Test
     void publish_fromScheduled_reservesAndEmitsPublished() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, NOW);
+        workshop.schedule(ROOM, false, NOW);
 
         workshop.publish(NOW);
 
@@ -200,7 +200,7 @@ class WorkshopTest {
         // The aggregate trusts schedule()'s invariants; publish() only transitions state.
         // (Global availability conflict is an Application-layer concern, not enforced here.)
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, NOW);
+        workshop.schedule(ROOM, false, NOW);
 
         workshop.publish(NOW);
 
@@ -217,7 +217,7 @@ class WorkshopTest {
     @Test
     void publish_twiceFromScheduled_isRejected() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, NOW);
+        workshop.schedule(ROOM, false, NOW);
         workshop.publish(NOW);
 
         assertThatThrownBy(() -> workshop.publish(NOW))
@@ -229,7 +229,7 @@ class WorkshopTest {
         Workshop workshop = createDraft();
         Instant created = workshop.updatedAt();
 
-        workshop.schedule(ROOM, NOW);
+        workshop.schedule(ROOM, false, NOW);
         assertThat(workshop.updatedAt()).isAfterOrEqualTo(created);
 
         Instant scheduledUpdate = workshop.updatedAt();

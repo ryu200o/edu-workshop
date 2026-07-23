@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPlanningException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.ScheduleWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopRepository;
@@ -45,20 +46,28 @@ public class ScheduleWorkshopCommandHandler
         RoomPlanningPermission permission = roomExposeApi.checkPlanningPermission(command.roomId())
                 .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", command.roomId()));
 
+        if (permission.status() == RoomPlanningPermission.PlanningStatus.BLOCKED) {
+            throw new RoomNotAvailableForPlanningException(command.roomId(), permission.reason());
+        }
+
+        boolean hasRoomWarning = permission.status() == RoomPlanningPermission.PlanningStatus.WARNING;
+
         String locationSnapshot = permission.planning().location().building()
                 + "/" + permission.planning().location().floor();
         RoomReference roomRef = RoomReference.of(
                 permission.planning().roomId(),
                 permission.planning().roomName(),
-                locationSnapshot);
+                locationSnapshot,
+                permission.planning().capacity());
 
-        workshop.schedule(roomRef, now);
+        workshop.schedule(roomRef, hasRoomWarning, now);
 
         workshopRepository.save(workshop);
 
         return new ScheduleWorkshopCommand.Result(
                 workshop.id().value(),
                 workshop.roomReference().roomId(),
-                workshop.updatedAt());
+                workshop.updatedAt(),
+                workshop.hasRoomWarning());
     }
 }
