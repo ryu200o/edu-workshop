@@ -78,12 +78,14 @@ Manages the lifecycle of workshops — from draft through scheduling, publishing
 | `title` | `VARCHAR(200)` | `NOT NULL` | Title of the workshop. Matches `@Size(max = 200)` (fail-fast DB guard). |
 | `description` | `VARCHAR(2000)` | `NULLABLE` | Detailed overview of the workshop. Matches `@Size(max = 2000)`. |
 | `room_id` | `UUID` | `NULLABLE` | Logical reference to the room (no physical FK). **Nullable** — a workshop can exist in `DRAFT` state without a room assigned. |
-| `room_name_snapshot` | `VARCHAR(255)` | `NULLABLE` | Decoupled snapshot of the room's display name. Filled at `schedule()`, refreshed at `reschedule()`. Lets the read side render without a cross-module call. |
-| `room_location_snapshot` | `VARCHAR(255)` | `NULLABLE` | Decoupled snapshot of the room's location (building/floor). Filled/refreshed together with `room_name_snapshot`. |
+| `room_name_snapshot` | `VARCHAR(255)` | `NULLABLE` | Decoupled snapshot of the room's display name. Filled at `schedule()`, refreshed by `WorkshopRoomEventHandler` on `RoomRenamedEvent`. Lets the read side render without a cross-module call. |
+| `room_location_snapshot` | `VARCHAR(255)` | `NULLABLE` | Decoupled snapshot of the room's location (building/floor). Filled/refreshed by `WorkshopRoomEventHandler` on `RoomRelocatedEvent`. |
+| `room_capacity_snapshot` | `INTEGER` | `NULLABLE` | Decoupled snapshot of the room's physical capacity. Filled at `schedule()`, refreshed by `WorkshopRoomEventHandler` on `RoomCapacityChanged`. Added by V6 migration. |
+| `has_room_warning` | `BOOLEAN` | `NOT NULL DEFAULT FALSE` | Internal projection flag: `true` when the referenced room is in `MAINTENANCE` state. Set/cleared by `WorkshopRoomEventHandler` on `RoomStateChanged` events. Read-side renders a warning badge from this persisted field. Added by V6 migration. |
 | `start_time` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Scheduled start time (UTC). Null until `schedule()`. |
 | `end_time` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Scheduled end time (UTC). Null until `schedule()`. |
 | `capacity` | `INTEGER` | `NOT NULL`, `CHECK (capacity > 0)` | Business registration capacity limit (can differ from room capacity). |
-| `state` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'DRAFT'` | Workshop lifecycle state: `DRAFT`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. Width 50 leaves room for future reactive states (`ROOM_DEACTIVATED_PENDING`, `OVER_CAPACITY_PENDING`) without an `ALTER`. |
+| `state` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'DRAFT'` | Workshop lifecycle state: `DRAFT`, `SCHEDULED`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. Width 50 leaves room for future reactive states (`ROOM_DEACTIVATED_PENDING`, `OVER_CAPACITY_PENDING`) without an `ALTER`. |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
 | `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
 
@@ -96,8 +98,8 @@ Manages the lifecycle of workshops — from draft through scheduling, publishing
 
 **Architectural Notes (Module Boundary & Decoupling — ADR 0001)**:
 *   `room_id` is a **logical UUID only** — no physical foreign key to the `rooms` table (respects Spring Modulith boundaries). Room physical info is reached via `RoomExposeAPI`, never by JOIN.
-*   `room_name_snapshot` / `room_location_snapshot` are **selective denormalized copies** captured at `schedule()` (and refreshed at `reschedule()`). They let the read side / UI render room info without a runtime cross-module call, keeping the Workshop module self-contained for display. They are **not** updated by a `RoomEventHandler` in Phase 1 — Room events are recorded-only (no Event Bus yet); automatic snapshot refresh on `RoomRenamed` / `RoomLocationChanged` is deferred until the Event Bus / Outbox is enabled.
-*   `room_id` + both snapshot columns are **nullable in the DB** to allow a `DRAFT` workshop to exist before a room is assigned. The **domain aggregate enforces** that `room_id` and both snapshots are non-null before the workshop transitions to `PUBLISHED` (publishing invariant). `start_time` / `end_time` are likewise required at publish.
+ *   `room_name_snapshot` / `room_location_snapshot` / `room_capacity_snapshot` are **selective denormalized copies** captured at `schedule()` (and refreshed reactively by `WorkshopRoomEventHandler` on Room domain events). They let the read side / UI render room info without a runtime cross-module call, keeping the Workshop module self-contained for display.
+ *   `room_id` + snapshot columns are **nullable in the DB** to allow a `DRAFT` workshop to exist before a room is assigned. The **domain aggregate enforces** that `room_id` and all snapshots are non-null before the workshop transitions to `PUBLISHED` (publishing invariant). `start_time` / `end_time` are likewise required at publish.
 *   `capacity` is the business registration limit; it is **independent** of the room's physical capacity (the room may physically hold more, but the workshop may be capped for pedagogical reasons). The runtime guard `workshop.capacity <= room.capacity` is enforced by the domain at publish (not a DB constraint, since room capacity can change after snapshot).
 *   The `state` column (not `status`) represents the workshop lifecycle.
 
