@@ -11,7 +11,14 @@ public record RoomPlanningPermission(
 
     public RoomPlanningPermission {
         Objects.requireNonNull(status, "status must not be null");
-        Objects.requireNonNull(planning, "planning must not be null");
+        switch (status) {
+            case ALLOWED -> Objects.requireNonNull(planning, "Planning data is required when status is ALLOWED");
+            case WARNING -> {
+                Objects.requireNonNull(reason, "Reason is required when status is WARNING");
+                Objects.requireNonNull(planning, "Planning data is required when status is WARNING");
+            }
+            case BLOCKED -> Objects.requireNonNull(reason, "Reason is required when status is BLOCKED");
+        }
     }
 
     public enum PlanningStatus {
