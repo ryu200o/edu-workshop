@@ -5,6 +5,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnscheduled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
 
@@ -95,9 +96,13 @@ public class Workshop {
         record(new WorkshopScheduled(id, room, updatedAt));
     }
 
-    public void publish(Instant now) {
-        requireNonNull(now, "Workshop now must be assigned before publishing");
+    public void publish(Instant now, int actualRoomCapacity) {
+        requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.SCHEDULED, "publish");
+
+        if (this.capacity.value() > actualRoomCapacity) {
+            throw new WorkshopCapacityExceedsRoomException(this.capacity.value(), actualRoomCapacity);
+        }
 
         this.state = WorkshopState.PUBLISHED;
         this.touch(now);

@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
 
 import org.junit.jupiter.api.Test;
@@ -171,7 +172,7 @@ class WorkshopTest {
         Workshop workshop = createDraft();
         workshop.schedule(ROOM, false, NOW);
 
-        workshop.publish(NOW);
+        workshop.publish(NOW, 50);
 
         assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
         assertThat(workshop.recordedEvents())
@@ -183,10 +184,19 @@ class WorkshopTest {
     }
 
     @Test
+    void publish_whenCapacityExceedsRoom_isRejected() {
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, false, NOW);
+
+        assertThatThrownBy(() -> workshop.publish(NOW, 20))
+                .isInstanceOf(WorkshopCapacityExceedsRoomException.class);
+    }
+
+    @Test
     void publish_fromDraft_isRejected() {
         Workshop workshop = createDraft();
 
-        assertThatThrownBy(() -> workshop.publish(NOW))
+        assertThatThrownBy(() -> workshop.publish(NOW, 50))
                 .isInstanceOf(InvalidWorkshopStateException.class)
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
@@ -202,7 +212,7 @@ class WorkshopTest {
         Workshop workshop = createDraft();
         workshop.schedule(ROOM, false, NOW);
 
-        workshop.publish(NOW);
+        workshop.publish(NOW, 50);
 
         assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
         assertThat(workshop.roomReference()).isEqualTo(ROOM);
@@ -218,9 +228,9 @@ class WorkshopTest {
     void publish_twiceFromScheduled_isRejected() {
         Workshop workshop = createDraft();
         workshop.schedule(ROOM, false, NOW);
-        workshop.publish(NOW);
+        workshop.publish(NOW, 50);
 
-        assertThatThrownBy(() -> workshop.publish(NOW))
+        assertThatThrownBy(() -> workshop.publish(NOW, 50))
                 .isInstanceOf(InvalidWorkshopStateException.class);
     }
 
@@ -233,7 +243,7 @@ class WorkshopTest {
         assertThat(workshop.updatedAt()).isAfterOrEqualTo(created);
 
         Instant scheduledUpdate = workshop.updatedAt();
-        workshop.publish(NOW);
+        workshop.publish(NOW, 50);
         assertThat(workshop.updatedAt()).isAfterOrEqualTo(scheduledUpdate);
     }
 
