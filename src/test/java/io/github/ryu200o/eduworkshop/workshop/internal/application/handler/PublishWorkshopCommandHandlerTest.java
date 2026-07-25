@@ -133,6 +133,24 @@ class PublishWorkshopCommandHandlerTest {
         }
 
         @Test
+        void clearsWarningFlag_whenRoomIsNowAllowed() {
+            Workshop workshop = createScheduledWorkshop(30);
+            workshop.markMaintenanceWarning(NOW);
+            assertThat(workshop.hasRoomWarning()).isTrue();
+
+            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(Optional.of(workshop));
+            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+                    .willReturn(Optional.of(ALLOWED_PERMISSION));
+            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(0);
+
+            handler.handle(new PublishWorkshopCommand(WORKSHOP_ID));
+
+            assertThat(workshop.hasRoomWarning()).isFalse();
+        }
+
+        @Test
         void rejectsWhenCapacityExceedsRoom() {
             Workshop workshop = createScheduledWorkshop(60);
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))

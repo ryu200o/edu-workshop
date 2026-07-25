@@ -57,6 +57,10 @@ public class PublishWorkshopCommandHandler
                     permission.reason());
         }
 
+        if (workshop.hasRoomWarning()) {
+            workshop.clearMaintenanceWarning(now);
+        }
+
         int overlapping = workshopRepository.countOverlapping(
                 workshop.roomReference().roomId(),
                 workshop.startTime(),

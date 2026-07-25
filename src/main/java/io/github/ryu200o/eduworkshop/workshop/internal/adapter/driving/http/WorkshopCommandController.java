@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.CreateWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.PublishWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.ScheduleWorkshopCommand;
 
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,13 @@ class WorkshopCommandController {
                                                             @RequestBody ScheduleWorkshopRequest request) {
         var command = new ScheduleWorkshopCommand(id, request.roomId());
         ScheduleWorkshopCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/publish")
+    ResponseEntity<PublishWorkshopCommand.Result> publish(@PathVariable UUID id) {
+        var command = new PublishWorkshopCommand(id);
+        PublishWorkshopCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
