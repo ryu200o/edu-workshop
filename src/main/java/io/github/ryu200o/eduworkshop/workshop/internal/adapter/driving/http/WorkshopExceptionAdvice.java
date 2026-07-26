@@ -1,6 +1,9 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.shared.application.exception.ResourceNotFoundException;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPlanningException;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopPersistenceException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
@@ -41,6 +44,24 @@ class WorkshopExceptionAdvice {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     ProblemDetail handleNotFound(ResourceNotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @ExceptionHandler(RoomNotAvailableForPlanningException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    ProblemDetail handleRoomNotAvailableForPlanning(RoomNotAvailableForPlanningException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+    }
+
+    @ExceptionHandler(RoomNotAvailableForPublishingException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    ProblemDetail handleRoomNotAvailableForPublishing(RoomNotAvailableForPublishingException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+    }
+
+    @ExceptionHandler(RoomConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleRoomConflict(RoomConflictException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     @ExceptionHandler(WorkshopPersistenceException.class)
