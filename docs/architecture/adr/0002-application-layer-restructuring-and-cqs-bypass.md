@@ -1,9 +1,9 @@
 # ADR 0002: Application Layer Restructuring & CQS Bypass
 
-- **Status:** Accepted
-- **Date:** 2026-07-12
+- **Status:** Revised (2026-07-25) — updated with Application orchestration rules, repository boundaries
+- **Date:** 2026-07-25 (revised); original 2026-07-12
 - **Deciders:** Lead Engineer / Architecture Guild
-- **Related:** `docs/architecture/development-guidelines.md`, ADR 0001, ADR 0005, `AGENTS.md`
+- **Related:** `docs/architecture/development-guidelines.md`, ADR 0001, ADR 0005, ADR 0006, ADR 0010, `AGENTS.md`
 
 ## Context
 
@@ -12,6 +12,9 @@ port/out, event}` and there was a temptation to host outbound ports under a `dom
 As we prepare to actually implement the Application layer (Command/Query handlers, buses), we need a
 single, unambiguous "golden" structure that all modules follow, aligned with the reference in
 `development-guidelines.md`, and compatible with Spring Modulith's boundary enforcement.
+
+Later experience with the Workshop module and the refactoring of ADR 0005 (global business rules)
+added further architectural constraints that are now codified here.
 
 ## Decision
 
@@ -63,26 +66,126 @@ Rather than sharing a single global bus, **each module declares its own `Command
 duplication protects Spring Modulith boundaries: no module reaches across into another module's
 application internals, and the buses resolve handlers only within the owning module's context.
 
+### 6. Aggregate enforces ONLY local invariants
+
+An aggregate validates only what it can prove with its own data:
+
+- State machine transitions (`requireState`)
+- Value object consistency (`endTime > startTime`)
+- Local business rules (capacity within snapshot, not-null guards)
+- Snapshot integrity
+
+An aggregate method must **never** accept a repository, policy, or any IO-backed interface as a parameter.
+Global / set-based rules (uniqueness, overlap, existence) belong to Application orchestration.
+
+**Workshop module (reference implementation):**
+```java
+// Workshop.publish(Instant now, int actualRoomCapacity)
+//   → only validates state transition + local capacity invariant
+//   → NO policy, NO repository parameter
+```
+
+**Room module (needs refactor — see Implementation Gap):**
+```java
+// Room.create(..., RoomUniquenessPolicy policy)  ← REJECTED pattern
+// Room.changeCode(..., RoomUniquenessPolicy)      ← REJECTED pattern
+```
+
+### 7. Global business rules — Application orchestration (check-then-execute)
+
+Rules that require observing the aggregate set are handled by the Application layer:
+
+```
+ ┌──────────────────────────────────────────────────┐
+ │                Application Handler                 │
+ │                                                    │
+ │  1. Load aggregate from repository                  │
+ │  2. Check global rules (query repository / ExposeAPI)│
+ │  3. Call aggregate behavior (local invariants only)  │
+ │  4. Save aggregate                                  │
+ │  5. Publish events                                  │
+ └──────────────────────────────────────────────────┘
+```
+
+**Workshop examples (already compliant):**
+
+- `ScheduleWorkshopCommandHandler`: loads workshop → calls `roomExposeApi.checkPlanningPermission()` → calls `workshop.schedule(roomRef)` → saves
+- `PublishWorkshopCommandHandler`: loads workshop with lock → calls `roomExposeApi.checkPlanningPermission()` → calls `repository.countOverlapping()` → calls `workshop.publish()` → saves
+
+The check and the execute are separate steps, both in the Application handler.
+The aggregate never sees the repository or the permission check.
+
+### 8. Repository appears only in Application
+
+`RoomRepository`, `WorkshopRepository`, and all outbound ports are injected **only** into Application handlers. They must never appear in:
+
+- Aggregate method signatures
+- Value object constructors
+- Domain Service constructors (unless the service is a genuine domain concept — see §9)
+- Policy interfaces (removed per ADR 0005)
+
+Cross-module queries (e.g., Workshop calling Room) go through `RoomExposeAPI` (per ADR 0010), never through a repository.
+
+### 9. Domain Service — only for genuine domain concepts
+
+A Domain Service may exist only if it represents an **independent business concept** that doesn't naturally belong to any single aggregate — for example, a `PricingCalculator`, `AllocationStrategy`, or `SchedulingAlgorithm`.
+
+A Domain Service must NOT be created solely to:
+- Wrap a repository query
+- Wrap a uniqueness check
+- Hide a policy interface
+- Perform any IO or cross-module call
+
+If the "service" has no business logic of its own and only delegates to a repository, keep it as an Application handler concern.
+
+### 10. Cross-module contract — RoomExposeAPI as business capability
+
+Per ADR 0010, cross-module dependencies are Application-only. The Application handler calls `RoomExposeAPI` to get a business decision (planning permission, room data). The Domain never imports another module's API or DTOs. The handler maps contract DTOs to domain VOs (Anti-Corruption Layer).
+
+### 11. Event as integration mechanism, not runtime validation
+
+Domain events are an **integration mechanism** for:
+- Synchronization across modules
+- Read model projection
+- Choreography (event-driven workflows)
+
+Events must NOT replace runtime validation. For example, a `WorkshopPublished` event does not replace the runtime overlap check — the overlap is checked synchronously in the handler before the aggregate is called. The event is published **after** all checks pass, as a notification to other modules.
+
 ## Consequences
 
 ### Positive
 - One canonical structure across modules; `create-module.sh` scaffolds it automatically.
-- Pure Domain (no SPI leakage), hidden handlers (package-private), fast reads (CQS bypass).
+- Pure Domain (no SPI leakage, no policy injection), hidden handlers (package-private), fast reads (CQS bypass).
 - Strong module isolation for Spring Modulith via per-module buses.
+- Clear responsibility: Application orchestrates global rules, aggregate owns local invariants.
+- Workshop module serves as the reference — no refactor needed.
 
 ### Negative / Trade-offs
 - Some boilerplate is duplicated per module (buses + framework interfaces) — accepted deliberately.
 - Read and write models can diverge; developers must keep query projections in sync with schema.
+- Room module handlers need refactoring to remove `RoomUniquenessPolicy` from aggregate calls (see Implementation Gap below).
+- Handlers are slightly heavier with orchestration logic (accepted — that is their job).
+
+## Implementation Gap
+
+The Room module still uses the old pattern (policy injected into aggregate). The following must be refactored to comply with §6–§8:
+
+| What | Current (gap) | Target (ADR compliant) |
+|---|---|---|
+| `Room.create(..., RoomUniquenessPolicy)` | Aggregate checks policy | Handler checks uniqueness, then calls `Room.create()` |
+| `Room.changeCode(..., RoomUniquenessPolicy)` | Same | Same |
+| `Room.changeName(..., RoomUniquenessPolicy)` | Same | Same |
+| `Room.relocateTo(..., RoomUniquenessPolicy)` | Same | Same |
+| `CreateRoomCommandHandler` | Injects policy, passes to aggregate | Injects `RoomRepository`, checks before create |
+| `RenameRoomCommandHandler` | Same | Same |
+| `RelocateRoomCommandHandler` | Same | Same |
+| `ChangeRoomCodeCommandHandler` | Same | Same |
+| `RoomUniquenessPolicy` interface | Exists in `domain/model/policy/` | Remove entirely |
+| `JpaRoomUniquenessPolicy` | Infrastructure adapter | Remove entirely |
+| `domain/model/policy/` package | Contains `RoomUniquenessPolicy` | Delete package |
+
+The Workshop module is fully compliant and requires no changes.
 
 ## Notes
-This branch only restructures packaging and documentation — **no business logic** is added. Handlers,
-buses, DTOs and gateways will be implemented in the following feature branch.
-
-## Refinement Note (ADR 0005)
-
-ADR 0005 (Domain Factory Gateway & Global Invariant via Domain Policy Interface) refines the layering decided
-here. It does **not** overturn §2 (reject `domain/spi`): outbound SPI ports still live in `application/port/out/`.
-ADR 0005 introduces a *domain-owned Policy interface* (`RoomUniquenessPolicy`) for set-based invariants — a
-distinct concept from an outbound SPI port — plus a Domain `RoomFactory` construction gateway. The application
-`RoomExistencePort` (an SPI port that merely wrapped the uniqueness query) is retired in favor of the domain
-policy. See ADR 0005 for the full rationale.
+- ADR 0005 (revised) contains the full rationale for removing policy injection from the aggregate.
+- This revision supersedes the Refinement Note that previously referenced the old ADR 0005.

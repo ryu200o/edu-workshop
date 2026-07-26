@@ -52,9 +52,9 @@ MUST follow when working in this repository. Read it before making changes.
   `RoomReader roomReader`. Never abbreviate to `repository` / `reader`.
 - Implementations: `JpaRoomWriteAdapter` (impl `RoomRepository`, persistence/jpa) and `JooqRoomReadAdapter`
   (impl `RoomReader`, persistence/jooq) — adapter class names are intentional and kept as-is.
-- **Uniqueness is NOT a repository concern.** `existsByCoordinate` / `existsByName` were removed from
-  `RoomRepository`. The global-uniqueness arbiter is `RoomUniquenessPolicy` (domain interface, see below),
-  whose IO impl `JpaRoomUniquenessPolicy` lives in the driven adapter.
+- **Uniqueness is an Application orchestration concern** (per ADR 0005 revised). The handler queries
+  the repository and evaluates uniqueness before calling the aggregate. No policy/interface is injected
+  into the aggregate.
 
 ## Modules & Skeleton
 
@@ -71,11 +71,13 @@ Consult these before designing or coding. They are the source of truth:
 - `docs/architecture/adr/0001-isolate-room-static-and-temporal-states.md` — Room static vs temporal state isolation.
 - `docs/architecture/adr/0002-application-layer-restructuring-and-cqs-bypass.md` — Application layout,
   reject `domain/spi`, package-private handlers, CQRS bypass, per-module Command/Query bus.
-- `docs/architecture/adr/0005-domain-policy-and-global-invariant.md` — **Accepted**: the global room-uniqueness
-  invariant is a **Domain Policy** (`RoomUniquenessPolicy`, in `domain/model/policy/`). The aggregate receives the
-  policy as an argument on every uniqueness-sensitive operation and throws `DuplicateRoomCodeException` /
-  `DuplicateRoomNameException` itself.
-  The Factory framing was dropped, but the policy is the current standard — follow this ADR.
+  **Revised to add**: aggregate local invariants only, Application orchestrates global rules,
+  Repository only in Application, Domain Service as pure concept, Event as integration.
+- `docs/architecture/adr/0005-global-business-rules-application-orchestration.md` — **Revised (supersedes
+  old policy injection)**: global business rules (uniqueness, overlap, existence) belong to Application
+  orchestration, NOT injected into the aggregate. Aggregate enforces only local invariants. No Repository
+  or Policy interface is passed into domain methods. The Workshop module is the reference implementation;
+  the Room module still needs refactoring (see Implementation Gap in ADR 0005).
 - `docs/architecture/adr/0006-shared-command-query-bus.md` — Shared Command/Query Bus (supersedes ADR 0002 §5):
   shared kernel owns the bus; modules own Commands/Queries/Handlers.
 - `docs/architecture/adr/0007-cross-module-data-decoupling-via-selective-snapshotting.md` — **Proposed**:
@@ -110,33 +112,22 @@ Consult these before designing or coding. They are the source of truth:
 - Never introduce DB columns or entities that cache temporal room availability; this prevents
   concurrency/locking issues. Treat `docs/database.md` as the authoritative source for this rule.
 
-## Domain Rule: Global / Set-based Invariant (Uniqueness) — Domain-owned Policy
+## Domain Rule: Global / Set-based Invariant (Uniqueness) — Application Orchestration
 
 - A **set-based invariant** (e.g. no two rooms share the same `(building, floor, code)` coordinate, and no two
   share the same `(building, floor, name)`) cannot be proven *by* a single Aggregate — it needs an arbiter that
-  looks at the whole set. But the **decision** of whether the invariant holds, and the exception it raises, belong
-  to the **Domain** (Ubiquitous Language: `DuplicateRoomCodeException` / `DuplicateRoomNameException` are
-  domain vocabulary).
-- Mechanism (**ADR 0005, Accepted**): a domain-owned `RoomUniquenessPolicy` interface in `domain/model/policy/`
-  answers the two uniqueness questions (`isCodeUnique`, `isNameUnique`). The **aggregate** receives the policy as
-  an argument on every uniqueness-sensitive operation (`Room.create`, `changeCode`, `changeName`, `relocateTo`),
-  checks it (after the idempotency skip, to avoid false-positive self-collision), and throws
-  `DuplicateRoomCodeException` / `DuplicateRoomNameException` (each carrying only its own collision data).
-  There is **no** `RoomFactory` — the aggregate is the single
-  decision-maker.
-- The Domain depends ONLY on the **domain interface** → it is pure at compile time (no infrastructure, no Spring).
-  The IO that answers the policy lives in `JpaRoomUniquenessPolicy` (driven adapter), which depends on
-  `RoomJpaRepository`. This is Hexagonal: the Domain knows a business rule, not a database.
+  looks at the whole set. Per **ADR 0005 (Revised)**, this arbiter is the **Application handler**, which checks
+  the invariant before delegating to the aggregate. The aggregate enforces ONLY local invariants (state transition,
+  value consistency, etc.) and never receives a policy or repository parameter.
+- **Mechanism:** handler queries the repository (`findByCoordinate`, `findByName`) → evaluates uniqueness →
+  calls `Room.create(...)` with no policy argument. If the DB constraint catches a race, the adapter translates
+  `DataIntegrityViolationException` → `DuplicateRoomCodeException` / `DuplicateRoomNameException`.
 - The **DB unique constraints** (`uk_rooms_building_floor_code`, `uk_rooms_building_floor_name`) remain the
-  authoritative, race-proof gate. `JpaRoomWriteAdapter.save()` translates `DataIntegrityViolationException` →
-  `DuplicateRoomCodeException` / `DuplicateRoomNameException` (correct type per constraint), so the TOCTOU
-  race is still caught. The policy read and the DB
-  constraint are **complementary**, not substitutive.
-- **Guardrails:** never inject a Repository / outbound port directly into a domain object — always via the domain
-  `RoomUniquenessPolicy` interface. The policy answers **only** the two uniqueness questions; do not turn it into a
-  catch-all validator.
-- **Handler role (thin):** load aggregate → build VOs → delegate to the aggregate passing the policy → save.
-  Handlers never call `exists*` and never evaluate the invariant themselves. Asserting *invariant ordering* is a
-  Domain concern, so it is tested in `RoomTest` (with an `ALWAYS_UNIQUE` stub) — NOT by spying on the policy inside
-  handler tests.
-- **Reconstitution** (`Room.reconstruct`) cleanly bypasses any uniqueness check (no spurious re-check on read).
+  authoritative, race-proof gate. The handler's read is a fast-fail / UX optimization; the adapter's
+  `DataIntegrityViolationException` translation is the final backstop.
+- **Guardrails:** never inject a Repository / outbound port into a domain object. Repository lives only in
+  Application Handlers. Aggregate method signatures must not carry policy or repository parameters.
+- **Handler role:** load aggregate → check global rules (query repository / ExposeAPI) → call aggregate
+  (domain-only params) → save → publish events. Handler tests verify orchestration; domain tests verify local
+  invariants only.
+- **Reconstitution** (`Room.reconstruct`) bypasses all invariant checks (no spurious re-validation on read).
