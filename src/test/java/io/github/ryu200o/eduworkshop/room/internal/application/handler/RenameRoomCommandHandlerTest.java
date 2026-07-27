@@ -7,11 +7,11 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
@@ -23,7 +23,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,9 +41,6 @@ class RenameRoomCommandHandlerTest {
     private RoomRepository roomRepository;
 
     @Mock
-    private RoomUniquenessPolicy uniquenessPolicy;
-
-    @Mock
     private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
@@ -54,30 +50,16 @@ class RenameRoomCommandHandlerTest {
     }
 
     private RenameRoomCommandHandler handler() {
-        return new RenameRoomCommandHandler(roomRepository, uniquenessPolicy, clock, domainEventPublisher);
+        return new RenameRoomCommandHandler(roomRepository, clock, domainEventPublisher);
     }
-
-    // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
-    private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
-        @Override
-        public boolean isCodeUnique(RoomLocation location, RoomCode code) {
-            return true;
-        }
-
-        @Override
-        public boolean isNameUnique(RoomLocation location, RoomName name) {
-            return true;
-        }
-    };
 
     private static Room existingRoom() {
-        RoomLocation location = RoomLocation.of("F", 2);
-        Instant now = Instant.now();
-        return Room.create(RoomId.generate(), RoomName.of("F-201"), location, RoomCode.of(1),
-                RoomCapacity.of(50), now, ALWAYS_UNIQUE);
+        return Room.reconstruct(
+                RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
+                RoomLocation.of("F", 2), RoomCode.of(1), RoomCapacity.of(50), RoomState.ACTIVE,
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"));
     }
 
-    // ── Step 1: load failure ──
     @Test
     void roomNotFound_whenLoadReturnsEmpty_throws() {
         RoomId id = RoomId.of(UUID.randomUUID());
@@ -90,9 +72,8 @@ class RenameRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 2: RAM guard (local invariant) blocks blank name (load happens first, no save/gate) ──
     @Test
-    void ramGuard_rejectsBlankName_withoutTouchingPorts() {
+    void ramGuard_rejectsBlankName_withoutSaving() {
         RoomId id = RoomId.of(UUID.randomUUID());
         when(roomRepository.loadById(id)).thenReturn(Optional.of(existingRoom()));
 
@@ -103,7 +84,6 @@ class RenameRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Idempotency: same name ⇒ no gate, no save, returns current projection ──
     @Test
     void sameName_isIdempotent_noSave() {
         Room room = existingRoom();
@@ -116,13 +96,11 @@ class RenameRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // The duplicate-name rejection is owned by the aggregate (RoomTest). The handler must not persist when
-    // the policy reports a collision, because the aggregate throws before save.
     @Test
-    void duplicateName_doesNotPersist_becauseAggregateRejectsFirst() {
+    void duplicateName_doesNotPersist() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101")))
                 .isInstanceOf(DuplicateRoomNameException.class);
@@ -130,12 +108,11 @@ class RenameRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Happy path — load → delegate (aggregate enforces uniqueness internally) → persist → return ──
     @Test
     void happyPath_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
@@ -154,17 +131,17 @@ class RenameRoomCommandHandlerTest {
     }
 
     @Test
-    void happyPath_loadsThenDelegatesThenSaves() {
+    void happyPath_loadsThenChecksExistsThenSaves() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
 
-        var ordered = org.mockito.Mockito.inOrder(roomRepository, uniquenessPolicy);
+        var ordered = org.mockito.Mockito.inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(uniquenessPolicy).isNameUnique(any(), any());
+        ordered.verify(roomRepository).existsByName(any(), any());
         ordered.verify(roomRepository).save(any());
     }
 }

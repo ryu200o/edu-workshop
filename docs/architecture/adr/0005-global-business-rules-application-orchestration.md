@@ -1,7 +1,7 @@
 # ADR 0005: Global Business Rules — Application Orchestration, Not Domain Policy Injection
 
-- **Status:** Revised (2026-07-25) — supersedes the earlier domain-policy-injection framing
-- **Date:** 2026-07-25 (revised); original 2026-07-12
+- **Status:** Revised (2026-07-27) — supersedes the earlier domain-policy-injection framing; refactor completed
+- **Date:** 2026-07-27 (revised); original 2026-07-12
 - **Deciders:** Lead Engineer / Architecture Guild
 - **Related:** ADR 0002, ADR 0003, ADR 0004, `AGENTS.md`, `docs/db/database.md`
 
@@ -126,36 +126,24 @@ DB unique constraints (`uk_rooms_building_floor_code`, `uk_rooms_building_floor_
 ### Negative / Trade-offs
 
 - **Handlers are slightly heavier.** They contain the orchestration logic for global rules. Accepted — orchestration *is* the handler's job.
-- **Room module handlers need refactoring.** All four handlers (`Create`, `ChangeCode`, `Rename`, `Relocate`) currently pass `RoomUniquenessPolicy` into the aggregate — this must change to the check-then-execute pattern.
-- `RoomUniquenessPolicy` interface and `JpaRoomUniquenessPolicy` adapter become dead code after refactor.
 - **No single "chokepoint"** for uniqueness checking. Each handler must independently call the appropriate repository method. Mitigated by DB constraints as final authority.
 
-## Implementation Gap
+## Implementation Status
 
-The following code still uses the old (rejected) pattern and must be refactored:
+The Room module has been fully refactored to the check-then-execute pattern:
 
-| File | Current pattern | Target pattern |
-|---|---|---|
-| `Room.create(..., RoomUniquenessPolicy)` | Aggregate calls policy | Handler checks uniqueness before calling `Room.create()` |
-| `Room.changeCode(..., RoomUniquenessPolicy)` | Aggregate calls policy | Handler checks uniqueness before calling `room.changeCode()` |
-| `Room.changeName(..., RoomUniquenessPolicy)` | Aggregate calls policy | Handler checks uniqueness before calling `room.changeName()` |
-| `Room.relocateTo(..., RoomUniquenessPolicy)` | Aggregate calls policy | Handler checks uniqueness before calling `room.relocateTo()` |
-| `CreateRoomCommandHandler` | Injects `RoomUniquenessPolicy`, passes to aggregate | Injects `RoomRepository`, queries before create |
-| `RenameRoomCommandHandler` | Same | Same |
-| `RelocateRoomCommandHandler` | Same | Same |
-| `ChangeRoomCodeCommandHandler` | Same | Same |
-| `RoomUniquenessPolicy` interface | Domain policy interface | Remove entirely |
-| `JpaRoomUniquenessPolicy` | Infrastructure impl | Remove entirely |
-| `RoomRepository.existsBy*` | Already removed (good) | Keep removed |
-
-### Refactoring order (for the refactor branch)
-
-1. Remove `RoomUniquenessPolicy` from aggregate methods (restore clean signatures)
-2. Add `existsByCoordinate` / `existsByName` back to `RoomRepository` (or use `findByCoordinate` + collection check)
-3. Update all 4 handlers to check before calling aggregate
-4. Remove `RoomUniquenessPolicy` interface and `JpaRoomUniquenessPolicy` adapter
-5. Update tests (no policy stubs needed)
-6. Remove `domain/model/policy/` package entirely
+| What | Status |
+|---|---|
+| `Room.create(..., RoomUniquenessPolicy)` → clean signature | ✅ Completed |
+| `Room.changeCode(..., RoomUniquenessPolicy)` → clean signature | ✅ Completed |
+| `Room.changeName(..., RoomUniquenessPolicy)` → clean signature | ✅ Completed |
+| `Room.relocateTo(..., RoomUniquenessPolicy)` → clean signature | ✅ Completed |
+| All 4 handlers check uniqueness via `existsBy*` before calling aggregate | ✅ Completed |
+| `RoomUniquenessPolicy` interface removed | ✅ Completed |
+| `JpaRoomUniquenessPolicy` adapter removed | ✅ Completed |
+| `domain/model/policy/` package removed | ✅ Completed |
+| All tests updated (no policy stubs) | ✅ Completed |
+| Exception hierarchy corrected (Duplicate* → ApplicationException) | ✅ Completed |
 
 ## Notes
 

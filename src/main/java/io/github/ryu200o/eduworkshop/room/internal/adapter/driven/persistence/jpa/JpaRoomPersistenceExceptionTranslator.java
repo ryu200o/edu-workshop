@@ -2,8 +2,8 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driven.persistence.j
 
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomPersistenceException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomNameException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 

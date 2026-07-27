@@ -6,7 +6,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomCodeException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 
@@ -20,14 +20,12 @@ import java.time.Instant;
 class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeCommand, ChangeRoomCodeCommand.Result> {
 
     private final RoomRepository roomRepository;
-    private final RoomUniquenessPolicy uniquenessPolicy;
     private final Clock clock;
     private final SpringDomainEventPublisher domainEventPublisher;
 
-    ChangeRoomCodeCommandHandler(RoomRepository roomRepository, RoomUniquenessPolicy uniquenessPolicy, Clock clock,
+    ChangeRoomCodeCommandHandler(RoomRepository roomRepository, Clock clock,
                                  SpringDomainEventPublisher domainEventPublisher) {
         this.roomRepository = roomRepository;
-        this.uniquenessPolicy = uniquenessPolicy;
         this.clock = clock;
         this.domainEventPublisher = domainEventPublisher;
     }
@@ -44,9 +42,13 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
             return toResult(room, room.code());
         }
 
+        if (roomRepository.existsByCoordinate(room.location(), newCode)) {
+            throw new DuplicateRoomCodeException(room.location(), newCode);
+        }
+
         RoomCode oldCode = room.code();
         Instant now = Instant.now(clock);
-        room.changeCode(newCode, uniquenessPolicy, now);
+        room.changeCode(newCode, now);
         Room saved = roomRepository.save(room);
         domainEventPublisher.publishEvents(room.recordedEvents());
         room.clearDomainEvents();

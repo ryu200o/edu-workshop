@@ -7,12 +7,12 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
@@ -24,7 +24,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,9 +43,6 @@ class RelocateRoomCommandHandlerTest {
     private RoomRepository roomRepository;
 
     @Mock
-    private RoomUniquenessPolicy uniquenessPolicy;
-
-    @Mock
     private SpringDomainEventPublisher domainEventPublisher;
     private Clock clock;
 
@@ -56,30 +52,16 @@ class RelocateRoomCommandHandlerTest {
     }
 
     private RelocateRoomCommandHandler handler() {
-        return new RelocateRoomCommandHandler(roomRepository, uniquenessPolicy, clock, domainEventPublisher);
+        return new RelocateRoomCommandHandler(roomRepository, clock, domainEventPublisher);
     }
-
-    // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
-    private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
-        @Override
-        public boolean isCodeUnique(RoomLocation location, RoomCode code) {
-            return true;
-        }
-
-        @Override
-        public boolean isNameUnique(RoomLocation location, RoomName name) {
-            return true;
-        }
-    };
 
     private static Room existingRoom() {
-        RoomLocation location = RoomLocation.of("F", 2);
-        Instant now = Instant.now();
-        return Room.create(RoomId.generate(), RoomName.of("F-201"), location, RoomCode.of(1),
-                RoomCapacity.of(50), now, ALWAYS_UNIQUE);
+        return Room.reconstruct(
+                RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
+                RoomLocation.of("F", 2), RoomCode.of(1), RoomCapacity.of(50), RoomState.ACTIVE,
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-03-15T00:00:00Z"));
     }
 
-    // ── Step 1: load failure ──
     @Test
     void roomNotFound_whenLoadReturnsEmpty_throws() {
         RoomId id = RoomId.of(UUID.randomUUID());
@@ -92,7 +74,6 @@ class RelocateRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 2: RAM guard (local invariant) blocks malformed location (load happens first, no save/gate) ──
     @Test
     void ramGuard_rejectsInvalidLocation_withoutTouchingPorts() {
         RoomId id = RoomId.of(UUID.randomUUID());
@@ -102,17 +83,14 @@ class RelocateRoomCommandHandlerTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(roomRepository).loadById(any());
-        verify(uniquenessPolicy, never()).isCodeUnique(any(), any(RoomCode.class));
         verify(roomRepository, never()).save(any());
     }
 
-    // The duplicate-code rejection is owned by the aggregate (RoomTest). When the policy reports a collision
-    // the aggregate throws before save, so nothing is persisted.
     @Test
-    void duplicateCode_doesNotPersist_becauseAggregateRejectsFirst() {
+    void duplicateCode_doesNotPersist() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(false);
+        when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
                 .isInstanceOf(DuplicateRoomCodeException.class);
@@ -120,7 +98,19 @@ class RelocateRoomCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Idempotency: same location ⇒ no gate, no save, returns the entity's CURRENT updatedAt ──
+    @Test
+    void duplicateName_doesNotPersist() {
+        Room room = existingRoom();
+        when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
+        when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(true);
+
+        assertThatThrownBy(() -> handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3)))
+                .isInstanceOf(DuplicateRoomNameException.class);
+
+        verify(roomRepository, never()).save(any());
+    }
+
     @Test
     void sameLocation_isIdempotent_noGateNoSave_returnsExistingUpdatedAt() {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
@@ -134,18 +124,16 @@ class RelocateRoomCommandHandlerTest {
 
         assertThat(response.oldLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
         assertThat(response.newLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
-        assertThat(response.updatedAt()).isEqualTo(fixedUpdated);   // NOT Instant.now()
-        verify(uniquenessPolicy, never()).isCodeUnique(any(), any(RoomCode.class));
+        assertThat(response.updatedAt()).isEqualTo(fixedUpdated);
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Happy path — load → delegate (aggregate enforces uniqueness internally) → persist → return ──
     @Test
     void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(true);
-        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
+        when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
@@ -155,8 +143,8 @@ class RelocateRoomCommandHandlerTest {
         Room saved = captor.getValue();
 
         assertThat(saved.location()).isEqualTo(RoomLocation.of("G", 3));
-        assertThat(saved.name()).isEqualTo(RoomName.of("F-201")); // name is preserved (decoupled)
-        assertThat(saved.code()).isEqualTo(RoomCode.of(1));          // code is preserved
+        assertThat(saved.name()).isEqualTo(RoomName.of("F-201"));
+        assertThat(saved.code()).isEqualTo(RoomCode.of(1));
         ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
         verify(domainEventPublisher).publishEvents(eventCaptor.capture());
         assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomRelocatedEvent);
@@ -166,19 +154,19 @@ class RelocateRoomCommandHandlerTest {
     }
 
     @Test
-    void happyPath_loadsThenDelegatesThenSaves() {
+    void happyPath_loadsThenChecksExistsThenSaves() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
-        when(uniquenessPolicy.isCodeUnique(any(), any(RoomCode.class))).thenReturn(true);
-        when(uniquenessPolicy.isNameUnique(any(), any())).thenReturn(true);
+        when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
+        when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
 
-        var ordered = inOrder(roomRepository, uniquenessPolicy);
+        var ordered = inOrder(roomRepository);
         ordered.verify(roomRepository).loadById(any());
-        ordered.verify(uniquenessPolicy).isCodeUnique(any(), any(RoomCode.class));
-        ordered.verify(uniquenessPolicy).isNameUnique(any(), any());
+        ordered.verify(roomRepository).existsByCoordinate(any(), any(RoomCode.class));
+        ordered.verify(roomRepository).existsByName(any(), any());
         ordered.verify(roomRepository).save(any());
     }
 }
