@@ -35,13 +35,15 @@ MUST follow when working in this repository. Read it before making changes.
 - The Facade may coordinate directly with Application Ports (Reader, Repository, Domain Service)
   **without going through the Command/Query Bus** — this is a trusted cross-module collaboration,
   not an external entry point (per ADR 0010).
-- **Exception layering:** a domain aggregate raises only **invariant violations** (e.g.
-  `RoomDomainException`, `DuplicateRoomCodeException`, `IllegalRoomStateException`) — these stay in
-  `internal/domain/model/exception/`. A **failed lookup / not-found** is an *application* concern, not a
-  domain invariant, so it lives in `internal/application/exception/` and extends the shared base
-  `shared.application.exception.ResourceNotFoundException` (abstract; `(resourceType, field, value)`
-  constructor). Handlers throw the not-found exception after an empty port lookup; the domain never imports
-  it. New modules (Workshop, …) follow the same split.
+- **Exception layering (3 categories):**
+  - **Local invariant violations** (raised by the aggregate, proven by a single object's state):
+    `IllegalRoomStateException`, `RoomDomainException` — stay in `internal/domain/model/exception/`.
+  - **Global / set-based rule violations** (raised by Application handlers per ADR 0005, proven by
+    cross-aggregate query): `DuplicateRoomCodeException`, `DuplicateRoomNameException` — live in
+    `internal/application/exception/` and extend `shared.application.exception.ApplicationException`.
+  - **Failed lookup / not-found** (raised by handlers after empty port lookup): `RoomNotFoundException`
+    — lives in `internal/application/exception/` and extends `ResourceNotFoundException`.
+  The domain never imports application exceptions. New modules follow the same split.
 
 ## Outbound Port Naming & DI Convention
 
@@ -76,8 +78,7 @@ Consult these before designing or coding. They are the source of truth:
 - `docs/architecture/adr/0005-global-business-rules-application-orchestration.md` — **Revised (supersedes
   old policy injection)**: global business rules (uniqueness, overlap, existence) belong to Application
   orchestration, NOT injected into the aggregate. Aggregate enforces only local invariants. No Repository
-  or Policy interface is passed into domain methods. The Workshop module is the reference implementation;
-  the Room module still needs refactoring (see Implementation Gap in ADR 0005).
+  or Policy interface is passed into domain methods. Both Workshop and Room modules comply.
 - `docs/architecture/adr/0006-shared-command-query-bus.md` — Shared Command/Query Bus (supersedes ADR 0002 §5):
   shared kernel owns the bus; modules own Commands/Queries/Handlers.
 - `docs/architecture/adr/0007-cross-module-data-decoupling-via-selective-snapshotting.md` — **Proposed**:

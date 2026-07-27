@@ -2,8 +2,8 @@ package io.github.ryu200o.eduworkshop.room.internal.adapter.driving.http;
 
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomPersistenceException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomCodeException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.DuplicateRoomNameException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomCodeException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomNameException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.springframework.http.HttpStatus;

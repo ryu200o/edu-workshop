@@ -38,6 +38,16 @@ class JpaRoomWriteAdapter implements RoomRepository {
     }
 
     @Override
+    public boolean existsByCoordinate(RoomLocation location, RoomCode code) {
+        return repository.existsByBuildingAndFloorAndCode(location.building(), location.floor(), code.value());
+    }
+
+    @Override
+    public boolean existsByName(RoomLocation location, RoomName name) {
+        return repository.existsByBuildingAndFloorAndName(location.building(), location.floor(), name.value());
+    }
+
+    @Override
     public Room save(Room room) {
         try {
             repository.saveAndFlush(toEntity(room));

@@ -1,8 +1,9 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.exception;
 
+import io.github.ryu200o.eduworkshop.shared.application.exception.ApplicationException;
 import java.util.UUID;
 
-public class RoomConflictException extends RuntimeException {
+public class RoomConflictException extends ApplicationException {
 
     private final UUID roomId;
     private final UUID conflictingWorkshopId;

@@ -1,10 +1,11 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.exception;
 
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
+import io.github.ryu200o.eduworkshop.shared.application.exception.ApplicationException;
 
 import java.util.UUID;
 
-public class RoomNotAvailableForPublishingException extends RuntimeException {
+public class RoomNotAvailableForPublishingException extends ApplicationException {
 
     private final UUID roomId;
     private final RoomPlanningPermission.PlanningStatus status;

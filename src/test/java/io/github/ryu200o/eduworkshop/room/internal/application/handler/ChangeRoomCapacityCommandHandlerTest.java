@@ -8,10 +8,9 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.policy.RoomUniquenessPolicy;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
@@ -23,7 +22,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -55,27 +53,13 @@ class ChangeRoomCapacityCommandHandlerTest {
         return new ChangeRoomCapacityCommandHandler(roomRepository, clock, domainEventPublisher);
     }
 
-    // Fixtures bypass the uniqueness gate (already-unique room): a policy that always reports "unique".
-    private static final RoomUniquenessPolicy ALWAYS_UNIQUE = new RoomUniquenessPolicy() {
-        @Override
-        public boolean isCodeUnique(RoomLocation location, RoomCode code) {
-            return true;
-        }
-
-        @Override
-        public boolean isNameUnique(RoomLocation location, RoomName name) {
-            return true;
-        }
-    };
-
     private static Room existingRoom() {
-        RoomLocation location = RoomLocation.of("F", 2);
-        Instant now = Instant.now();
-        return Room.create(RoomId.generate(), RoomName.of("F-201"), location, RoomCode.of(1),
-                RoomCapacity.of(50), now, ALWAYS_UNIQUE);
+        return Room.reconstruct(
+                RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
+                RoomLocation.of("F", 2), RoomCode.of(1), RoomCapacity.of(50), RoomState.ACTIVE,
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"));
     }
 
-    // ── Step 1: load failure ──
     @Test
     void roomNotFound_whenLoadReturnsEmpty_throws() {
         RoomId id = RoomId.of(UUID.randomUUID());
@@ -87,8 +71,6 @@ class ChangeRoomCapacityCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── capacity invariant: owned by the RoomCapacity VO. The handler builds the VO from the command,
-    //    so a non-positive value is rejected when the VO self-validates (IllegalArgumentException). ──
     @Test
     void domainRejectsNonPositiveCapacity_withoutSaving() {
         Room room = existingRoom();
@@ -102,7 +84,6 @@ class ChangeRoomCapacityCommandHandlerTest {
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Idempotency: same capacity ⇒ no save, returns the entity's CURRENT updatedAt ──
     @Test
     void sameCapacity_isIdempotent_noSave_returnsExistingUpdatedAt() {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
@@ -116,11 +97,10 @@ class ChangeRoomCapacityCommandHandlerTest {
 
         assertThat(response.oldCapacity()).isEqualTo(50);
         assertThat(response.newCapacity()).isEqualTo(50);
-        assertThat(response.updatedAt()).isEqualTo(fixedUpdated);   // NOT Instant.now()
+        assertThat(response.updatedAt()).isEqualTo(fixedUpdated);
         verify(roomRepository, never()).save(any());
     }
 
-    // ── Step 3: Happy path — passes guards, mutates, persists, returns projection ──
     @Test
     void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
         Room room = existingRoom();

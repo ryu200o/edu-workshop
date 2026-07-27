@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception;
 
-public class WorkshopCapacityExceedsRoomException extends RuntimeException {
+public class WorkshopCapacityExceedsRoomException extends WorkshopDomainException {
 
     private final int workshopCapacity;
     private final int roomCapacity;
