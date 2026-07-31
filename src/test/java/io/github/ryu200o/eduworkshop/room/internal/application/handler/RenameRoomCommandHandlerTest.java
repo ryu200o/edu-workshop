@@ -12,7 +12,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNot
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -41,7 +41,7 @@ class RenameRoomCommandHandlerTest {
     private RoomRepository roomRepository;
 
     @Mock
-    private SpringDomainEventPublisher domainEventPublisher;
+    private RoomDomainEventPublisher roomDomainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -50,7 +50,7 @@ class RenameRoomCommandHandlerTest {
     }
 
     private RenameRoomCommandHandler handler() {
-        return new RenameRoomCommandHandler(roomRepository, clock, domainEventPublisher);
+        return new RenameRoomCommandHandler(roomRepository, clock, roomDomainEventPublisher);
     }
 
     private static Room existingRoom() {
@@ -123,7 +123,7 @@ class RenameRoomCommandHandlerTest {
 
         assertThat(saved.name()).isEqualTo(RoomName.of("LAB-101"));
         ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
-        verify(domainEventPublisher).publishEvents(eventCaptor.capture());
+        verify(roomDomainEventPublisher).publish(eventCaptor.capture());
         assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomRenamedEvent);
         assertThat(response.id()).isEqualTo(room.id().value());
         assertThat(response.oldName()).isEqualTo("F-201");

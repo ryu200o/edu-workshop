@@ -19,7 +19,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-public class ScheduleWorkshopCommandHandler
+class ScheduleWorkshopCommandHandler
         implements CommandHandler<ScheduleWorkshopCommand, ScheduleWorkshopCommand.Result> {
 
     private final WorkshopRepository workshopRepository;

@@ -3,7 +3,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
@@ -20,21 +20,21 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-public class PublishWorkshopCommandHandler
+class PublishWorkshopCommandHandler
         implements CommandHandler<PublishWorkshopCommand, PublishWorkshopCommand.Result> {
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
-    private final SpringDomainEventPublisher domainEventPublisher;
+    private final WorkshopEventPublisher workshopEventPublisher;
     private final Clock clock;
 
     PublishWorkshopCommandHandler(WorkshopRepository workshopRepository,
                                    RoomExposeAPI roomExposeApi,
-                                   SpringDomainEventPublisher domainEventPublisher,
+                                   WorkshopEventPublisher workshopEventPublisher,
                                    Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
-        this.domainEventPublisher = domainEventPublisher;
+        this.workshopEventPublisher = workshopEventPublisher;
         this.clock = clock;
     }
 
@@ -75,7 +75,7 @@ public class PublishWorkshopCommandHandler
 
         workshopRepository.save(workshop);
 
-        domainEventPublisher.publishEvents(workshop.recordedEvents());
+        workshopEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
 
         return new PublishWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt());

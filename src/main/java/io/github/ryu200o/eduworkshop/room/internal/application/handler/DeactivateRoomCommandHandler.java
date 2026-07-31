@@ -7,7 +7,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomDomainEventPublisher;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +20,13 @@ class DeactivateRoomCommandHandler implements CommandHandler<DeactivateRoomComma
 
     private final RoomRepository roomRepository;
     private final Clock clock;
-    private final SpringDomainEventPublisher domainEventPublisher;
+    private final RoomDomainEventPublisher roomDomainEventPublisher;
 
     DeactivateRoomCommandHandler(RoomRepository roomRepository, Clock clock,
-                                 SpringDomainEventPublisher domainEventPublisher) {
+                                  RoomDomainEventPublisher roomDomainEventPublisher) {
         this.roomRepository = roomRepository;
         this.clock = clock;
-        this.domainEventPublisher = domainEventPublisher;
+        this.roomDomainEventPublisher = roomDomainEventPublisher;
     }
 
     @Override
@@ -43,7 +43,7 @@ class DeactivateRoomCommandHandler implements CommandHandler<DeactivateRoomComma
                     room.id().value(), previous, room.state(), room.updatedAt());
         }
         Room saved = roomRepository.save(room);
-        domainEventPublisher.publishEvents(room.recordedEvents());
+        roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
         return new DeactivateRoomCommand.Result(
                 saved.id().value(), previous, saved.state(), saved.updatedAt());

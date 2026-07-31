@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.PlanningStatus;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.RoomPlanningData;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
@@ -76,7 +76,7 @@ class PublishWorkshopCommandHandlerTest {
     private RoomExposeAPI roomExposeApi;
 
     @Mock
-    private SpringDomainEventPublisher domainEventPublisher;
+    private WorkshopEventPublisher workshopEventPublisher;
 
     @Captor
     private ArgumentCaptor<List<?>> eventsCaptor;
@@ -88,7 +88,7 @@ class PublishWorkshopCommandHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new PublishWorkshopCommandHandler(
-                workshopRepository, roomExposeApi, domainEventPublisher, fixedClock);
+                workshopRepository, roomExposeApi, workshopEventPublisher, fixedClock);
     }
 
     private Workshop createScheduledWorkshop(int capacity) {
@@ -129,7 +129,7 @@ class PublishWorkshopCommandHandlerTest {
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
 
             verify(workshopRepository).save(workshop);
-            verify(domainEventPublisher).publishEvents(any());
+            verify(workshopEventPublisher).publish(any());
         }
 
         @Test

@@ -8,7 +8,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomCodeException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomDomainEventPublisher;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +21,13 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
 
     private final RoomRepository roomRepository;
     private final Clock clock;
-    private final SpringDomainEventPublisher domainEventPublisher;
+    private final RoomDomainEventPublisher roomDomainEventPublisher;
 
     ChangeRoomCodeCommandHandler(RoomRepository roomRepository, Clock clock,
-                                 SpringDomainEventPublisher domainEventPublisher) {
+                                  RoomDomainEventPublisher roomDomainEventPublisher) {
         this.roomRepository = roomRepository;
         this.clock = clock;
-        this.domainEventPublisher = domainEventPublisher;
+        this.roomDomainEventPublisher = roomDomainEventPublisher;
     }
 
     @Override
@@ -50,7 +50,7 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
         Instant now = Instant.now(clock);
         room.changeCode(newCode, now);
         Room saved = roomRepository.save(room);
-        domainEventPublisher.publishEvents(room.recordedEvents());
+        roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
         return toResult(saved, oldCode);
     }

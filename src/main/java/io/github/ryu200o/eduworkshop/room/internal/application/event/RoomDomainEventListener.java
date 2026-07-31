@@ -6,6 +6,7 @@ import io.github.ryu200o.eduworkshop.room.contract.RoomRelocatedIntegrationEvent
 import io.github.ryu200o.eduworkshop.room.contract.RoomRenamedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateChangedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateContract;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomIntegrationEventPublisher;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
@@ -13,7 +14,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomain
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,16 +22,14 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.util.List;
-
 @Component
-class RoomIntegrationEventPublisher {
+class RoomDomainEventListener {
 
-    private static final Logger log = LoggerFactory.getLogger(RoomIntegrationEventPublisher.class);
+    private static final Logger log = LoggerFactory.getLogger(RoomDomainEventListener.class);
 
-    private final SpringDomainEventPublisher publisher;
+    private final RoomIntegrationEventPublisher publisher;
 
-    RoomIntegrationEventPublisher(SpringDomainEventPublisher publisher) {
+    RoomDomainEventListener(RoomIntegrationEventPublisher publisher) {
         this.publisher = publisher;
     }
 
@@ -50,7 +48,7 @@ class RoomIntegrationEventPublisher {
             return;
         }
         log.debug("Publishing integration event: {}", integration);
-        publisher.publishEvents(List.of(integration));
+        publisher.publish(integration);
     }
 
     // -------------------------------------------------------------------------
