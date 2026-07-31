@@ -98,6 +98,10 @@ Consult these before designing or coding. They are the source of truth:
   Cross-module dependencies are Application-only. Contract types stay outside `internal/`;
   Module Facade (`internal/facade/`) is distinct from driving adapters. Domain must never import
   another module's API or contract DTOs. The Application layer acts as Anti-Corruption Layer (ACL).
+- `docs/architecture/adr/0011-event-publication-registry-as-outbox.md` — **Accepted**:
+  Spring Modulith Event Publication Registry is the transactional outbox (below ports & adapters,
+  transparent to Application). One `event_publication` row per (event, listener) in the business
+  TX; completion via UPDATE `completion_date`; restart replay opt-in.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).
