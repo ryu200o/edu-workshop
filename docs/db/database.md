@@ -181,22 +181,31 @@ Records user ticket bookings for workshops, including check-in tracking.
 
 ### 7. `event_publication` Table (Spring Modulith Outbox Event Registry)
 
-Stores published domain events waiting for asynchronous outbox delivery. Managed by Spring Modulith.
+Transactional outbox for asynchronous event delivery. Managed by Spring Modulith's Event
+Publication Registry (ADR 0011): **one row per (event, listener)**, inserted in the **same
+transaction** as the business write, with completion recorded by **UPDATE** `completion_date`
+(completion mode `update`). Implemented by Flyway `V7__create_event_publication_table.sql`,
+copied from the official Modulith JDBC schema with two documented portability tweaks
+(`TIMESTAMP WITH TIME ZONE` instead of `TIMESTAMP(9) ...`; portable composite index instead of a
+Postgres-only `USING hash` index) so the same DDL runs on H2 (tests) and PostgreSQL (runtime).
 
 | Column Name | Data Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
-| `id` | `UUID` | `PRIMARY KEY` | Unique identifier for the event publication. |
+| `id` | `UUID` | `PRIMARY KEY` | Unique identifier for the event publication row. |
 | `listener_id` | `TEXT` | `NOT NULL` | Identifier of the consuming event listener (fully qualified class/method name). |
 | `event_type` | `TEXT` | `NOT NULL` | Fully qualified class name of the published event type. |
 | `serialized_event` | `TEXT` | `NOT NULL` | Serialized JSON payload of the event. |
-| `publication_date` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Timestamp when the event was published. |
-| `completion_date` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp when event processing completed. |
-| `status` | `TEXT` | `NULLABLE` | Delivery status (e.g. `PUBLISHED`). |
-| `completion_attempts` | `INTEGER` | `NULLABLE` | Count of consumption retry attempts. |
-| `last_resubmission_date` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp of the last retry attempt. |
+| `publication_date` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Timestamp when the event was published (business TX commit). |
+| `completion_date` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp when the listener completed delivery. Null until processed. |
+| `status` | `TEXT` | `NULLABLE` | Delivery status: `COMPLETED` on success, `FAILED` when the listener threw. |
+| `completion_attempts` | `INTEGER` | `NULLABLE` | Count of delivery attempts for this publication. |
+| `last_resubmission_date` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp of the last resubmission attempt. |
 
 **Indexes & Constraints**:
-*   `event_publication_by_completion_date_idx`: Index on `completion_date` to quickly query uncompleted events for retry scheduling.
+*   `event_publication_by_completion_date_idx`: Index on `completion_date` to quickly query
+    uncompleted events for retry scheduling.
+*   `event_publication_by_listener_id_serialized_event_idx`: Composite index on
+    `(listener_id, serialized_event)` for the registry's BY_EVENT_AND_LISTENER_ID upsert lookup.
 
 ---
 
@@ -215,7 +224,7 @@ Each module follows a **3-step data lifecycle** for auditing and traceability:
 *   **History entries are append-only** — never updated or deleted.
 *   **Snapshots are write-once** — created exactly once per workshop.
 *   **JSONB columns** use a JPA `@Convert` with `JsonbConverter` (wraps Jackson 3 `ObjectMapper`).
-*   **`event_publication`** outbox table (managed by Spring Modulith) provides at-least-once delivery guarantees for cross-module event processing. This is distinct from the business audit history tables.
+*   **`event_publication`** outbox table (managed by Spring Modulith, ADR 0011) provides at-least-once delivery guarantees for cross-module event processing, with **one row per (event, listener)**. This is distinct from the business audit history tables.
 
 ---
 

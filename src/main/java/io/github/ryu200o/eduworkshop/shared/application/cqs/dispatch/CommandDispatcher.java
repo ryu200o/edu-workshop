@@ -23,8 +23,16 @@ public class CommandDispatcher {
         this.defaultPipeline = defaultPipeline;
     }
 
-    public Object dispatch(Command<?> command) {
-        CommandPipeline pipeline = policyResolver.resolve(command).orElse(defaultPipeline);
-        return pipeline.run(command, resolver::handle);
+    /**
+     * Runs the command through its resolved pipeline chain. The parameter is declared as {@link Object} rather
+     * than {@link Command} on purpose: the Modulith observability interceptor formats intercepted method
+     * signatures, and a generic {@code Command<R>} argument normalizes to {@code Command<?>} whose unbounded
+     * wildcard resolves to {@code null}, crashing the formatter.
+     */
+    @SuppressWarnings("rawtypes")
+    public Object dispatch(Object command) {
+        Command c = (Command) command;
+        CommandPipeline pipeline = policyResolver.resolve(c).orElse(defaultPipeline);
+        return pipeline.run(c, resolver::handle);
     }
 }

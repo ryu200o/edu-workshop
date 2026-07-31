@@ -12,7 +12,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.event.SpringDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomDomainEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -23,7 +23,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,7 +42,7 @@ class PlaceRoomUnderMaintenanceCommandHandlerTest {
     private RoomRepository roomRepository;
 
     @Mock
-    private SpringDomainEventPublisher domainEventPublisher;
+    private RoomDomainEventPublisher roomDomainEventPublisher;
     private Clock clock;
 
     @BeforeEach
@@ -52,7 +51,7 @@ class PlaceRoomUnderMaintenanceCommandHandlerTest {
     }
 
     private PlaceRoomUnderMaintenanceCommandHandler handler() {
-        return new PlaceRoomUnderMaintenanceCommandHandler(roomRepository, clock, domainEventPublisher);
+        return new PlaceRoomUnderMaintenanceCommandHandler(roomRepository, clock, roomDomainEventPublisher);
     }
 
     private static Room existingRoom(RoomState state) {
@@ -85,7 +84,7 @@ class PlaceRoomUnderMaintenanceCommandHandlerTest {
         verify(roomRepository).save(captor.capture());
         assertThat(captor.getValue().state()).isEqualTo(RoomState.MAINTENANCE);
         ArgumentCaptor<List> captor2 = ArgumentCaptor.forClass(List.class);
-        verify(domainEventPublisher).publishEvents(captor2.capture());
+        verify(roomDomainEventPublisher).publish(captor2.capture());
         assertThat(captor2.getValue()).anyMatch(e -> e instanceof RoomStateChanged);
         assertThat(response.previousState()).isEqualTo(RoomState.ACTIVE);
         assertThat(response.newState()).isEqualTo(RoomState.MAINTENANCE);
