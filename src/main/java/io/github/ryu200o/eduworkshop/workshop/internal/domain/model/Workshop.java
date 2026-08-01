@@ -19,6 +19,23 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Aggregate Root of the Workshop module.
+ *
+ * <p>Encapsulates a scheduled/published educational session: title, description, time window, capacity,
+ * and an optional {@link RoomReference} carrying denormalized room snapshots (ADR 0007). A Rich Domain
+ * Model — mutations only through explicit, intention-revealing behaviors, never public setters.</p>
+ *
+ * <p>Lifecycle (see {@link WorkshopState}): born {@code DRAFT} → {@link #schedule} to {@code SCHEDULED}
+ * (planning only, no room reservation — ADR 0008) → {@link #publish} to {@code PUBLISHED} (the room is
+ * reserved). Post-publish changes ({@link #changeRoom}, {@link #adjustCapacity}, {@link #cancel}) are
+ * only allowed in {@code PUBLISHED}. A room going {@code DEACTIVATED} returns the workshop to
+ * {@code DRAFT} ({@link #returnToDraft}).</p>
+ *
+ * <p>Local invariants are enforced here (state transitions, capacity vs room, time-window validity);
+ * global / set-based rules (uniqueness of availability, conflict with other PUBLISHED workshops,
+ * capacity vs active registrations) are orchestrated by the Application layer (ADR 0005).</p>
+ */
 public class Workshop {
 
     private final WorkshopId id;
@@ -59,6 +76,23 @@ public class Workshop {
         this.updatedAt = requireNonNull(updatedAt, "UpdatedAt cannot be null");
     }
 
+    /**
+     * Creates a new workshop aggregate in state {@code DRAFT}.
+     *
+     * <p>Validates the local invariant that the time window is well-formed ({@code endTime} strictly
+     * after {@code startTime}); the room is not yet assigned (that is {@link #schedule}). Records a
+     * {@link WorkshopCreated} domain event.</p>
+     *
+     * @param id          the aggregate identifier
+     * @param title       the workshop title (self-validating VO)
+     * @param description the workshop description (self-validating VO)
+     * @param startTime   planned start instant
+     * @param endTime     planned end instant; must be after {@code startTime}
+     * @param capacity    maximum participant capacity (self-validating VO)
+     * @param now         the current instant, used for {@code createdAt}/{@code updatedAt}
+     * @return the newly created aggregate
+     * @throws InvalidWorkshopTimeRangeException if {@code endTime} is not after {@code startTime}
+     */
     public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description,
                                    Instant startTime, Instant endTime, WorkshopCapacity capacity, Instant now) {
         if (!endTime.isAfter(startTime)) {
@@ -72,6 +106,13 @@ public class Workshop {
         return workshop;
     }
 
+    /**
+     * Reconstitutes an existing aggregate from persistence.
+     *
+     * <p>Bypasses <em>all</em> invariant checks — no spurious re-validation on read — mirroring the
+     * reconstruction pattern of the other aggregates ({@code Room.reconstruct}). Called only by the
+     * write adapter, never by business logic.</p>
+     */
     public static Workshop reconstruct(WorkshopId id,
                                        WorkshopTitle title,
                                        WorkshopDescription description,
@@ -87,6 +128,19 @@ public class Workshop {
                 capacity, hasRoomWarning, state, createdAt, updatedAt);
     }
 
+    /**
+     * Assigns a room and moves the workshop DRAFT → {@code SCHEDULED}.
+     *
+     * <p>Per ADR 0008 this is a <em>planning</em> act, not a reservation: overlapping schedules for the
+     * same room are allowed, and no global availability check happens here. The {@code hasRoomWarning}
+     * flag is carried over from the Application handler (a room in {@code MAINTENANCE} still permits
+     * planning, with a warning). Records a {@link WorkshopScheduled} event.</p>
+     *
+     * @param room           the room reference (id + name/location/capacity snapshots, ADR 0007)
+     * @param hasRoomWarning whether the room is under maintenance (planning allowed, with warning)
+     * @param now            the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code DRAFT}
+     */
     public void schedule(RoomReference room, boolean hasRoomWarning, Instant now) {
         requireNonNull(room, "room must be assigned before scheduling");
         requireNonNull(now, "now cannot be null");
@@ -101,6 +155,19 @@ public class Workshop {
         record(new WorkshopScheduled(id, room, updatedAt));
     }
 
+    /**
+     * Publishes a {@code SCHEDULED} workshop, turning planning into a reservation (ADR 0008).
+     *
+     * <p>Enforces the local invariant that the workshop capacity must not exceed the room's actual
+     * physical capacity (passed in by the Application handler after querying Room). The global
+     * "room free for the window" conflict check is orchestrated by the Application handler before
+     * this call. Records a {@link WorkshopPublished} event.</p>
+     *
+     * @param now               the current instant, used for {@code updatedAt}
+     * @param actualRoomCapacity the room's current physical capacity (from Room planning data)
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     * @throws WorkshopCapacityExceedsRoomException if the workshop capacity exceeds the room's capacity
+     */
     public void publish(Instant now, int actualRoomCapacity) {
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.SCHEDULED, "publish");
@@ -115,6 +182,18 @@ public class Workshop {
         record(new WorkshopPublished(id, updatedAt));
     }
 
+    /**
+     * Refreshes the denormalized room snapshots (name/location/capacity, ADR 0007) on an existing
+     * room reference, without changing the room itself.
+     *
+     * <p>Called by the {@code WorkshopRoomEventHandler} when the Room module emits rename / relocate /
+     * capacity-change integration events. Allowed in {@code SCHEDULED} and {@code PUBLISHED} (the
+     * states where a room is assigned); does not emit a domain event.</p>
+     *
+     * @param updatedRef the room reference carrying the refreshed snapshots
+     * @param now        the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop has no room yet (not {@code SCHEDULED}/{@code PUBLISHED})
+     */
     public void updateRoomSnapshot(RoomReference updatedRef, Instant now) {
         requireNonNull(updatedRef, "room snapshot must not be null");
         requireNonNull(now, "now cannot be null");
@@ -127,6 +206,16 @@ public class Workshop {
         this.touch(now);
     }
 
+    /**
+     * Flags the assigned room as under maintenance ({@code hasRoomWarning = true}).
+     *
+     * <p>Called by the {@code WorkshopRoomEventHandler} when the room transitions to
+     * {@code MAINTENANCE}. Planning state ({@code SCHEDULED}) is kept — maintenance is a warning, not
+     * a blocker. Does not emit a domain event.</p>
+     *
+     * @param now the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     */
     public void markMaintenanceWarning(Instant now) {
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.SCHEDULED, "markMaintenanceWarning");
@@ -134,6 +223,15 @@ public class Workshop {
         this.touch(now);
     }
 
+    /**
+     * Clears the maintenance warning ({@code hasRoomWarning = false}).
+     *
+     * <p>Called by the {@code WorkshopRoomEventHandler} when the room returns to {@code ACTIVE}
+     * after maintenance. Does not emit a domain event.</p>
+     *
+     * @param now the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     */
     public void clearMaintenanceWarning(Instant now) {
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.SCHEDULED, "clearMaintenanceWarning");
@@ -141,6 +239,17 @@ public class Workshop {
         this.touch(now);
     }
 
+    /**
+     * Releases the room and moves the workshop back {@code SCHEDULED → DRAFT}.
+     *
+     * <p>Called by the {@code WorkshopRoomEventHandler} when the room is {@code DEACTIVATED}
+     * (planning no longer possible), and in Phase 2 by {@code ChangeWorkshopRoomCommandHandler} to
+     * kick out conflicting {@code SCHEDULED} workshops from a target room. Clears the room reference
+     * and the maintenance warning; records a {@link WorkshopUnscheduled} event.</p>
+     *
+     * @param now the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     */
     public void returnToDraft(Instant now) {
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.SCHEDULED, "returnToDraft");
