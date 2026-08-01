@@ -7,8 +7,8 @@
 
 ## Context
 
-The initial per-module skeleton placed the Application layer as `application/{command, query, port/in,
-port/out, event}` and there was a temptation to host outbound ports under a `domain/spi` location.
+The initial per-module skeleton placed the Application layer as `application/{command, query, port/inbound,
+port/outbound, event}` and there was a temptation to host outbound ports under a `domain/spi` location.
 As we prepare to actually implement the Application layer (Command/Query handlers, buses), we need a
 single, unambiguous "golden" structure that all modules follow, aligned with the reference in
 `development-guidelines.md`, and compatible with Spring Modulith's boundary enforcement.
@@ -22,26 +22,26 @@ added further architectural constraints that are now codified here.
 ```
 application/
 ├── port/
-│   ├── in/
+│   ├── inbound/
 │   │   ├── command/   (write DTOs as records + CommandBus interface)
 │   │   └── query/     (read DTOs/projections as records + QueryBus interface)
-│   └── out/           (ALL outbound ports / SPI owned by the module)
+│   └── outbound/      (ALL outbound ports / SPI owned by the module)
 ├── handler/           (fully flattened — no sub-packages)
 ├── event/             (application-level events)
 └── mapper/            (DTO <-> Domain converters, when needed)
 ```
 
-### 2. Reject `domain/spi`; outbound ports live in `application/port/out/`
+### 2. Reject `domain/spi`; outbound ports live in `application/port/outbound/`
 Outbound ports (SPI) are an Application concern (they express what the use cases need from the
 outside world), not a Domain concern. We **reject any `domain/spi` package** and place **all**
-outbound ports in `application/port/out/`. This keeps the Domain core pure (no port dependencies),
+outbound ports in `application/port/outbound/`. This keeps the Domain core pure (no port dependencies),
 consistent with ADR 0001 and the "clean domain" outcome of the Room rework.
 
 ### 3. Flatten `handler/` with package-private visibility
 All command/query handlers and the bus implementations are placed **flat** in `application/handler/`
 with **no sub-packages**, and are declared **package-private** (no `public`). Other modules therefore
 cannot import or interfere with them — the only exposed surfaces are the `CommandBus`/`QueryBus`
-interfaces in `port/in/` and the module's `ExposeAPI`.
+interfaces in `port/inbound/` and the module's `ExposeAPI`.
 
 ### 4. CQRS Bypass for the read side
 Queries do **not** pass through the Domain Model. A query handler calls an outbound **query gateway**

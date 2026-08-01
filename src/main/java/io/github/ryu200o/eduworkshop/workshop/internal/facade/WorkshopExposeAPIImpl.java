@@ -3,7 +3,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.facade;
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRegistrationContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopStateContract;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopReader;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 
 import org.springframework.stereotype.Component;
 

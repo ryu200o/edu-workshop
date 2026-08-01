@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.registration.internal.facade;
 
 import io.github.ryu200o.eduworkshop.registration.RegistrationExposeAPI;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationReader;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationReader;
 
 import org.springframework.stereotype.Component;
 

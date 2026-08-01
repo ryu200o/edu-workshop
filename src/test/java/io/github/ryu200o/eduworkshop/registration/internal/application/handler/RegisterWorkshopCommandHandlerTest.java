@@ -3,9 +3,9 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.handler;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.DuplicateRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.ReferencedWorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotOpenForRegistrationException;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.in.command.RegisterWorkshopCommand;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationEventPublisher;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationRepository;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.RegisterWorkshopCommand;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationId;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationState;
@@ -48,7 +48,7 @@ class RegisterWorkshopCommandHandlerTest {
     private RegistrationRepository registrationRepository;
 
     @Mock
-    private RegistrationEventPublisher registrationEventPublisher;
+    private RegistrationDomainEventPublisher registrationDomainEventPublisher;
 
     private static final Instant NOW = Instant.parse("2026-08-01T10:00:00Z");
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
@@ -64,7 +64,7 @@ class RegisterWorkshopCommandHandlerTest {
 
     private RegisterWorkshopCommandHandler handler() {
         return new RegisterWorkshopCommandHandler(workshopExposeApi, registrationRepository,
-                registrationEventPublisher, clock);
+                registrationDomainEventPublisher, clock);
     }
 
     private WorkshopRegistrationContract publishedWorkshop() {
@@ -86,7 +86,7 @@ class RegisterWorkshopCommandHandlerTest {
                 r.state() == RegistrationState.REGISTERED
                         && r.studentId().value().equals(USER_ID)
                         && r.workshopReference().startTime().equals(START)));
-        verify(registrationEventPublisher).publish(argThat(events -> events.size() == 1
+        verify(registrationDomainEventPublisher).publish(argThat(events -> events.size() == 1
                 && events.getFirst() instanceof RegistrationCreated));
     }
 
@@ -103,7 +103,7 @@ class RegisterWorkshopCommandHandlerTest {
         RegisterWorkshopCommand.Result result = handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID));
 
         assertThat(result.registrationId()).isEqualTo(existing.id().value());
-        verify(registrationEventPublisher).publish(argThat(events -> events.size() == 3
+        verify(registrationDomainEventPublisher).publish(argThat(events -> events.size() == 3
                 && events.getLast() instanceof RegistrationReactivated));
     }
 
@@ -119,7 +119,7 @@ class RegisterWorkshopCommandHandlerTest {
                 .isInstanceOf(DuplicateRegistrationException.class);
 
         verify(registrationRepository, never()).save(any());
-        verifyNoInteractions(registrationEventPublisher);
+        verifyNoInteractions(registrationDomainEventPublisher);
     }
 
     @Test
@@ -129,7 +129,7 @@ class RegisterWorkshopCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
                 .isInstanceOf(ReferencedWorkshopNotFoundException.class);
 
-        verifyNoInteractions(registrationRepository, registrationEventPublisher);
+        verifyNoInteractions(registrationRepository, registrationDomainEventPublisher);
     }
 
     @Test
@@ -140,6 +140,6 @@ class RegisterWorkshopCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
                 .isInstanceOf(WorkshopNotOpenForRegistrationException.class);
 
-        verifyNoInteractions(registrationRepository, registrationEventPublisher);
+        verifyNoInteractions(registrationRepository, registrationDomainEventPublisher);
     }
 }

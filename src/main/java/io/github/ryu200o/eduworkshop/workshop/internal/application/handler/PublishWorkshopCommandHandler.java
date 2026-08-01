@@ -3,13 +3,13 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopEventPublisher;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.PublishWorkshopCommand;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopRepository;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PublishWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 
@@ -25,16 +25,16 @@ class PublishWorkshopCommandHandler
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
-    private final WorkshopEventPublisher workshopEventPublisher;
+    private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
     private final Clock clock;
 
     PublishWorkshopCommandHandler(WorkshopRepository workshopRepository,
                                    RoomExposeAPI roomExposeApi,
-                                   WorkshopEventPublisher workshopEventPublisher,
+                                   WorkshopDomainEventPublisher workshopDomainEventPublisher,
                                    Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
-        this.workshopEventPublisher = workshopEventPublisher;
+        this.workshopDomainEventPublisher = workshopDomainEventPublisher;
         this.clock = clock;
     }
 
@@ -75,7 +75,7 @@ class PublishWorkshopCommandHandler
 
         workshopRepository.save(workshop);
 
-        workshopEventPublisher.publish(workshop.recordedEvents());
+        workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
 
         return new PublishWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt());

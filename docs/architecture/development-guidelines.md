@@ -24,16 +24,16 @@
     │   └── service/           # domain service (nếu cần)
     ├── application/
     │   ├── port/
-    │   │   ├── in/
+    │   │   ├── inbound/
     │   │   │   ├── command/   # CreateRoomCommand + nested Result, RenameRoomCommand + nested Result
     │   │   │   └── query/     # GetRoomByIdQuery, GetRoomByNameQuery, view/ (RoomDetailView...)
-    │   │   └── out/           # RoomRepository (write), RoomReader (read, CQRS bypass)
+    │   │   └── outbound/      # RoomRepository (write), RoomReader (read, CQRS bypass)
     │   └── handler/           # *CommandHandler, *QueryHandler (package-private, @Component)
     └── adapter/
-        ├── driving/
+        ├── inbound/
         │   ├── http/          # *CommandController, *QueryController, *ExceptionAdvice
         │   └── event/         # Event Bus consumer (tương lai)
-        └── driven/
+        └── outbound/
             └── persistence/
                 ├── jpa/        # JpaRoomWriteAdapter (impl RoomRepository) + RoomJpaRepository/Entity
                 └── jooq/       # JooqRoomReadAdapter (impl RoomReader) + generated jooq.tables.Rooms
@@ -66,7 +66,7 @@ public interface CommandHandler<C extends Command<R>, R> {
 > `*Result.java` riêng). Một Command ↔ một Result (1-1), giữ contract trong cùng 1 file.
 
 ```java
-// port.in.command.RenameRoomCommand — chỉ chứa raw input, validation để ở domain VO bên trong handler
+// port.inbound.command.RenameRoomCommand — chỉ chứa raw input, validation để ở domain VO bên trong handler
 public record RenameRoomCommand(
         UUID roomId,
         String newName
@@ -76,13 +76,13 @@ public record RenameRoomCommand(
     public record Result(UUID id, String oldName, String newName, Instant updatedAt) {}
 }
 
-// port.in.command.CreateRoomCommand — lưu ý có trường capacity + code (int) + name (free-form)
+// port.inbound.command.CreateRoomCommand — lưu ý có trường capacity + code (int) + name (free-form)
 public record CreateRoomCommand(String building, int floor, int code, String name, int capacity)
         implements Command<CreateRoomCommand.Result> {
     public record Result(UUID id, String name) {}
 }
 
-// port.in.command.ChangeRoomCodeCommand — đổi code (int) SILENT, không event
+// port.inbound.command.ChangeRoomCodeCommand — đổi code (int) SILENT, không event
 public record ChangeRoomCodeCommand(UUID roomId, int newCode)
         implements Command<ChangeRoomCodeCommand.Result> {
     public record Result(UUID id, int oldCode, int newCode, Instant updatedAt) {}
@@ -94,7 +94,7 @@ public record ChangeRoomCodeCommand(UUID roomId, int newCode)
 > repository concern** — `existsByCoordinate` / `existsByName` đã bị gỡ bỏ (ADR 0005). Việc chứng minh tính
 > duy nhất toàn cục nằm ở Domain Policy (xem §2.6), IO của nó nằm ở adapter `JpaRoomUniquenessPolicy`.
 ```java
-// port.out.RoomRepository — write port duy nhất (chỉ load + save)
+// port.outbound.RoomRepository — write port duy nhất (chỉ load + save)
 public interface RoomRepository {
     Optional<Room> loadById(UUID id);
     Room save(Room room);
@@ -177,7 +177,7 @@ room.relocateTo(newLocation, uniquenessPolicy);
 Idempotency (same code / same name / same location) is checked **inside the aggregate, before** the policy
 call — avoids false-positive self-collision and needless IO.
 
-**Infrastructure — `adapter/driven/persistence/jpa/JpaRoomUniquenessPolicy.java`** (runtime IO, in the adapter):
+**Infrastructure — `adapter/outbound/persistence/jpa/JpaRoomUniquenessPolicy.java`** (runtime IO, in the adapter):
 ```java
 @Component
 class JpaRoomUniquenessPolicy implements RoomUniquenessPolicy {
@@ -232,22 +232,22 @@ public interface QueryHandler<Q extends Query<R>, R> {
 }
 ```
 
-### 3.2 Query DTO = record (ở `port.in.query`) + View (ở `port.in.query.view`)
+### 3.2 Query DTO = record (ở `port.inbound.query`) + View (ở `port.inbound.query.view`)
 > **Pattern thực chiến:** Query record nhẹ, chỉ chứa tham số. Kết quả trả về là các `View` nằm trong
 > sub-package **`view/`** (`RoomDetailView`, `RoomSummaryView`). Một View phục vụ nhiều Query
 > (multi-1, global) nên tách riêng để tiến hóa độc lập với write flow (CQRS bypass, không reconstruct domain).
 
 ```java
-// port.in.query.GetRoomByIdQuery
+// port.inbound.query.GetRoomByIdQuery
 public record GetRoomByIdQuery(UUID roomId) implements Query<RoomDetailView> {}
 
-// port.in.query.GetRoomByNameQuery — raw name, handler sẽ parse thành RoomName (RAM self-defense)
+// port.inbound.query.GetRoomByNameQuery — raw name, handler sẽ parse thành RoomName (RAM self-defense)
 public record GetRoomByNameQuery(String roomName) implements Query<RoomSummaryView> {}
 
-// port.in.query.view.RoomDetailView — projection đầy đủ (state là String: ACTIVE/MAINTENANCE/DEACTIVATED)
+// port.inbound.query.view.RoomDetailView — projection đầy đủ (state là String: ACTIVE/MAINTENANCE/DEACTIVATED)
 public record RoomDetailView(UUID id, String name, String building, int floor, int capacity, String state) {}
 
-// port.in.query.view.RoomSummaryView — projection gọn (subset của Detail)
+// port.inbound.query.view.RoomSummaryView — projection gọn (subset của Detail)
 public record RoomSummaryView(UUID id, String name, String building, int floor) {}
 ```
 
@@ -356,7 +356,7 @@ RoomReference roomRef = RoomReference.of(snapshot.roomId(), snapshot.name(), loc
 
 ---
 
-## 4. Driving HTTP Adapter — tách rõ C/Q + Advice scoped (ADR 0004)
+## 4. Inbound HTTP Adapter — tách rõ C/Q + Advice scoped (ADR 0004)
 
 ### 4.1 Tách 2 controller, mỗi cái chỉ cầm 1 bus
 ```java
@@ -408,7 +408,7 @@ class RoomQueryController {
 - Request body dùng nested `XxxRequest` record trong controller; Command chỉ nhận raw param.
 
 ### 4.2 Centralized Exception Advice (scoped, in-module)
-> Nằm trong module Room (`adapter/driving/http/RoomExceptionAdvice.java`), **không** đẩy lên Shared
+> Nằm trong module Room (`adapter/inbound/http/RoomExceptionAdvice.java`), **không** đẩy lên Shared
 > Kernel — giữ encapsulation module (Spring Modulith).
 
 ```java
@@ -454,7 +454,7 @@ class RoomExceptionAdvice {
 - [ ] Mọi class trong `internal/` là package-private (handler, port impl, mapper, facade impl...), chỉ API công khai (`*ExposeAPI`, `contract/*`) là `public`.
 - [ ] Contract DTO dùng chung giữa các module nằm ở `contract/` (module root), **không** trong `internal/` (ADR 0010).
 - [ ] Module Facade (`internal/facade/`): implementation package-private, gọi trực tiếp Application Ports, không qua Command/Query Bus (ADR 0010).
-- [ ] Command có nested `Result`; Query View nằm trong `port.in.query.view`. **Không còn** `XResponse` chung.
+- [ ] Command có nested `Result`; Query View nằm trong `port.inbound.query.view`. **Không còn** `XResponse` chung.
 - [ ] Driving adapter: `RoomCommandController` (CommandBus) + `RoomQueryController` (QueryBus) tách rõ;
       `var x = new XCommand(...)` trước `execute`; request body qua nested `XxxRequest`.
 - [ ] Exception nghiệp vụ tập trung ở `*ExceptionAdvice` scoped `assignableTypes`, nằm trong module.

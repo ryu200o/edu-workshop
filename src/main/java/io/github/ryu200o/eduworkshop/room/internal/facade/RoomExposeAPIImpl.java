@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.PlanningStatus;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.RoomPlanningData;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.RoomPlanningData.Location;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.outbound.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 
 import org.springframework.stereotype.Component;

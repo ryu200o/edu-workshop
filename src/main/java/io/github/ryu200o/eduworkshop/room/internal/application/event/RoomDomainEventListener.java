@@ -6,7 +6,7 @@ import io.github.ryu200o.eduworkshop.room.contract.RoomRelocatedIntegrationEvent
 import io.github.ryu200o.eduworkshop.room.contract.RoomRenamedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateChangedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateContract;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomIntegrationEventPublisher;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.outbound.RoomIntegrationEventPublisher;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
