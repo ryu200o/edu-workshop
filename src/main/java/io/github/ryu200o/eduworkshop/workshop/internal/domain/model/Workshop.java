@@ -153,6 +153,20 @@ public class Workshop {
         record(new WorkshopUnscheduled(id, updatedAt));
     }
 
+    /**
+     * Moves a PUBLISHED workshop to a different room.
+     *
+     * <p>Post-publish change ("đổi trả"). The room must be {@code ALLOWED} and free of conflicts —
+     * those global checks are orchestrated by the Application handler (ADR 0005); this method only
+     * enforces the local invariant that the workshop capacity must fit the new room's physical
+     * capacity. The new {@link RoomReference} carries the denormalized name/location/capacity
+     * snapshots (ADR 0007).</p>
+     *
+     * @param newRoomRef the new room reference (id + snapshots) to assign
+     * @param now        the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
+     * @throws WorkshopCapacityExceedsRoomException if the workshop capacity exceeds the new room's capacity
+     */
     public void changeRoom(RoomReference newRoomRef, Instant now) {
         requireNonNull(newRoomRef, "new room reference must not be null");
         requireNonNull(now, "now cannot be null");
@@ -168,6 +182,21 @@ public class Workshop {
         record(new WorkshopRoomChanged(id, newRoomRef, updatedAt));
     }
 
+    /**
+     * Adjusts a PUBLISHED workshop's maximum capacity.
+     *
+     * <p>Post-publish change. The active-registration count is fetched by the Application handler
+     * (ADR 0005) and passed in as data; the aggregate validates two local invariants: the new
+     * capacity must not drop below the current active registrations, and must not exceed the room's
+     * physical capacity (from the snapshot).</p>
+     *
+     * @param newCapacity          the new maximum participant capacity
+     * @param activeRegistrations  the number of currently {@code REGISTERED} seats (from Registration)
+     * @param now                  the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
+     * @throws WorkshopCapacityBelowRegistrationsException if {@code newCapacity} is less than {@code activeRegistrations}
+     * @throws WorkshopCapacityExceedsRoomException if {@code newCapacity} exceeds the room's capacity
+     */
     public void adjustCapacity(WorkshopCapacity newCapacity, int activeRegistrations, Instant now) {
         requireNonNull(newCapacity, "new capacity must not be null");
         requireNonNull(now, "now cannot be null");
@@ -187,6 +216,17 @@ public class Workshop {
         record(new WorkshopCapacityAdjusted(id, newCapacity, updatedAt));
     }
 
+    /**
+     * Cancels a PUBLISHED workshop (→ {@code CANCELLED}).
+     *
+     * <p>Post-publish change. Only allowed before the session starts — a workshop that is ongoing or
+     * already finished must not be cancelled. The Application layer maps this into
+     * {@code WorkshopCancelledIntegrationEvent} so Registration flips all active seats.</p>
+     *
+     * @param now the current instant; must be strictly before {@code startTime}
+     * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
+     * @throws WorkshopAlreadyStartedException if {@code now} is not before {@code startTime}
+     */
     public void cancel(Instant now) {
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.PUBLISHED, "cancel");
