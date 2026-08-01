@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.pipeline;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 

@@ -2,40 +2,58 @@ package io.github.ryu200o.eduworkshop.shared.application.cqs.config;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Query;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.CommandDispatcher;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.HandlerRegistry;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.HandlerResolver;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.QueryDispatcher;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.RegistryHandlerResolver;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPipeline;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CommandPolicyResolver;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.pipeline.CompositeCommandPolicyResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.CommandDispatcher;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.CommandHandlerRegistry;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.CommandHandlerResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.RegistryCommandHandlerResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.pipeline.CommandPipeline;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.pipeline.CommandPolicyResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command.pipeline.CompositeCommandPolicyResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.query.QueryDispatcher;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.query.QueryHandlerRegistry;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.query.QueryHandlerResolver;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.query.RegistryQueryHandlerResolver;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
-import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
 /**
- * Declares the shared bus capability as Spring beans. Builds the immutable {@link HandlerRegistry} once at
- * startup (failing fast on duplicate/missing handlers), wires the {@link CommandDispatcher} /
- * {@link QueryDispatcher} coordinators, and exposes the shared {@link CommandBus} / {@link QueryBus}
- * interfaces. Modules contribute optional {@link CommandPolicyResolver.ModuleRegistration} beans to customize
- * their command pipelines; absent those, a default pass-through pipeline is used.
+ * Declares the shared bus capability as Spring beans, split into two fully symmetric subsystems.
+ *
+ * <p>1. Command subsystem (write / mutate): eager {@link CommandHandlerRegistry} (fails fast on
+ * duplicate/missing handlers at startup) feeding {@link CommandHandlerResolver}, the optional
+ * module-contributed {@link CommandPipeline}s via {@link CommandPolicyResolver}, and the
+ * {@link CommandDispatcher} coordinator that runs commands through their pipeline chain.</p>
+ *
+ * <p>2. Query subsystem (read / projection): lazy {@link QueryHandlerRegistry} (resolved at runtime on first
+ * dispatch, keeping startup acyclic when query handlers depend on the buses) feeding {@link QueryHandlerResolver}
+ * and the zero-pipeline {@link QueryDispatcher}.</p>
+ *
+ * <p>Both registries gather their handler beans via {@link ObjectProvider} — no {@code @Lazy}, no proxy,
+ * no startup bean cycle. Modules contribute optional {@link CommandPolicyResolver.ModuleRegistration} beans
+ * to customize their command pipelines; absent those, a default pass-through pipeline is used.</p>
  */
 @Configuration
 public class BusConfiguration {
 
+    // =========================================================================
+    // 1. COMMAND SUBSYSTEM (Ghi / Mutate State)
+    // =========================================================================
+
     @Bean
-    HandlerRegistry handlerRegistry(ListableBeanFactory beanFactory) {
-        return HandlerRegistry.from(beanFactory);
+    CommandHandlerRegistry commandHandlerRegistry(ObjectProvider<CommandHandler<?, ?>> commandHandlers) {
+        return new CommandHandlerRegistry(commandHandlers);
     }
 
     @Bean
-    HandlerResolver handlerResolver(HandlerRegistry registry) {
-        return new RegistryHandlerResolver(registry);
+    CommandHandlerResolver commandHandlerResolver(CommandHandlerRegistry registry) {
+        return new RegistryCommandHandlerResolver(registry);
     }
 
     @Bean
@@ -49,16 +67,34 @@ public class BusConfiguration {
     }
 
     @Bean
-    CommandDispatcher commandDispatcher(HandlerResolver resolver,
+    CommandDispatcher commandDispatcher(CommandHandlerResolver resolver,
                                         CommandPolicyResolver policyResolver,
                                         CommandPipeline defaultPipeline) {
         return new CommandDispatcher(resolver, policyResolver, defaultPipeline);
     }
 
+    // =========================================================================
+    // 2. QUERY SUBSYSTEM (Đọc / Pure Projections)
+    // =========================================================================
+
     @Bean
-    QueryDispatcher queryDispatcher(HandlerRegistry registry) {
-        return new QueryDispatcher(registry);
+    QueryHandlerRegistry queryHandlerRegistry(ObjectProvider<QueryHandler<?, ?>> queryHandlers) {
+        return new QueryHandlerRegistry(queryHandlers);
     }
+
+    @Bean
+    QueryHandlerResolver queryHandlerResolver(QueryHandlerRegistry registry) {
+        return new RegistryQueryHandlerResolver(registry);
+    }
+
+    @Bean
+    QueryDispatcher queryDispatcher(QueryHandlerResolver resolver) {
+        return new QueryDispatcher(resolver);
+    }
+
+    // =========================================================================
+    // 3. DELEGATING BUSES
+    // =========================================================================
 
     @Bean
     CommandBus commandBus(CommandDispatcher dispatcher) {

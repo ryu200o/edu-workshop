@@ -1,6 +1,8 @@
 # ADR 0006: Shared Application Kernel for Command/Query Bus
 
-- **Status:** Accepted (2026-07-18) — supersedes ADR 0002 §5
+- **Status:** Accepted (2026-07-18) — supersedes ADR 0002 §5. Implemented; **Revised (2026-08-01)** to a
+  fully symmetric split of the dispatch engine into a Command subsystem and a Query subsystem (see
+  "Behavioral Asymmetry" below).
 - **Date:** 2026-07-18
 - **Deciders:** Lead Engineer / Architecture Guild
 - **Related:** ADR 0002 (§5 superseded), ADR 0001, `docs/architecture/development-guidelines.md`, `AGENTS.md`, PR #17
@@ -70,7 +72,9 @@ room.internal.application.*
 ## Proposed Architecture (if accepted)
 
 A **Shared Application Kernel** owns the bus *capability*; modules own only Commands, Queries, Handlers,
-and (optionally) their own Policies.
+and (optionally) their own Policies. The dispatch engine is **fully symmetric but behaviorally asymmetric**:
+a write-oriented Command subsystem and a read-oriented Query subsystem live in two separate packages with
+no shared registry/resolver/dispatcher (SRP at the infrastructure level).
 
 ```
 shared.application.cqs/                     (shared kernel — implemented package)
@@ -81,18 +85,23 @@ shared.application.cqs/                     (shared kernel — implemented packa
 │   ├── QueryHandler<Q extends Query<R>, R>
 │   ├── CommandBus.java                        (interface, shared)
 │   └── QueryBus.java                          (interface, shared)
-├── dispatch/                                  (Coordinator + resolution)
-│   ├── CommandDispatcher.java                 (orchestration ONLY — Coordinator)
-│   ├── QueryDispatcher.java
-│   ├── HandlerResolver.java                   (CommandType -> Handler; no pipeline knowledge)
-│   ├── HandlerRegistry.java                   (immutable after startup; auto-discovery + validation)
-│   └── RegistryHandlerResolver.java
-├── pipeline/                                  (Chain of Responsibility)
-│   ├── BehaviorChain.java
-│   ├── CommandBehavior.java                   (Chain of Responsibility unit)
-│   ├── CommandPipeline.java                   (ordered chain of CommandBehavior + handler)
-│   ├── CommandPolicyResolver.java             (matcher-based; NO package-name identity)
-│   └── CompositeCommandPolicyResolver.java
+├── dispatch/
+│   ├── command/                               (COMMAND SUBSYSTEM — Ghi / Mutate / Side-effects)
+│   │   ├── CommandDispatcher.java             (orchestration ONLY — Coordinator)
+│   │   ├── CommandHandlerRegistry.java        (eager scan @startup via ObjectProvider; freeze immutable)
+│   │   ├── CommandHandlerResolver.java        (CommandType -> Handler; no pipeline knowledge)
+│   │   ├── RegistryCommandHandlerResolver.java
+│   │   └── pipeline/                          (Chain of Responsibility — LIVES INSIDE Command side)
+│   │       ├── BehaviorChain.java
+│   │       ├── CommandBehavior.java           (Chain of Responsibility unit)
+│   │       ├── CommandPipeline.java           (ordered chain of CommandBehavior + handler)
+│   │       ├── CommandPolicyResolver.java     (matcher-based; NO package-name identity)
+│   │       └── CompositeCommandPolicyResolver.java
+│   └── query/                                 (QUERY SUBSYSTEM — Đọc / Pure Projections / Zero-Pipeline)
+│       ├── QueryDispatcher.java
+│       ├── QueryHandlerRegistry.java          (LAZY scan @runtime via ObjectProvider, no pipeline)
+│       ├── QueryHandlerResolver.java
+│       └── RegistryQueryHandlerResolver.java
 ├── config/
 │   └── BusConfiguration.java                  (@Configuration declaring the shared beans)
 └── exception/
@@ -111,6 +120,26 @@ room.internal.application.*
     └── ... (handlers, package-private @Component)
 ```
 
+### Behavioral Asymmetry — why Command and Query never share infrastructure
+
+Command and Query are not just two names for a Message; they are opposite behavioral dynamics with opposite
+lifecycles. Forcing them through a shared registry/resolver/dispatcher violates SRP at the infrastructure level.
+
+| Dimension | COMMAND subsystem (write) | QUERY subsystem (read) |
+| --- | --- | --- |
+| Purpose | Ghi / Sửa / Xóa (mutate state) | Đọc / projection (read-only) |
+| Side-effects | Yes — DB writes, integration events, outbox, notifications | Never — 100% idempotent |
+| Pipeline | Required — `CommandBehavior` chain via `CommandPolicyResolver` | None — zero-overhead direct invocation |
+| Transaction | Write TX (`@Transactional` read-write) | No/read-only TX (`@Transactional(readOnly = true)`) |
+| Handler discovery | **Eager** at startup via `ObjectProvider<CommandHandler<?,?>>`; duplicate/missing fail-fast | **Lazy** at first dispatch via `ObjectProvider<QueryHandler<?,?>>` |
+| Scaling strategy | Vertical (locks, saga, outbox, tracing) | Horizontal (Redis, read replicas, search indexes) |
+| Exception handling | Domain/Application exception → rollback → business error | Query exception → empty/NotFound → safe fallback |
+
+Both registries gather handler beans through `ObjectProvider<T>` injected into their constructors. This
+defers bean resolution and removes the startup bean-creation cycle **without `@Lazy` and without dynamic
+proxies**: Command scans eagerly (fail-fast is the desired write-side behavior), Query scans lazily on first
+dispatch (so query handlers may themselves depend on the shared buses acyclically).
+
 ### Component responsibilities (strict SRP)
 
 ```
@@ -121,25 +150,43 @@ CommandDispatcher        (orchestration only — does NOT know Spring or pipelin
     │
     ├───────────────┐
     ▼               ▼
-HandlerResolver   CommandPipeline
+CommandHandler    CommandPipeline
+   Resolver        (CommandBehavior chain)
     │               │
     └───────┬───────┘
             ▼
        CommandHandler
+
+QueryBus
+    │
+    ▼
+QueryDispatcher         (orchestration only; zero pipeline)
+    │
+    ▼
+QueryHandlerResolver     →  QueryHandlerRegistry (lazy)
+            │
+            ▼
+       QueryHandler
 ```
 
 - **CommandBus** — public entry point (`execute`).
-- **CommandDispatcher** — orchestrates: ask `HandlerResolver` for the handler, ask `CommandPipeline` to run
-  the behavior chain that ends in the handler. Knows neither Spring nor behavior details.
-- **HandlerResolver** — maps `Command type -> Handler` only. No pipeline, no policy knowledge.
+- **CommandDispatcher** — orchestrates: ask `CommandHandlerResolver` for the handler, ask `CommandPipeline`
+  to run the behavior chain that ends in the handler. Knows neither Spring nor behavior details.
+- **CommandHandlerResolver** — maps `Command type -> Handler` only. No pipeline, no policy knowledge.
 - **CommandPipeline** — a Chain of Responsibility of `CommandBehavior` units terminating in the handler.
-  Knows the behavior chain, not Spring.
+  Knows the behavior chain, not Spring. Lives inside the Command subsystem.
 - **CommandBehavior** — one cross-cutting concern (logging / validation / authorization / metrics /
   transaction). Chain link: `Object handle(Command<?> cmd, BehaviorChain next)`.
 - **CommandPolicyResolver** — selects/orders the behavior chain for a command via a **matcher**
   (`Predicate<Class<?>>`), never by package name.
-- **HandlerRegistry** — scans `CommandHandler<?>` beans at startup, validates, then **freezes immutable**
-  (read-only at runtime; no re-scan, no re-compute, no synchronization).
+- **CommandHandlerRegistry** — scans `CommandHandler<?>` beans **eagerly at startup** through an
+  `ObjectProvider`, validates, then **freezes immutable** (read-only at runtime; no re-scan, no re-compute,
+  no synchronization).
+- **QueryDispatcher** — resolves the `QueryHandler` via `QueryHandlerResolver` and invokes it directly; no
+  behavior chain (read-only projection lookup).
+- **QueryHandlerRegistry** — resolves `QueryHandler` beans **lazily at runtime** (first dispatched query)
+  through an `ObjectProvider` with thread-safe double-checked caching; duplicate detection surfaces as
+  `DuplicateQueryHandlerException` at dispatch time, missing as `MissingQueryHandlerException`.
 
 ### Roles (strictly separated)
 
@@ -262,9 +309,9 @@ This ADR is successful only if ALL hold after implementation:
 - ADR 0002 §5 is marked *Superseded by ADR 0006*.
 - `CommandBus`/`QueryBus` interfaces + `Simple*Bus` impls move from each module into the shared kernel.
 - Modules keep Commands/Queries/Handlers only.
-- A `CommandPipeline`/`QueryPipeline` + `DispatchPolicy` extension model is introduced so modules retain
-  per-module customization.
-- Duplicate-handler collision is detected at startup with a clear `IllegalStateException`.
+- A `CommandPipeline` + `CommandPolicyResolver` extension model is introduced so modules retain per-module
+  customization on the write side; the Query side stays zero-pipeline (direct projection invocation).
+- Duplicate-handler collision is detected at startup with a clear `DuplicateCommandHandlerException`.
 
 ### If Rejected (ADR 0002 §5 stands)
 - Per-module bus remains; no code change to the bus.
@@ -285,10 +332,11 @@ This ADR is successful only if ALL hold after implementation:
    `ResolvableType` over manual `commandType()` when/if we implement.
 
 3. **(This ADR) Shared bus as Coordinator + pluggable Behavior-Chain / Policy extension points.**
-   Preferred if we move to shared: keeps the bus free of business logic, separates `HandlerResolver` from
-   `CommandDispatcher` (SRP), models cross-cutting concerns as a `CommandBehavior` Chain of Responsibility,
-   resolves policies by matcher (not package name), freezes an immutable `HandlerRegistry`, and fails fast
-   with dedicated `DuplicateCommandHandlerException` / `MissingCommandHandlerException`.
+   Preferred if we move to shared: keeps the bus free of business logic, separates `CommandHandlerResolver`
+   from `CommandDispatcher` (SRP), models cross-cutting concerns as a `CommandBehavior` Chain of
+   Responsibility, resolves policies by matcher (not package name), freezes an immutable
+   `CommandHandlerRegistry`, and fails fast with dedicated `DuplicateCommandHandlerException` /
+   `MissingCommandHandlerException`.
 
 4. **Status quo (per-module bus).**
    Valid and currently official. Lowest risk; only cost is duplication.
@@ -298,11 +346,11 @@ This ADR is successful only if ALL hold after implementation:
 ## Migration Strategy (only if Accepted)
 
 - **Phase 1 — Infrastructure:** introduce shared `CommandBus`/`QueryBus` interfaces + `CommandDispatcher`/
-  `QueryDispatcher` + `HandlerRegistry` (auto-discovery via `ResolvableType`) + `BusConfiguration` in the
-  shared kernel. No module changes yet.
+  `QueryDispatcher` + `CommandHandlerRegistry` (auto-discovery via `ResolvableType`) + `BusConfiguration` in
+  the shared kernel. No module changes yet.
 - **Phase 2 — Pipeline abstraction:** add `CommandBehavior` + `CommandPipeline` (Chain of Responsibility) +
   `CommandPolicyResolver` (matcher-based `ModuleRegistration`) + default pass-through pipeline.
-  `CommandDispatcher` delegates to the pipeline; `HandlerRegistry` is built immutable at startup
+  `CommandDispatcher` delegates to the pipeline; `CommandHandlerRegistry` is built immutable at startup
   (scan → validate → freeze; read-only at runtime). Dedicated `DuplicateCommandHandlerException` /
   `MissingCommandHandlerException` on misconfiguration. No business logic in the bus.
 - **Phase 3 — Migration per module:** Room first (remove `SimpleCommandBus`/`SimpleQueryBus` + bus

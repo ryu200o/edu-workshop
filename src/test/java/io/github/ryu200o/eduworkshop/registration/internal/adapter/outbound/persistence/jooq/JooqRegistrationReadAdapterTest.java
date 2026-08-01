@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.registration.internal.adapter.outbound.persistence.jooq;
 
-import io.github.ryu200o.eduworkshop.registration.RegistrationExposeAPI;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationReader;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
@@ -23,17 +22,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration test for the JOOQ registration read adapter — full Spring context + real H2
  * (PostgreSQL mode) + Flyway. Proves the read path counts only active (REGISTERED) rows directly
  * from flat SQL (no JPA entity, no domain reconstruction — CQRS bypass). Rows are seeded via
- * {@link RegistrationRepository} (JPA) since this adapter is read-only by design. Also verifies the
- * {@link RegistrationExposeAPI} Module Facade delegates to the same count.
+ * {@link RegistrationRepository} (JPA) since this adapter is read-only by design.
  */
 @SpringBootTest
 class JooqRegistrationReadAdapterTest {
 
     @Autowired
     private RegistrationReader registrationReader;
-
-    @Autowired
-    private RegistrationExposeAPI registrationExposeApi;
 
     @Autowired
     private RegistrationRepository registrationRepository;
@@ -74,15 +69,5 @@ class JooqRegistrationReadAdapterTest {
     @Test
     void countActiveByWorkshop_whenEmpty_returnsZero() {
         assertThat(registrationReader.countActiveByWorkshop(UUID.randomUUID())).isZero();
-    }
-
-    @Test
-    void exposeApi_delegatesToTheSameCount() {
-        UUID workshop = UUID.randomUUID();
-        registrationRepository.save(newRegistration(workshop, UUID.randomUUID()));
-        registrationRepository.save(newRegistration(workshop, UUID.randomUUID()));
-
-        assertThat(registrationExposeApi.countActiveRegistrations(workshop)).isEqualTo(2);
-        assertThat(registrationExposeApi.countActiveRegistrations(UUID.randomUUID())).isZero();
     }
 }

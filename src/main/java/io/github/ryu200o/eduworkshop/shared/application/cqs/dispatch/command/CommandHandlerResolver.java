@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch;
+package io.github.ryu200o.eduworkshop.shared.application.cqs.dispatch.command;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
@@ -6,9 +6,9 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 /**
  * Resolves a {@link CommandHandler} for a concrete {@link Command} type. Pure lookup: it knows nothing
  * about Spring, the dispatch pipeline, or policy. The mapping is sourced from the immutable
- * {@link HandlerRegistry}.
+ * {@link CommandHandlerRegistry}.
  */
-public interface HandlerResolver {
+public interface CommandHandlerResolver {
 
     <R, C extends Command<R>> CommandHandler<C, R> resolve(C command);
 
