@@ -40,6 +40,26 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
     }
 
     @Override
+    public List<Workshop> saveAll(List<Workshop> workshops) {
+        try {
+            repository.saveAllAndFlush(workshops.stream().map(this::toEntity).toList());
+            return workshops;
+        } catch (DataIntegrityViolationException ex) {
+            throw new WorkshopPersistenceException(
+                    "Failed to persist workshops.",
+                    ex
+            );
+        }
+    }
+
+    @Override
+    public List<Workshop> findOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId) {
+        return repository.findOverlappingPlanned(roomId, startTime, endTime, excludeWorkshopId.value()).stream()
+                .map(this::toWorkshop)
+                .toList();
+    }
+
+    @Override
     public Optional<Workshop> loadById(WorkshopId id) {
         return repository.findById(id.value()).map(this::toWorkshop);
     }

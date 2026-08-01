@@ -17,6 +17,8 @@ public interface WorkshopRepository {
 
     Workshop save(Workshop workshop);
 
+    List<Workshop> saveAll(List<Workshop> workshops);
+
     Optional<Workshop> loadById(WorkshopId id);
 
     Optional<Workshop> loadByIdWithLock(WorkshopId id);
@@ -24,4 +26,12 @@ public interface WorkshopRepository {
     List<Workshop> loadByRoomId(UUID roomId);
 
     int countOverlapping(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId);
+
+    /**
+     * Loads only the PLANNED workshops in the given room whose time window overlaps
+     * the specified window (excluding the workshop with {@code excludeId}).
+     * Pushes the overlap filter into the SQL/JPQL layer so the Application layer
+     * never loads irrelevant rows.
+     */
+    List<Workshop> findOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId);
 }

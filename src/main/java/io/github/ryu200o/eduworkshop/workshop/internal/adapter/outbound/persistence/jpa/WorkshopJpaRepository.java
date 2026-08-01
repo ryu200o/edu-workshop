@@ -30,4 +30,16 @@ interface WorkshopJpaRepository extends JpaRepository<WorkshopJpaEntity, UUID> {
                          @Param("startTime") Instant startTime,
                          @Param("endTime") Instant endTime,
                          @Param("excludeWorkshopId") UUID excludeWorkshopId);
+    @Query("""
+            SELECT w FROM WorkshopJpaEntity w
+            WHERE w.roomId = :roomId
+              AND w.state = 'PLANNED'
+              AND w.startTime < :endTime
+              AND w.endTime > :startTime
+              AND w.id <> :excludeWorkshopId
+            """)
+    List<WorkshopJpaEntity> findOverlappingPlanned(@Param("roomId") UUID roomId,
+                                                   @Param("startTime") Instant startTime,
+                                                   @Param("endTime") Instant endTime,
+                                                   @Param("excludeWorkshopId") UUID excludeWorkshopId);
 }

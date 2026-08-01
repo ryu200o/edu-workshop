@@ -84,7 +84,8 @@ class RescheduleWorkshopCommandHandlerTest {
                 .willReturn(Optional.of(workshop));
         given(workshopRepository.countOverlapping(ROOM_ID, NEW_START, NEW_END, WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(0);
-        given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of());
+        given(workshopRepository.findOverlappingPlanned(ROOM_ID, NEW_START, NEW_END, WorkshopId.of(WORKSHOP_ID)))
+                .willReturn(List.of());
 
         RescheduleWorkshopCommand.Result result = handler.handle(
                 new RescheduleWorkshopCommand(WORKSHOP_ID, NEW_START, NEW_END));
@@ -118,13 +119,14 @@ class RescheduleWorkshopCommandHandlerTest {
                 .willReturn(Optional.of(workshop));
         given(workshopRepository.countOverlapping(ROOM_ID, NEW_START, NEW_END, WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(0);
-        given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(planned));
+        given(workshopRepository.findOverlappingPlanned(ROOM_ID, NEW_START, NEW_END, WorkshopId.of(WORKSHOP_ID)))
+                .willReturn(List.of(planned));
 
         handler.handle(new RescheduleWorkshopCommand(WORKSHOP_ID, NEW_START, NEW_END));
 
         assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);
         assertThat(planned.roomReference()).isNotNull();
-        verify(workshopRepository).save(planned);
+        verify(workshopRepository).saveAll(any());
     }
 
     @Test

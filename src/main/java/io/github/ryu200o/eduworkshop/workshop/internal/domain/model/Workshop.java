@@ -21,7 +21,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Aggregate Root of the Workshop module.
@@ -162,7 +161,7 @@ public class Workshop {
         requireNonNull(room, "room must be assigned before planning");
         requireNonNull(now, "now cannot be null");
 
-        requireStateIn(Set.of(WorkshopState.DRAFT, WorkshopState.PLANNED), "plan");
+        requireStateIn(List.of(WorkshopState.DRAFT, WorkshopState.PLANNED), "plan");
 
         this.roomReference = room;
         this.hasRoomWarning = hasRoomWarning;
@@ -447,11 +446,11 @@ public class Workshop {
         }
     }
 
-    private void requireStateIn(Set<WorkshopState> expected, String operation) {
+    private void requireStateIn(List<WorkshopState> expected, String operation) {
         if (!expected.contains(state)) {
             throw new InvalidWorkshopStateException(
                     id, state,
-                    expected.iterator().next(),
+                    expected.getFirst(),
                     "Cannot " + operation + " a workshop in state " + state + "; expected one of " + expected + ".");
         }
     }
