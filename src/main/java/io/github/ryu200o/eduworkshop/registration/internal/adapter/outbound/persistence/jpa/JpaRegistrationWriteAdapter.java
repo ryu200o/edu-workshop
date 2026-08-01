@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Workshop
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -54,6 +55,13 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
     public Optional<Registration> loadByWorkshopAndUser(UUID workshopId, UUID userId) {
         return repository.findByWorkshopIdAndUserId(workshopId, userId)
                 .map(JpaRegistrationWriteAdapter::toRegistration);
+    }
+
+    @Override
+    public List<Registration> loadAllByWorkshop(UUID workshopId) {
+        return repository.findByWorkshopId(workshopId).stream()
+                .map(JpaRegistrationWriteAdapter::toRegistration)
+                .toList();
     }
 
     // ====================== MAPPER ======================

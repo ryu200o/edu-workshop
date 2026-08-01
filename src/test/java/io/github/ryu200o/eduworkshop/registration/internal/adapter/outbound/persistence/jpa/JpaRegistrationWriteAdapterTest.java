@@ -70,6 +70,27 @@ class JpaRegistrationWriteAdapterTest {
     }
 
     @Test
+    void loadAllByWorkshop_returnsAllRowsForTheWorkshop() {
+        UUID workshopA = UUID.randomUUID();
+        UUID workshopB = UUID.randomUUID();
+
+        adapter.save(Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
+                WorkshopReference.of(workshopA, START), Instant.parse("2026-08-01T10:00:00Z")));
+        adapter.save(Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
+                WorkshopReference.of(workshopA, START), Instant.parse("2026-08-01T10:00:00Z")));
+        Registration cancelled = Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
+                WorkshopReference.of(workshopA, START), Instant.parse("2026-08-01T10:00:00Z"));
+        cancelled.cancel(Instant.parse("2026-08-31T08:00:00Z"));
+        adapter.save(cancelled);
+        adapter.save(Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
+                WorkshopReference.of(workshopB, START), Instant.parse("2026-08-01T10:00:00Z")));
+
+        assertThat(adapter.loadAllByWorkshop(workshopA)).hasSize(3);
+        assertThat(adapter.loadAllByWorkshop(workshopB)).hasSize(1);
+        assertThat(adapter.loadAllByWorkshop(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
     void duplicateInsert_isTranslatedToDuplicateRegistrationException() {
         Registration first = Registration.create(RegistrationId.generate(), StudentId.of(USER_ID),
                 WorkshopReference.of(WORKSHOP_ID, START), Instant.parse("2026-08-01T10:00:00Z"));
