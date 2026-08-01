@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.port.out
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationId;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,4 +31,11 @@ public interface RegistrationRepository {
      * (re-activation path) or {@code REGISTERED} (duplicate path).
      */
     Optional<Registration> loadByWorkshopAndUser(UUID workshopId, UUID userId);
+
+    /**
+     * Loads every registration row belonging to a workshop (both {@code REGISTERED} and
+     * {@code CANCELLED}). Used by the outbox listener that flips all active seats when the workshop
+     * itself is cancelled; the listener filters by state. Returns an empty list when none exist.
+     */
+    List<Registration> loadAllByWorkshop(UUID workshopId);
 }

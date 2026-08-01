@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.registration.internal.adapter.outbound.per
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,4 +18,9 @@ interface RegistrationJpaRepository extends JpaRepository<RegistrationJpaEntity,
      * result.
      */
     Optional<RegistrationJpaEntity> findByWorkshopIdAndUserId(UUID workshopId, UUID userId);
+
+    /**
+     * Loads all registration rows belonging to a workshop.
+     */
+    List<RegistrationJpaEntity> findByWorkshopId(UUID workshopId);
 }
