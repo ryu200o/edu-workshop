@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.CreateWorkshopCommand;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopRepository;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;

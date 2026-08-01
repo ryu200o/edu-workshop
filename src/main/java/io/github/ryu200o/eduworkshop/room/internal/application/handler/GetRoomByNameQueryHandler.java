@@ -1,8 +1,8 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.GetRoomByNameQuery;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.query.view.RoomSummaryView;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomReader;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.query.GetRoomByNameQuery;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.query.view.RoomSummaryView;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.outbound.RoomReader;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler;

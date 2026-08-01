@@ -57,15 +57,15 @@ DIRS=(
   "internal/domain/model/policy"       # domain-owned policy interfaces (e.g. RoomUniquenessPolicy)
   # Aggregate Root, Value Objects, Factory, Policy, state enum live directly at
   # internal/domain/model/ (flat) — only event/ and exception/ are sub-packages.
-  "internal/application/port/in/command"
-  "internal/application/port/in/query"
-  "internal/application/port/out"
+  "internal/application/port/inbound/command"
+  "internal/application/port/inbound/query"
+  "internal/application/port/outbound"
   "internal/application/handler"
   "internal/application/event"
   "internal/application/mapper"
   "internal/facade"
-  "internal/adapter/driving/http"
-  "internal/adapter/driven/persistence"
+  "internal/adapter/inbound/http"
+  "internal/adapter/outbound/persistence"
 )
 
 MODULE_ROOT="$SRC_MAIN/${MOD_PKG//./\/}"

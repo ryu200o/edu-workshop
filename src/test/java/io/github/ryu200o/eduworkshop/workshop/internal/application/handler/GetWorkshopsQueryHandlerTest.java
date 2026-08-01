@@ -1,8 +1,8 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.query.GetWorkshopsQuery;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.query.view.WorkshopSummaryView;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopReader;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.GetWorkshopsQuery;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

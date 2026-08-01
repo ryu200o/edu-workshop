@@ -2,9 +2,9 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotFoundException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotOwnedByUserException;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.in.command.CancelRegistrationCommand;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationEventPublisher;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationRepository;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.CancelRegistrationCommand;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationId;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
@@ -27,14 +27,14 @@ class CancelRegistrationCommandHandler
         implements CommandHandler<CancelRegistrationCommand, CancelRegistrationCommand.Result> {
 
     private final RegistrationRepository registrationRepository;
-    private final RegistrationEventPublisher registrationEventPublisher;
+    private final RegistrationDomainEventPublisher registrationDomainEventPublisher;
     private final Clock clock;
 
     CancelRegistrationCommandHandler(RegistrationRepository registrationRepository,
-                                     RegistrationEventPublisher registrationEventPublisher,
+                                     RegistrationDomainEventPublisher registrationDomainEventPublisher,
                                      Clock clock) {
         this.registrationRepository = registrationRepository;
-        this.registrationEventPublisher = registrationEventPublisher;
+        this.registrationDomainEventPublisher = registrationDomainEventPublisher;
         this.clock = clock;
     }
 
@@ -54,7 +54,7 @@ class CancelRegistrationCommandHandler
 
         registrationRepository.save(registration);
 
-        registrationEventPublisher.publish(registration.recordedEvents());
+        registrationDomainEventPublisher.publish(registration.recordedEvents());
         registration.clearDomainEvents();
 
         return new CancelRegistrationCommand.Result(registration.id().value(), registration.cancelledAt());

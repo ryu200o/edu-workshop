@@ -4,13 +4,13 @@ import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.PlanningStatus;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.RoomPlanningData;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopEventPublisher;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.PublishWorkshopCommand;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopRepository;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PublishWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
@@ -76,7 +76,7 @@ class PublishWorkshopCommandHandlerTest {
     private RoomExposeAPI roomExposeApi;
 
     @Mock
-    private WorkshopEventPublisher workshopEventPublisher;
+    private WorkshopDomainEventPublisher workshopDomainEventPublisher;
 
     @Captor
     private ArgumentCaptor<List<?>> eventsCaptor;
@@ -88,7 +88,7 @@ class PublishWorkshopCommandHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new PublishWorkshopCommandHandler(
-                workshopRepository, roomExposeApi, workshopEventPublisher, fixedClock);
+                workshopRepository, roomExposeApi, workshopDomainEventPublisher, fixedClock);
     }
 
     private Workshop createScheduledWorkshop(int capacity) {
@@ -129,7 +129,7 @@ class PublishWorkshopCommandHandlerTest {
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
 
             verify(workshopRepository).save(workshop);
-            verify(workshopEventPublisher).publish(any());
+            verify(workshopDomainEventPublisher).publish(any());
         }
 
         @Test

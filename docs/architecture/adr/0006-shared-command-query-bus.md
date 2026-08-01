@@ -46,10 +46,10 @@ shared.cqs/                         (shared kernel)
 └── QueryHandler<Q extends Query<R>, R>
 
 room.internal.application.*
-├── port/in/command/
+├── port/inbound/command/
 │   ├── CommandBus.java             (interface, per-module)
 │   └── CreateRoomCommand.java  ... (Command records)
-├── port/in/query/
+├── port/inbound/query/
 │   ├── QueryBus.java               (interface, per-module)
 │   └── GetRoomByIdQuery.java   ... (Query records)
 └── handler/
@@ -102,9 +102,9 @@ shared.application.cqs/                     (shared kernel — implemented packa
     └── MissingQueryHandlerException
 
 room.internal.application.*
-├── port/in/command/
+├── port/inbound/command/
 │   └── CreateRoomCommand.java ...            (Command records; NO bus interface here)
-├── port/in/query/
+├── port/inbound/query/
 │   └── GetRoomByIdQuery.java ...             (Query records)
 └── handler/
     ├── CreateRoomCommandHandler.java

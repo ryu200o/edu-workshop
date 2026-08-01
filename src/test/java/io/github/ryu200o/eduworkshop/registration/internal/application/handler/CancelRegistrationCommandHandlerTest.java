@@ -2,9 +2,9 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotFoundException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotOwnedByUserException;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.in.command.CancelRegistrationCommand;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationEventPublisher;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationRepository;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.CancelRegistrationCommand;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationId;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationState;
@@ -41,7 +41,7 @@ class CancelRegistrationCommandHandlerTest {
     private RegistrationRepository registrationRepository;
 
     @Mock
-    private RegistrationEventPublisher registrationEventPublisher;
+    private RegistrationDomainEventPublisher registrationDomainEventPublisher;
 
     private static final Instant NOW = Instant.parse("2026-08-01T10:00:00Z");
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
@@ -56,7 +56,7 @@ class CancelRegistrationCommandHandlerTest {
     }
 
     private CancelRegistrationCommandHandler handler() {
-        return new CancelRegistrationCommandHandler(registrationRepository, registrationEventPublisher, clock);
+        return new CancelRegistrationCommandHandler(registrationRepository, registrationDomainEventPublisher, clock);
     }
 
     private Registration registeredForOwner() {
@@ -77,7 +77,7 @@ class CancelRegistrationCommandHandlerTest {
         assertThat(result.cancelledAt()).isEqualTo(NOW);
 
         verify(registrationRepository).save(argThat(r -> r.state() == RegistrationState.CANCELLED));
-        verify(registrationEventPublisher).publish(argThat(events -> events.size() == 2
+        verify(registrationDomainEventPublisher).publish(argThat(events -> events.size() == 2
                 && events.get(1) instanceof RegistrationCancelled));
     }
 
@@ -89,7 +89,7 @@ class CancelRegistrationCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new CancelRegistrationCommand(registration.id().value(), UUID.randomUUID())))
                 .isInstanceOf(RegistrationNotOwnedByUserException.class);
 
-        verifyNoInteractions(registrationEventPublisher);
+        verifyNoInteractions(registrationDomainEventPublisher);
     }
 
     @Test
@@ -100,7 +100,7 @@ class CancelRegistrationCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new CancelRegistrationCommand(id, OWNER_ID)))
                 .isInstanceOf(RegistrationNotFoundException.class);
 
-        verifyNoInteractions(registrationEventPublisher);
+        verifyNoInteractions(registrationDomainEventPublisher);
     }
 
     @Test
@@ -114,7 +114,7 @@ class CancelRegistrationCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new CancelRegistrationCommand(registration.id().value(), OWNER_ID)))
                 .isInstanceOf(CancellationDeadlineExceededException.class);
 
-        verifyNoInteractions(registrationEventPublisher);
+        verifyNoInteractions(registrationDomainEventPublisher);
     }
 
     @Test
@@ -126,6 +126,6 @@ class CancelRegistrationCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(new CancelRegistrationCommand(registration.id().value(), OWNER_ID)))
                 .isInstanceOf(RegistrationDomainException.class);
 
-        verifyNoInteractions(registrationEventPublisher);
+        verifyNoInteractions(registrationDomainEventPublisher);
     }
 }

@@ -1,14 +1,14 @@
 package io.github.ryu200o.eduworkshop.shared.infrastructure.event;
 
 import io.github.ryu200o.eduworkshop.room.contract.RoomRenamedIntegrationEvent;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.CreateRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.RenameRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.CreateRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.RenameRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.CreateWorkshopCommand;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.in.command.ScheduleWorkshopCommand;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.out.WorkshopRepository;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ScheduleWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 

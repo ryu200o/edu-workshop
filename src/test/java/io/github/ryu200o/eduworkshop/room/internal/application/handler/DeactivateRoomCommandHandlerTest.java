@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.room.internal.application.port.in.command.DeactivateRoomCommand;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomRepository;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.DeactivateRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.outbound.RoomRepository;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.Room;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCapacity;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomCode;
@@ -11,7 +11,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNotFoundException;
-import io.github.ryu200o.eduworkshop.room.internal.application.port.out.RoomDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.outbound.RoomDomainEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

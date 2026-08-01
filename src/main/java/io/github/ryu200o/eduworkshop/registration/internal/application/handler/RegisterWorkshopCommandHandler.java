@@ -3,9 +3,9 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.handler;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.DuplicateRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.ReferencedWorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotOpenForRegistrationException;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.in.command.RegisterWorkshopCommand;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationEventPublisher;
-import io.github.ryu200o.eduworkshop.registration.internal.application.port.out.RegistrationRepository;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.RegisterWorkshopCommand;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationId;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationState;
@@ -41,16 +41,16 @@ class RegisterWorkshopCommandHandler
 
     private final WorkshopExposeAPI workshopExposeApi;
     private final RegistrationRepository registrationRepository;
-    private final RegistrationEventPublisher registrationEventPublisher;
+    private final RegistrationDomainEventPublisher registrationDomainEventPublisher;
     private final Clock clock;
 
     RegisterWorkshopCommandHandler(WorkshopExposeAPI workshopExposeApi,
                                    RegistrationRepository registrationRepository,
-                                   RegistrationEventPublisher registrationEventPublisher,
+                                   RegistrationDomainEventPublisher registrationDomainEventPublisher,
                                    Clock clock) {
         this.workshopExposeApi = workshopExposeApi;
         this.registrationRepository = registrationRepository;
-        this.registrationEventPublisher = registrationEventPublisher;
+        this.registrationDomainEventPublisher = registrationDomainEventPublisher;
         this.clock = clock;
     }
 
@@ -83,7 +83,7 @@ class RegisterWorkshopCommandHandler
 
         registrationRepository.save(registration);
 
-        registrationEventPublisher.publish(registration.recordedEvents());
+        registrationDomainEventPublisher.publish(registration.recordedEvents());
         registration.clearDomainEvents();
 
         return new RegisterWorkshopCommand.Result(registration.id().value(), registration.updatedAt());

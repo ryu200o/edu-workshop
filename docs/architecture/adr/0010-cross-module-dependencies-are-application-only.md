@@ -171,7 +171,7 @@ room/
             └── RoomExposeAPIImpl.java  // package-private
 ```
 
-Not `internal/adapter/driving/module_api/` — the Facade is conceptually distinct from adapters.
+Not `internal/adapter/inbound/module_api/` — the Facade is conceptually distinct from adapters.
 
 ---
 
@@ -193,7 +193,7 @@ Not `internal/adapter/driving/module_api/` — the Facade is conceptually distin
 - **Discoverable public surface.** The module root (`contract/`, `*ExposeAPI`) shows exactly
   what is exposed to other modules — no digging through `internal/` to find shared types.
 - **Facade clarity.** The `internal/facade/` package makes the Module Facade explicit and
-  distinct from driving adapters.
+  distinct from inbound adapters.
 
 ### Negative / Trade-offs (Cons)
 

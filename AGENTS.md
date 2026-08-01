@@ -29,7 +29,7 @@ MUST follow when working in this repository. Read it before making changes.
 - The `internal/` zone is an information-hiding boundary. Default visibility is **package-private**;
   only explicitly intended types are `public`.
 - The Module Facade layer MUST be named **`facade`** (underscore, not hyphen) and lives at
-  `internal/facade/` — conceptually distinct from driving adapters (per ADR 0010).
+  `internal/facade/` — conceptually distinct from inbound adapters (per ADR 0010).
 - Module API communication interface is exposed as `[ModuleName]ExposeAPI` (public, at module root);
   its implementation `[ModuleName]ExposeAPIImpl` lives in `internal/facade/` and stays package-private.
 - The Facade may coordinate directly with Application Ports (Reader, Repository, Domain Service)
@@ -62,8 +62,8 @@ MUST follow when working in this repository. Read it before making changes.
 
 - Generate new modules with `bash create-module.sh <module-name>`. It produces the Spring Modulith +
   Hexagonal skeleton and the required `ExposeAPI` / `ExposeAPIImpl` pair.
-- Application layer (per module) follows the golden structure: `application/port/in/{command,query}`,
-  `application/port/out`, flat `application/handler`, `application/event`, `application/mapper`.
+- Application layer (per module) follows the golden structure: `application/port/inbound/{command,query}`,
+  `application/port/outbound`, flat `application/handler`, `application/event`, `application/mapper`.
 
 ## Documentation Index (project "constitution")
 
@@ -96,7 +96,7 @@ Consult these before designing or coding. They are the source of truth:
   objectized; Workshop domain is the reference implementation.
 - `docs/architecture/adr/0010-cross-module-dependencies-are-application-only.md` — **Accepted**:
   Cross-module dependencies are Application-only. Contract types stay outside `internal/`;
-  Module Facade (`internal/facade/`) is distinct from driving adapters. Domain must never import
+  Module Facade (`internal/facade/`) is distinct from inbound adapters. Domain must never import
   another module's API or contract DTOs. The Application layer acts as Anti-Corruption Layer (ACL).
 - `docs/architecture/adr/0011-event-publication-registry-as-outbox.md` — **Accepted**:
   Spring Modulith Event Publication Registry is the transactional outbox (below ports & adapters,
