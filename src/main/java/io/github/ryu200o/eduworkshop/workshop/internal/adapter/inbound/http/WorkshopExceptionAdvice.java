@@ -6,6 +6,8 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Roo
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopPersistenceException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
 
 import org.springframework.http.HttpStatus;
@@ -26,6 +28,18 @@ class WorkshopExceptionAdvice {
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleInvalidState(InvalidWorkshopStateException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(WorkshopAlreadyStartedException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleAlreadyStarted(WorkshopAlreadyStartedException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(WorkshopCapacityBelowRegistrationsException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+    ProblemDetail handleCapacityBelowRegistrations(WorkshopCapacityBelowRegistrationsException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
     }
 
     @ExceptionHandler(WorkshopDomainException.class)
