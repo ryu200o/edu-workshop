@@ -127,6 +127,25 @@ public class Registration {
     }
 
     /**
+     * Cancels the seat because the workshop itself was cancelled (REGISTERED → CANCELLED).
+     *
+     * <p>Unlike {@link #cancel(Instant)} this is a system-initiated cancellation, not a student's
+     * decision: the 24-hour deadline is <em>deliberately not</em> enforced — a cancelled workshop has
+     * no seats left, regardless of how close it was to start. Explicit domain intent, kept as a
+     * separate method so the two flows can never be confused.</p>
+     */
+    public void cancelOnWorkshopCancelled(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(RegistrationState.REGISTERED, "cancelOnWorkshopCancelled");
+
+        this.state = RegistrationState.CANCELLED;
+        this.cancelledAt = now;
+        this.touch(now);
+
+        record(new RegistrationCancelled(id, workshopReference.workshopId(), studentId, updatedAt));
+    }
+
+    /**
      * Re-activates a previously cancelled registration (CANCELLED → REGISTERED) on the same row.
      * Refreshes the {@link WorkshopReference} snapshot (e.g. an updated start time after a
      * reschedule) and resets the cancellation timestamp.

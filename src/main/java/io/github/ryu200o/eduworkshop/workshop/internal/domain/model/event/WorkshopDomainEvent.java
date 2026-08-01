@@ -7,5 +7,11 @@ package io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event;
  * pattern matching at the point of dispatch without falling back to {@code Object}.</p>
  */
 public sealed interface WorkshopDomainEvent
-        permits WorkshopCreated, WorkshopScheduled, WorkshopPublished, WorkshopUnscheduled {
+        permits WorkshopCreated,
+                WorkshopScheduled,
+                WorkshopPublished,
+                WorkshopUnscheduled,
+                WorkshopRoomChanged,
+                WorkshopCapacityAdjusted,
+                WorkshopCancelled {
 }
