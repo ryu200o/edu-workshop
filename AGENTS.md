@@ -102,6 +102,13 @@ Consult these before designing or coding. They are the source of truth:
   Spring Modulith Event Publication Registry is the transactional outbox (below ports & adapters,
   transparent to Application). One `event_publication` row per (event, listener) in the business
   TX; completion via UPDATE `completion_date`; restart replay opt-in.
+- `docs/architecture/adr/0012-registration-table-one-row-per-workshop-user-with-status-flip.md` —
+  **Accepted**: `registrations` keeps EXACTLY ONE row per (workshop_id, user_id); cancel flips
+  `status` to `CANCELLED`, re-register flips it back (plain unique index
+  `uk_registrations_workshop_user` = race-proof backstop, portable across H2/PostgreSQL —
+  H2 lacks partial indexes). `workshop_start_time` selective snapshot (ADR 0007). Phase 1
+  implements a subset (REGISTERED/CANCELLED, no check-in); `docs/db/database.md` §6 stays the
+  target design and is synchronized only when the module is complete. No `registration_histories`.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).
