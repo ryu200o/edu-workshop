@@ -12,12 +12,15 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
 class PublishWorkshopCommandHandler
@@ -26,15 +29,18 @@ class PublishWorkshopCommandHandler
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
+    private final ScheduledWorkshopKicker scheduledWorkshopKicker;
     private final Clock clock;
 
     PublishWorkshopCommandHandler(WorkshopRepository workshopRepository,
                                    RoomExposeAPI roomExposeApi,
                                    WorkshopDomainEventPublisher workshopDomainEventPublisher,
+                                   ScheduledWorkshopKicker scheduledWorkshopKicker,
                                    Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
+        this.scheduledWorkshopKicker = scheduledWorkshopKicker;
         this.clock = clock;
     }
 
@@ -71,12 +77,21 @@ class PublishWorkshopCommandHandler
             throw new RoomConflictException(workshop.roomReference().roomId(), command.workshopId());
         }
 
+        List<Workshop> kickedOut = scheduledWorkshopKicker.kickOutOverlappingScheduled(
+                workshop.roomReference().roomId(), workshop, now);
+
         workshop.publish(now, permission.planning().capacity());
 
         workshopRepository.save(workshop);
 
-        workshopDomainEventPublisher.publish(workshop.recordedEvents());
+        List<WorkshopDomainEvent> events = new ArrayList<>(workshop.recordedEvents());
+        for (Workshop other : kickedOut) {
+            events.addAll(other.recordedEvents());
+        }
+
+        workshopDomainEventPublisher.publish(events);
         workshop.clearDomainEvents();
+        kickedOut.forEach(Workshop::clearDomainEvents);
 
         return new PublishWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt());
     }

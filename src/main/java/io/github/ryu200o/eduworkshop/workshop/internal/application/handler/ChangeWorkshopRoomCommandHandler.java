@@ -13,7 +13,6 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 
 import org.springframework.stereotype.Component;
@@ -32,15 +31,18 @@ class ChangeWorkshopRoomCommandHandler
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
+    private final ScheduledWorkshopKicker scheduledWorkshopKicker;
     private final Clock clock;
 
     ChangeWorkshopRoomCommandHandler(WorkshopRepository workshopRepository,
                                      RoomExposeAPI roomExposeApi,
                                      WorkshopDomainEventPublisher workshopDomainEventPublisher,
+                                     ScheduledWorkshopKicker scheduledWorkshopKicker,
                                      Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
+        this.scheduledWorkshopKicker = scheduledWorkshopKicker;
         this.clock = clock;
     }
 
@@ -67,7 +69,7 @@ class ChangeWorkshopRoomCommandHandler
             throw new RoomConflictException(newRoomId, command.workshopId());
         }
 
-        List<Workshop> kickedOut = kickOutOverlappingScheduled(newRoomId, workshop, now);
+        List<Workshop> kickedOut = scheduledWorkshopKicker.kickOutOverlappingScheduled(newRoomId, workshop, now);
 
         RoomReference newRoomRef = RoomReference.of(
                 permission.planning().roomId(),
@@ -88,29 +90,5 @@ class ChangeWorkshopRoomCommandHandler
         kickedOut.forEach(Workshop::clearDomainEvents);
 
         return new ChangeWorkshopRoomCommand.Result(workshop.id().value(), newRoomRef.roomId(), workshop.updatedAt());
-    }
-
-    private List<Workshop> kickOutOverlappingScheduled(UUID newRoomId, Workshop target, Instant now) {
-        List<Workshop> kickedOut = new ArrayList<>();
-        for (Workshop other : workshopRepository.loadByRoomId(newRoomId)) {
-            if (other.id().equals(target.id())) {
-                continue;
-            }
-            if (other.state() != WorkshopState.SCHEDULED) {
-                continue;
-            }
-            if (!overlaps(other, target)) {
-                continue;
-            }
-            other.returnToDraft(now);
-            workshopRepository.save(other);
-            kickedOut.add(other);
-        }
-        return kickedOut;
-    }
-
-    private boolean overlaps(Workshop other, Workshop target) {
-        return other.startTime().isBefore(target.endTime())
-                && target.startTime().isBefore(other.endTime());
     }
 }

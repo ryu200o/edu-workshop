@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -88,15 +89,24 @@ class PublishWorkshopCommandHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new PublishWorkshopCommandHandler(
-                workshopRepository, roomExposeApi, workshopDomainEventPublisher, fixedClock);
+                workshopRepository, roomExposeApi, workshopDomainEventPublisher,
+                new ScheduledWorkshopKicker(workshopRepository), fixedClock);
     }
 
     private Workshop createScheduledWorkshop(int capacity) {
+        return createScheduledWorkshop(capacity, WORKSHOP_ID, START, END);
+    }
+
+    private Workshop createScheduledWorkshop(int capacity, UUID workshopId) {
+        return createScheduledWorkshop(capacity, workshopId, START, END);
+    }
+
+    private Workshop createScheduledWorkshop(int capacity, UUID workshopId, Instant start, Instant end) {
         Workshop workshop = Workshop.create(
-                WorkshopId.of(WORKSHOP_ID),
-                WorkshopTitle.of("Test Workshop"),
+                WorkshopId.of(workshopId),
+                WorkshopTitle.of("Scheduled Workshop"),
                 WorkshopDescription.of("Description"),
-                START, END,
+                start, end,
                 WorkshopCapacity.of(capacity),
                 NOW
         );
@@ -160,6 +170,58 @@ class PublishWorkshopCommandHandlerTest {
 
             assertThatThrownBy(() -> handler.handle(new PublishWorkshopCommand(WORKSHOP_ID)))
                     .isInstanceOf(WorkshopCapacityExceedsRoomException.class);
+        }
+    }
+
+    @Nested
+    class KickOutScheduled {
+
+        @Test
+        void publish_kicksOutOverlappingScheduledWorkshops() {
+            Workshop workshop = createScheduledWorkshop(30);
+            Workshop scheduled = createScheduledWorkshop(20, UUID.randomUUID());
+            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(Optional.of(workshop));
+            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+                    .willReturn(Optional.of(ALLOWED_PERMISSION));
+            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(0);
+            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(scheduled));
+
+            PublishWorkshopCommand.Result result = handler.handle(
+                    new PublishWorkshopCommand(WORKSHOP_ID));
+
+            assertThat(result.id()).isEqualTo(WORKSHOP_ID);
+            assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
+            // Overlapping SCHEDULED workshop was kicked back to DRAFT, freeing the room.
+            assertThat(scheduled.state()).isEqualTo(WorkshopState.DRAFT);
+            assertThat(scheduled.roomReference()).isNull();
+
+            verify(workshopRepository).save(workshop);
+            verify(workshopRepository).save(scheduled);
+            verify(workshopDomainEventPublisher).publish(any());
+        }
+
+        @Test
+        void publish_keepsNonOverlappingScheduledWorkshop() {
+            Workshop workshop = createScheduledWorkshop(30);
+            Workshop scheduled = createScheduledWorkshop(
+                    20, UUID.randomUUID(),
+                    Instant.parse("2026-09-01T12:00:00Z"),
+                    Instant.parse("2026-09-01T14:00:00Z"));
+            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(Optional.of(workshop));
+            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+                    .willReturn(Optional.of(ALLOWED_PERMISSION));
+            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(0);
+            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(scheduled));
+
+            handler.handle(new PublishWorkshopCommand(WORKSHOP_ID));
+
+            assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
+            assertThat(scheduled.state()).isEqualTo(WorkshopState.SCHEDULED);
+            verify(workshopRepository, never()).save(scheduled);
         }
     }
 

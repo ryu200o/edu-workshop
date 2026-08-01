@@ -86,7 +86,8 @@ class ChangeWorkshopRoomCommandHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new ChangeWorkshopRoomCommandHandler(
-                workshopRepository, roomExposeApi, workshopDomainEventPublisher, fixedClock);
+                workshopRepository, roomExposeApi, workshopDomainEventPublisher,
+                new ScheduledWorkshopKicker(workshopRepository), fixedClock);
     }
 
     private Workshop createPublishedWorkshop() {
