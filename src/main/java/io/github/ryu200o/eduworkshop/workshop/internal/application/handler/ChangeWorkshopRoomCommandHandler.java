@@ -3,13 +3,14 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PublishWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
@@ -21,10 +22,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Component
-class PublishWorkshopCommandHandler
-        implements CommandHandler<PublishWorkshopCommand, PublishWorkshopCommand.Result> {
+class ChangeWorkshopRoomCommandHandler
+        implements CommandHandler<ChangeWorkshopRoomCommand, ChangeWorkshopRoomCommand.Result> {
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
@@ -32,11 +34,11 @@ class PublishWorkshopCommandHandler
     private final ScheduledWorkshopKicker scheduledWorkshopKicker;
     private final Clock clock;
 
-    PublishWorkshopCommandHandler(WorkshopRepository workshopRepository,
-                                   RoomExposeAPI roomExposeApi,
-                                   WorkshopDomainEventPublisher workshopDomainEventPublisher,
-                                   ScheduledWorkshopKicker scheduledWorkshopKicker,
-                                   Clock clock) {
+    ChangeWorkshopRoomCommandHandler(WorkshopRepository workshopRepository,
+                                     RoomExposeAPI roomExposeApi,
+                                     WorkshopDomainEventPublisher workshopDomainEventPublisher,
+                                     ScheduledWorkshopKicker scheduledWorkshopKicker,
+                                     Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
@@ -46,42 +48,36 @@ class PublishWorkshopCommandHandler
 
     @Override
     @Transactional
-    public PublishWorkshopCommand.Result handle(PublishWorkshopCommand command) {
+    public ChangeWorkshopRoomCommand.Result handle(ChangeWorkshopRoomCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
+        UUID newRoomId = command.newRoomId();
 
         Workshop workshop = workshopRepository.loadByIdWithLock(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
-        RoomPlanningPermission permission = roomExposeApi.checkPlanningPermission(workshop.roomReference().roomId())
-                .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", workshop.roomReference().roomId()));
+        RoomPlanningPermission permission = roomExposeApi.checkPlanningPermission(newRoomId)
+                .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", newRoomId));
 
         if (permission.status() != RoomPlanningPermission.PlanningStatus.ALLOWED) {
-            throw new RoomNotAvailableForPublishingException(
-                    workshop.roomReference().roomId(),
-                    permission.status(),
-                    permission.reason());
+            throw new RoomNotAvailableForPublishingException(newRoomId, permission.status(), permission.reason());
         }
 
-        if (workshop.hasRoomWarning()) {
-            workshop.clearMaintenanceWarning(now);
+        int overlappingPublished = workshopRepository.countOverlapping(
+                newRoomId, workshop.startTime(), workshop.endTime(), workshopId);
+        if (overlappingPublished > 0) {
+            throw new RoomConflictException(newRoomId, command.workshopId());
         }
 
-        int overlapping = workshopRepository.countOverlapping(
-                workshop.roomReference().roomId(),
-                workshop.startTime(),
-                workshop.endTime(),
-                workshopId);
+        List<Workshop> kickedOut = scheduledWorkshopKicker.kickOutOverlappingScheduled(newRoomId, workshop, now);
 
-        if (overlapping > 0) {
-            throw new RoomConflictException(workshop.roomReference().roomId(), command.workshopId());
-        }
+        RoomReference newRoomRef = RoomReference.of(
+                permission.planning().roomId(),
+                permission.planning().roomName(),
+                permission.planning().location().building() + "/" + permission.planning().location().floor(),
+                permission.planning().capacity());
 
-        List<Workshop> kickedOut = scheduledWorkshopKicker.kickOutOverlappingScheduled(
-                workshop.roomReference().roomId(), workshop, now);
-
-        workshop.publish(now, permission.planning().capacity());
-
+        workshop.changeRoom(newRoomRef, now);
         workshopRepository.save(workshop);
 
         List<WorkshopDomainEvent> events = new ArrayList<>(workshop.recordedEvents());
@@ -93,6 +89,6 @@ class PublishWorkshopCommandHandler
         workshop.clearDomainEvents();
         kickedOut.forEach(Workshop::clearDomainEvents);
 
-        return new PublishWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt());
+        return new ChangeWorkshopRoomCommand.Result(workshop.id().value(), newRoomRef.roomId(), workshop.updatedAt());
     }
 }
