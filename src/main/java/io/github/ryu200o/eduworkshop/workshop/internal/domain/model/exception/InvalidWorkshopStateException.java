@@ -6,8 +6,8 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopStat
 /**
  * Raised when a requested lifecycle transition is rejected by the workshop's invariant.
  *
- * <p>Examples: calling {@code schedule()} on a non-DRAFT workshop (re-scheduling is a future
- * {@code reschedule()} slice), or calling {@code publish()} on a workshop that is not SCHEDULED
+ * <p>Examples: calling {@code plan()} on a non-DRAFT workshop (re-planning is a future
+ * {@code reschedule()} slice), or calling {@code publish()} on a workshop that is not PLANNED
  * (e.g. still DRAFT).</p>
  */
 public final class InvalidWorkshopStateException extends WorkshopDomainException {

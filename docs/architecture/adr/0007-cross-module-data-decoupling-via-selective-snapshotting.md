@@ -25,7 +25,7 @@ That approach is rejected because it:
 - **Violates the database-level isolation boundary** — Workshop would be physically coupled to Room's
   schema, breaking module autonomy and Spring Modulith's allowed-dependency graph.
 - **Corrupts historical integrity** — if Room renames or relocates a room, every historical workshop
-  row would silently reflect the new name instead of the name that was valid at schedule/publish time.
+  row would silently reflect the new name instead of the name that was valid at plan/publish time.
 - **Blocks the microservice extraction path** — a cross-module JOIN cannot survive a future split into
   independent deployable services without rewriting the SQL.
 
@@ -44,7 +44,7 @@ read side self-contained while preserving module boundaries.
    "Logical References (Zero Cross-Module Foreign Keys)" principle in `docs/db/database.md`.
 
 2. **Selective snapshot columns on `workshops`.** The `workshops` table carries two denormalized
-   snapshot columns, filled from Room at schedule time and refreshed at reschedule time:
+   snapshot columns, filled from Room at plan time and refreshed at reschedule time:
    - `room_name_snapshot VARCHAR(255)` — the room's display name at scheduling time.
    - `room_location_snapshot VARCHAR(255)` — the room's physical location (building/floor) at scheduling
      time.
@@ -53,7 +53,7 @@ read side self-contained while preserving module boundaries.
    **enforced non-null by the domain aggregate** before the workshop transitions to `PUBLISHED`.
 
 3. **Two synchronization paths:**
-   - **Proactive (now):** when a workshop is `schedule()`d / `publish()`ed, the Workshop module pulls the
+   - **Proactive (now):** when a workshop is `plan()`ed / `publish()`ed, the Workshop module pulls the
      current room data via `RoomExposeAPI` (get physical room info) and writes it into the snapshot
      columns. The read side then serves a complete UI row from a **single-table query** with no runtime
      call to Room.
@@ -75,7 +75,7 @@ read side self-contained while preserving module boundaries.
 - **Module Autonomy:** the Workshop read side is self-sufficient. One single-table query fully serves the
   UI without touching or calling the Room module at runtime.
 - **Historical Integrity:** historical data is never silently mutated when Room renames or deletes a room;
-  each workshop keeps the snapshot captured at schedule/publish time, and `workshop_snapshots` freezes it
+  each workshop keeps the snapshot captured at plan/publish time, and `workshop_snapshots` freezes it
   on completion.
 - **Migration Path:** the design is ready to be extracted into independent microservices on demand, with no
   SQL rewrite, because no cross-module JOIN or FK exists.
@@ -85,14 +85,14 @@ read side self-contained while preserving module boundaries.
   negligible against modern hardware and is an accepted price for autonomy.
 - **Eventual Consistency:** the room name shown on a workshop may lag briefly before it is resynchronized
   via the reactive Room event. This short inconsistency window is accepted; for the proactive path the
-  snapshot is correct at schedule/publish, and the reactive path keeps `PUBLISHED` workshops in sync once
+  snapshot is correct at plan/publish, and the reactive path keeps `PUBLISHED` workshops in sync once
   the Event Bus is enabled.
 
 ---
 
 ## Sync Procedure (summary)
 
-1. **On `schedule()` / `publish()`:** Workshop proactively calls `RoomExposeAPI` to fetch the current room
+1. **On `plan()` / `publish()`:** Workshop proactively calls `RoomExposeAPI` to fetch the current room
    data and fills the snapshot columns.
 2. **On Room data change (future):** when the Event Bus is ready, Room emits a domain event; Workshop's
    `RoomEventHandler` listens and refreshes the snapshot columns for non-terminal (`PUBLISHED`) workshops.

@@ -11,7 +11,7 @@ import java.util.UUID;
  * @param title     the workshop title
  * @param startTime the planned start time
  * @param endTime   the planned end time
- * @param state     the lifecycle state (DRAFT / SCHEDULED / PUBLISHED / …)
+ * @param state     the lifecycle state (DRAFT / PLANNED / PUBLISHED / …)
  */
 public record WorkshopSummaryView(
         UUID id,

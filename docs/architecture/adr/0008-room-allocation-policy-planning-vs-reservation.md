@@ -1,4 +1,4 @@
-# ADR 0008: Room Allocation Policy — Planning (SCHEDULED) vs Reservation (PUBLISHED)
+# ADR 0008: Room Allocation Policy — Planning (PLANNED) vs Reservation (PUBLISHED)
 
 - **Status:** Proposed
 - **Date:** 2026-07-20
@@ -23,36 +23,36 @@ Query layers.
 The current Workshop lifecycle (per `.llm/current_plan.md` v2) is:
 
 ```
-DRAFT  ──schedule()──▶  SCHEDULED  ──publish()──▶  PUBLISHED
+DRAFT  ──plan()──▶  PLANNED  ──publish()──▶  PUBLISHED
 ```
 
-The semantic meaning of `SCHEDULED` has now been refined: **scheduling plans a room; publishing reserves it.**
+The semantic meaning of `PLANNED` has now been refined: **scheduling plans a room; publishing reserves it.**
 This distinction was implicit (and the publish-flow conflict check in `room-workshop-publish-flow.mermaid`
-could be read as a schedule-time gate). This ADR makes the policy explicit so the future Application and Query
+could be read as a plan-time gate). This ADR makes the policy explicit so the future Application and Query
 implementations converge.
 
 ---
 
 ## Decision
 
-### 1. Scheduling does NOT reserve a room
+### 1. Planning does NOT reserve a room
 
-When a workshop enters `SCHEDULED`:
+When a workshop enters `PLANNED`:
 
 - Only `room` (via `RoomReference`) is assigned. `startTime`, `endTime`, `capacity` are already known at
-  creation time (DRAFT), so they are not re-validated at `schedule()` — only room non-null is enforced.
+  creation time (DRAFT), so they are not re-validated at `plan()` — only room non-null is enforced.
 
-However, `SCHEDULED` **does NOT grant exclusive ownership** of the room. Multiple workshops may legitimately
-exist in `SCHEDULED` for the **same room and overlapping time window**.
+However, `PLANNED` **does NOT grant exclusive ownership** of the room. Multiple workshops may legitimately
+exist in `PLANNED` for the **same room and overlapping time window**.
 
 Example (VALID):
 
 ```
-Workshop A   SCHEDULED   Room 201   09:00–11:00
-Workshop C   SCHEDULED   Room 201   09:00–11:00
+Workshop A   PLANNED   Room 201   09:00–11:00
+Workshop C   PLANNED   Room 201   09:00–11:00
 ```
 
-Both are allowed. Scheduling is a *planning* act, not a *reservation*.
+Both are allowed. Planning is a *planning* act, not a *reservation*.
 
 ### 2. Publishing reserves the room
 
@@ -61,7 +61,7 @@ layer** performs Room availability verification (via `RoomExposeAPI` / its own o
 
 - If another workshop is already `PUBLISHED` for the same room and overlapping time → **publish fails**.
 - The aggregate remains **unchanged** (the conflict is detected outside the aggregate, before the transition).
-- The conflict is **NOT** checked during `schedule()`.
+- The conflict is **NOT** checked during `plan()`.
 
 This keeps the aggregate pure: it owns local invariants and the state machine, but never performs cross-
 workshop / room-occupancy lookups.
@@ -72,8 +72,8 @@ The future Room Availability query must distinguish three states (not a binary a
 
 | State | Meaning | Scheduling allowed? | Publish possible? | UI treatment |
 |-------|---------|---------------------|-------------------|--------------|
-| **A — AVAILABLE** | No published workshop. No scheduled workshop. | Yes | Yes | Normal selectable room. |
-| **B — AVAILABLE_WITH_PLANNING_CONFLICT** | No published workshop. One or more `SCHEDULED` workshops already plan to use the room (same/overlapping time). | **Yes** (planning info only, does NOT block) | Yes (unless a published conflict appears at publish time) | Show room available **+ warning** + list/count of scheduled workshops. |
+| **A — AVAILABLE** | No published workshop. No planned workshop. | Yes | Yes | Normal selectable room. |
+| **B — AVAILABLE_WITH_PLANNING_CONFLICT** | No published workshop. One or more `PLANNED` workshops already plan to use the room (same/overlapping time). | **Yes** (planning info only, does NOT block) | Yes (unless a published conflict appears at publish time) | Show room available **+ warning** + list/count of planned workshops. |
 | **C — OCCUPIED** | A `PUBLISHED` workshop owns the room for the window. | **No** | **No** (impossible) | Room disappears from available-room selection. |
 
 State B is **planning information only** — it surfaces contention without pessimistic locking.
@@ -96,8 +96,8 @@ The user can still choose Room 201, but understands another planner is already c
 ### 5. Responsibilities
 
 **Workshop Aggregate** is responsible for:
-- local invariants (`schedule()` validation: room/time/capacity),
-- lifecycle transitions and the state machine (`DRAFT → SCHEDULED → PUBLISHED`),
+- local invariants (`plan()` validation: room/time/capacity),
+- lifecycle transitions and the state machine (`DRAFT → PLANNED → PUBLISHED`),
 - recorded domain events.
 
 It is **NOT** responsible for:
@@ -113,7 +113,7 @@ It is **NOT** responsible for:
 
 **Query Model (future)** should expose planning information. The read model must be able to represent:
 - *occupied by a published workshop*, and
-- *planned by scheduled workshops*,
+- *planned by workshops in `PLANNED` state*,
 as **distinct** concepts (State C vs State B), not a single boolean.
 
 ---
@@ -122,13 +122,13 @@ as **distinct** concepts (State C vs State B), not a single boolean.
 
 ### Positive (Pros)
 - **Better UX** — planners see contention early instead of hitting a hard failure at publish.
-- **No pessimistic locking** — no cross-workshop lock on `workshops`; `schedule()` stays lightweight.
+- **No pessimistic locking** — no cross-workshop lock on `workshops`; `plan()` stays lightweight.
 - **Parallel planning** — multiple organizers may prepare workshops for the same room concurrently.
 - **Explicit business semantics** — planning vs reservation is a first-class, documented distinction.
 - **Aggregate stays pure** — no IO / cross-module lookup leaks into the domain.
 
 ### Negative / Trade-offs (Cons)
-- **Publish may fail after a successful schedule.** A workshop can be `SCHEDULED` (valid) yet fail to
+- **Publish may fail after a successful plan.** A workshop can be `PLANNED` (valid) yet fail to be
   `PUBLISHED` if another workshop publishes the same room first.
 - **Re-planning cost.** A user may need to re-plan (reschedule / change room) if another workshop publishes
   first.
@@ -147,6 +147,6 @@ These trade-offs are **accepted** as the price of transparency-first planning.
   `WorkshopRepository` overlap scan + `RoomExposeAPI.checkAvailability` per Plan C) and fails *before* calling
   `workshop.publish()`.
 - Future Workshop **Query** slice: a Room Availability query/projected View returns State A / B / C with the
-  scheduled-workshop list for State B.
+  planned-workshop list for State B.
 - Cross-module note: Room events are currently **recorded-only** (not published), so reactive snapshot refresh
   (ADR 0007) remains deferred; this ADR's policy is independent of that and can ship without the Event Bus.

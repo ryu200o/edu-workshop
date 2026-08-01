@@ -15,16 +15,16 @@ graph TD
         B -->|DRAFT| D[No action<br>No room reference]
         B -->|PUBLISHED| G[Process PUBLISHED Reactions]
 
-        B -->|SCHEDULED| F[Process SCHEDULED Reactions]
+        B -->|PLANNED| F[Process PLANNED Reactions]
 
-        %% SCHEDULED
+        %% PLANNED
         F --> F_T{Event type?}
         F_T -->|Renamed| F1[Update room_name_snapshot]
         F_T -->|Relocated| F2[Update room_location_snapshot]
         F_T -->|CapacityChanged| F3[Update room_capacity_snapshot]
-        F_T -->|StateChanged → MAINTENANCE| F4[hasRoomWarning = true<br>Keep SCHEDULED]
-        F_T -->|StateChanged → ACTIVE| F5[hasRoomWarning = false<br>Keep SCHEDULED]
-        F_T -->|StateChanged → DEACTIVATED| F6[returnToDraft()<br>SCHEDULED → DRAFT]
+        F_T -->|StateChanged → MAINTENANCE| F4[hasRoomWarning = true<br>Keep PLANNED]
+        F_T -->|StateChanged → ACTIVE| F5[hasRoomWarning = false<br>Keep PLANNED]
+        F_T -->|StateChanged → DEACTIVATED| F6[returnToDraft()<br>PLANNED → DRAFT]
 
         %% PUBLISHED
         G --> G_T{Event type?}

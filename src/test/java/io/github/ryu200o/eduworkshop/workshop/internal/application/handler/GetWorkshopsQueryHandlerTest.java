@@ -29,7 +29,7 @@ class GetWorkshopsQueryHandlerTest {
     void returnsAllViewsFromPort() {
         Instant now = Instant.now();
         WorkshopSummaryView one = new WorkshopSummaryView(UUID.randomUUID(), "Workshop A", now, now.plusSeconds(3600), "DRAFT");
-        WorkshopSummaryView two = new WorkshopSummaryView(UUID.randomUUID(), "Workshop B", now, now.plusSeconds(7200), "SCHEDULED");
+        WorkshopSummaryView two = new WorkshopSummaryView(UUID.randomUUID(), "Workshop B", now, now.plusSeconds(7200), "PLANNED");
         when(workshopReader.findAll()).thenReturn(List.of(one, two));
 
         List<WorkshopSummaryView> result = handler().handle(new GetWorkshopsQuery());

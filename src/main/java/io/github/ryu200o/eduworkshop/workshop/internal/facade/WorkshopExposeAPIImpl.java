@@ -33,7 +33,7 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
     private static WorkshopStateContract mapState(String state) {
         return switch (state) {
             case "DRAFT" -> WorkshopStateContract.DRAFT;
-            case "SCHEDULED" -> WorkshopStateContract.SCHEDULED;
+            case "PLANNED" -> WorkshopStateContract.PLANNED;
             case "PUBLISHED" -> WorkshopStateContract.PUBLISHED;
             case "IN_PROGRESS" -> WorkshopStateContract.IN_PROGRESS;
             case "COMPLETED" -> WorkshopStateContract.COMPLETED;

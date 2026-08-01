@@ -10,7 +10,7 @@ package io.github.ryu200o.eduworkshop.workshop.contract;
  */
 public enum WorkshopStateContract {
     DRAFT,
-    SCHEDULED,
+    PLANNED,
     PUBLISHED,
     IN_PROGRESS,
     COMPLETED,

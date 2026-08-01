@@ -4,10 +4,10 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduled;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnscheduled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnplanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
@@ -26,7 +26,7 @@ import java.util.List;
  * and an optional {@link RoomReference} carrying denormalized room snapshots (ADR 0007). A Rich Domain
  * Model — mutations only through explicit, intention-revealing behaviors, never public setters.</p>
  *
- * <p>Lifecycle (see {@link WorkshopState}): born {@code DRAFT} → {@link #schedule} to {@code SCHEDULED}
+ * <p>Lifecycle (see {@link WorkshopState}): born {@code DRAFT} → {@link #plan} to {@code PLANNED}
  * (planning only, no room reservation — ADR 0008) → {@link #publish} to {@code PUBLISHED} (the room is
  * reserved). Post-publish changes ({@link #changeRoom}, {@link #adjustCapacity}, {@link #cancel}) are
  * only allowed in {@code PUBLISHED}. A room going {@code DEACTIVATED} returns the workshop to
@@ -80,7 +80,7 @@ public class Workshop {
      * Creates a new workshop aggregate in state {@code DRAFT}.
      *
      * <p>Validates the local invariant that the time window is well-formed ({@code endTime} strictly
-     * after {@code startTime}); the room is not yet assigned (that is {@link #schedule}). Records a
+     * after {@code startTime}); the room is not yet assigned (that is {@link #plan}). Records a
      * {@link WorkshopCreated} domain event.</p>
      *
      * @param id          the aggregate identifier
@@ -129,34 +129,34 @@ public class Workshop {
     }
 
     /**
-     * Assigns a room and moves the workshop DRAFT → {@code SCHEDULED}.
+     * Assigns a room and moves the workshop DRAFT → {@code PLANNED}.
      *
-     * <p>Per ADR 0008 this is a <em>planning</em> act, not a reservation: overlapping schedules for the
+     * <p>Per ADR 0008 this is a <em>planning</em> act, not a reservation: overlapping plans for the
      * same room are allowed, and no global availability check happens here. The {@code hasRoomWarning}
      * flag is carried over from the Application handler (a room in {@code MAINTENANCE} still permits
-     * planning, with a warning). Records a {@link WorkshopScheduled} event.</p>
+     * planning, with a warning). Records a {@link WorkshopPlanned} event.</p>
      *
      * @param room           the room reference (id + name/location/capacity snapshots, ADR 0007)
      * @param hasRoomWarning whether the room is under maintenance (planning allowed, with warning)
      * @param now            the current instant, used for {@code updatedAt}
      * @throws InvalidWorkshopStateException if the workshop is not in {@code DRAFT}
      */
-    public void schedule(RoomReference room, boolean hasRoomWarning, Instant now) {
-        requireNonNull(room, "room must be assigned before scheduling");
+    public void plan(RoomReference room, boolean hasRoomWarning, Instant now) {
+        requireNonNull(room, "room must be assigned before planning");
         requireNonNull(now, "now cannot be null");
 
-        requireState(WorkshopState.DRAFT, "schedule");
+        requireState(WorkshopState.DRAFT, "plan");
 
         this.roomReference = room;
         this.hasRoomWarning = hasRoomWarning;
-        this.state = WorkshopState.SCHEDULED;
+        this.state = WorkshopState.PLANNED;
         this.touch(now);
 
-        record(new WorkshopScheduled(id, room, updatedAt));
+        record(new WorkshopPlanned(id, room, updatedAt));
     }
 
     /**
-     * Publishes a {@code SCHEDULED} workshop, turning planning into a reservation (ADR 0008).
+     * Publishes a {@code PLANNED} workshop, turning planning into a reservation (ADR 0008).
      *
      * <p>Enforces the local invariant that the workshop capacity must not exceed the room's actual
      * physical capacity (passed in by the Application handler after querying Room). The global
@@ -165,12 +165,12 @@ public class Workshop {
      *
      * @param now               the current instant, used for {@code updatedAt}
      * @param actualRoomCapacity the room's current physical capacity (from Room planning data)
-     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code PLANNED}
      * @throws WorkshopCapacityExceedsRoomException if the workshop capacity exceeds the room's capacity
      */
     public void publish(Instant now, int actualRoomCapacity) {
         requireNonNull(now, "now cannot be null");
-        requireState(WorkshopState.SCHEDULED, "publish");
+        requireState(WorkshopState.PLANNED, "publish");
 
         if (this.capacity.value() > actualRoomCapacity) {
             throw new WorkshopCapacityExceedsRoomException(this.capacity.value(), actualRoomCapacity);
@@ -187,19 +187,19 @@ public class Workshop {
      * room reference, without changing the room itself.
      *
      * <p>Called by the {@code WorkshopRoomEventHandler} when the Room module emits rename / relocate /
-     * capacity-change integration events. Allowed in {@code SCHEDULED} and {@code PUBLISHED} (the
+     * capacity-change integration events. Allowed in {@code PLANNED} and {@code PUBLISHED} (the
      * states where a room is assigned); does not emit a domain event.</p>
      *
      * @param updatedRef the room reference carrying the refreshed snapshots
      * @param now        the current instant, used for {@code updatedAt}
-     * @throws InvalidWorkshopStateException if the workshop has no room yet (not {@code SCHEDULED}/{@code PUBLISHED})
+     * @throws InvalidWorkshopStateException if the workshop has no room yet (not {@code PLANNED}/{@code PUBLISHED})
      */
     public void updateRoomSnapshot(RoomReference updatedRef, Instant now) {
         requireNonNull(updatedRef, "room snapshot must not be null");
         requireNonNull(now, "now cannot be null");
-        if (state != WorkshopState.SCHEDULED && state != WorkshopState.PUBLISHED) {
+        if (state != WorkshopState.PLANNED && state != WorkshopState.PUBLISHED) {
             throw new InvalidWorkshopStateException(
-                    id, state, WorkshopState.SCHEDULED,
+                    id, state, WorkshopState.PLANNED,
                     "Cannot update room snapshot in state " + state);
         }
         this.roomReference = updatedRef;
@@ -210,15 +210,15 @@ public class Workshop {
      * Flags the assigned room as under maintenance ({@code hasRoomWarning = true}).
      *
      * <p>Called by the {@code WorkshopRoomEventHandler} when the room transitions to
-     * {@code MAINTENANCE}. Planning state ({@code SCHEDULED}) is kept — maintenance is a warning, not
+     * {@code MAINTENANCE}. Planning state ({@code PLANNED}) is kept — maintenance is a warning, not
      * a blocker. Does not emit a domain event.</p>
      *
      * @param now the current instant, used for {@code updatedAt}
-     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code PLANNED}
      */
     public void markMaintenanceWarning(Instant now) {
         requireNonNull(now, "now cannot be null");
-        requireState(WorkshopState.SCHEDULED, "markMaintenanceWarning");
+        requireState(WorkshopState.PLANNED, "markMaintenanceWarning");
         this.hasRoomWarning = true;
         this.touch(now);
     }
@@ -230,36 +230,36 @@ public class Workshop {
      * after maintenance. Does not emit a domain event.</p>
      *
      * @param now the current instant, used for {@code updatedAt}
-     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code PLANNED}
      */
     public void clearMaintenanceWarning(Instant now) {
         requireNonNull(now, "now cannot be null");
-        requireState(WorkshopState.SCHEDULED, "clearMaintenanceWarning");
+        requireState(WorkshopState.PLANNED, "clearMaintenanceWarning");
         this.hasRoomWarning = false;
         this.touch(now);
     }
 
     /**
-     * Releases the room and moves the workshop back {@code SCHEDULED → DRAFT}.
+     * Releases the room and moves the workshop back {@code PLANNED → DRAFT}.
      *
      * <p>Called by the {@code WorkshopRoomEventHandler} when the room is {@code DEACTIVATED}
      * (planning no longer possible), and in Phase 2 by {@code ChangeWorkshopRoomCommandHandler} to
-     * kick out conflicting {@code SCHEDULED} workshops from a target room. Clears the room reference
-     * and the maintenance warning; records a {@link WorkshopUnscheduled} event.</p>
+     * kick out conflicting {@code PLANNED} workshops from a target room. Clears the room reference
+     * and the maintenance warning; records a {@link WorkshopUnplanned} event.</p>
      *
      * @param now the current instant, used for {@code updatedAt}
-     * @throws InvalidWorkshopStateException if the workshop is not in {@code SCHEDULED}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code PLANNED}
      */
     public void returnToDraft(Instant now) {
         requireNonNull(now, "now cannot be null");
-        requireState(WorkshopState.SCHEDULED, "returnToDraft");
+        requireState(WorkshopState.PLANNED, "returnToDraft");
 
         this.roomReference = null;
         this.hasRoomWarning = false;
         this.state = WorkshopState.DRAFT;
         this.touch(now);
 
-        record(new WorkshopUnscheduled(id, updatedAt));
+        record(new WorkshopUnplanned(id, updatedAt));
     }
 
     /**

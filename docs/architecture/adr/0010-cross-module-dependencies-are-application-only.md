@@ -220,7 +220,7 @@ public static RoomReference from(RoomSnapshot snapshot) { ... }
 ✅ **Legal — Application maps the DTO:**
 
 ```java
-// workshop/internal/application/handler/ScheduleWorkshopCommandHandler.java
+// workshop/internal/application/handler/PlanWorkshopCommandHandler.java
 import io.github.ryu200o.eduworkshop.room.contract.RoomSnapshot;
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 
@@ -232,7 +232,7 @@ RoomReference roomRef = RoomReference.of(
     snapshot.name(),
     snapshot.location().building() + "/" + snapshot.location().floor()
 );
-workshop.schedule(roomRef, now);
+workshop.plan(roomRef, now);
 ```
 
 ❌ **Illegal — Domain throws or imports another module's exception:**

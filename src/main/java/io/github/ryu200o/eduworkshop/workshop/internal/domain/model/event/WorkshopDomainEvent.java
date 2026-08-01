@@ -8,9 +8,9 @@ package io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event;
  */
 public sealed interface WorkshopDomainEvent
         permits WorkshopCreated,
-                WorkshopScheduled,
+                WorkshopPlanned,
                 WorkshopPublished,
-                WorkshopUnscheduled,
+                WorkshopUnplanned,
                 WorkshopRoomChanged,
                 WorkshopCapacityAdjusted,
                 WorkshopCancelled {

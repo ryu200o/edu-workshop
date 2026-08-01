@@ -46,7 +46,7 @@ workshop.publish(now, actualRoomCapacity);   // aggregate only checks LOCAL inva
 ```
 
 The aggregate (`Workshop.publish`) only validates:
-- State machine transition (SCHEDULED → PUBLISHED)
+- State machine transition (PLANNED → PUBLISHED)
 - Capacity ≤ room capacity (local invariant from its own `RoomReference` snapshot)
 
 It never receives a policy or repository.

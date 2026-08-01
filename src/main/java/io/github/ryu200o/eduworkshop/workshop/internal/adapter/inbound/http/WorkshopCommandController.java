@@ -5,8 +5,8 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CancelWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PlanWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PublishWorkshopCommand;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ScheduleWorkshopCommand;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,11 +46,11 @@ class WorkshopCommandController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
-    @PostMapping("/{id}/schedule")
-    ResponseEntity<ScheduleWorkshopCommand.Result> schedule(@PathVariable UUID id,
-                                                            @RequestBody ScheduleWorkshopRequest request) {
-        var command = new ScheduleWorkshopCommand(id, request.roomId());
-        ScheduleWorkshopCommand.Result result = commandBus.execute(command);
+    @PostMapping("/{id}/plan")
+    ResponseEntity<PlanWorkshopCommand.Result> plan(@PathVariable UUID id,
+                                                    @RequestBody PlanWorkshopRequest request) {
+        var command = new PlanWorkshopCommand(id, request.roomId());
+        PlanWorkshopCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
@@ -93,7 +93,7 @@ class WorkshopCommandController {
     ) {
     }
 
-    record ScheduleWorkshopRequest(UUID roomId) {
+    record PlanWorkshopRequest(UUID roomId) {
     }
 
     record ChangeWorkshopRoomRequest(UUID roomId) {

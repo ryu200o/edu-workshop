@@ -29,18 +29,18 @@ class PublishWorkshopCommandHandler
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
-    private final ScheduledWorkshopKicker scheduledWorkshopKicker;
+    private final PlannedWorkshopKicker plannedWorkshopKicker;
     private final Clock clock;
 
     PublishWorkshopCommandHandler(WorkshopRepository workshopRepository,
                                    RoomExposeAPI roomExposeApi,
                                    WorkshopDomainEventPublisher workshopDomainEventPublisher,
-                                   ScheduledWorkshopKicker scheduledWorkshopKicker,
+                                   PlannedWorkshopKicker plannedWorkshopKicker,
                                    Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
-        this.scheduledWorkshopKicker = scheduledWorkshopKicker;
+        this.plannedWorkshopKicker = plannedWorkshopKicker;
         this.clock = clock;
     }
 
@@ -77,7 +77,7 @@ class PublishWorkshopCommandHandler
             throw new RoomConflictException(workshop.roomReference().roomId(), command.workshopId());
         }
 
-        List<Workshop> kickedOut = scheduledWorkshopKicker.kickOutOverlappingScheduled(
+        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(
                 workshop.roomReference().roomId(), workshop, now);
 
         workshop.publish(now, permission.planning().capacity());
