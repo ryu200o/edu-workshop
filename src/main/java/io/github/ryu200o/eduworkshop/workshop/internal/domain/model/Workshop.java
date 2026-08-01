@@ -1,10 +1,15 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.domain.model;
 
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnscheduled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
@@ -146,6 +151,54 @@ public class Workshop {
         this.touch(now);
 
         record(new WorkshopUnscheduled(id, updatedAt));
+    }
+
+    public void changeRoom(RoomReference newRoomRef, Instant now) {
+        requireNonNull(newRoomRef, "new room reference must not be null");
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.PUBLISHED, "changeRoom");
+
+        if (this.capacity.value() > newRoomRef.roomCapacitySnapshot()) {
+            throw new WorkshopCapacityExceedsRoomException(this.capacity.value(), newRoomRef.roomCapacitySnapshot());
+        }
+
+        this.roomReference = newRoomRef;
+        this.touch(now);
+
+        record(new WorkshopRoomChanged(id, newRoomRef, updatedAt));
+    }
+
+    public void adjustCapacity(WorkshopCapacity newCapacity, int activeRegistrations, Instant now) {
+        requireNonNull(newCapacity, "new capacity must not be null");
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.PUBLISHED, "adjustCapacity");
+
+        if (newCapacity.value() < activeRegistrations) {
+            throw new WorkshopCapacityBelowRegistrationsException(newCapacity.value(), activeRegistrations);
+        }
+
+        if (newCapacity.value() > this.roomReference.roomCapacitySnapshot()) {
+            throw new WorkshopCapacityExceedsRoomException(newCapacity.value(), this.roomReference.roomCapacitySnapshot());
+        }
+
+        this.capacity = newCapacity;
+        this.touch(now);
+
+        record(new WorkshopCapacityAdjusted(id, newCapacity, updatedAt));
+    }
+
+    public void cancel(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.PUBLISHED, "cancel");
+
+        if (!now.isBefore(this.startTime)) {
+            throw new WorkshopAlreadyStartedException(id, startTime, now);
+        }
+
+        this.state = WorkshopState.CANCELLED;
+        this.touch(now);
+
+        record(new WorkshopCancelled(id, updatedAt));
     }
 
     // ---------------------------------------------------------------------

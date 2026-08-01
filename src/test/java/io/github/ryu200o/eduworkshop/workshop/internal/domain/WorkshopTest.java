@@ -9,8 +9,13 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitl
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
 
@@ -218,6 +223,174 @@ class WorkshopTest {
         assertThat(workshop.roomReference()).isEqualTo(ROOM);
         assertThat(workshop.startTime()).isEqualTo(START);
         assertThat(workshop.capacity()).isEqualTo(CAPACITY);
+    }
+
+    // ----------------------------------------------------------------
+    // changeRoom (post-publish)
+    // ----------------------------------------------------------------
+
+    private Workshop createPublished() {
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, false, NOW);
+        workshop.publish(NOW, 50);
+        return workshop;
+    }
+
+    @Test
+    void changeRoom_successfulWhenPublishedAndCapacityFits() {
+        Workshop workshop = createPublished();
+        RoomReference newRoom = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 50);
+        Instant changedAt = NOW.plusSeconds(1);
+
+        workshop.changeRoom(newRoom, changedAt);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
+        assertThat(workshop.roomReference()).isEqualTo(newRoom);
+        assertThat(workshop.updatedAt()).isEqualTo(changedAt);
+
+        assertThat(workshop.recordedEvents())
+                .hasSize(4)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class,
+                        WorkshopPublished.class, WorkshopRoomChanged.class);
+
+        WorkshopRoomChanged event = (WorkshopRoomChanged) workshop.recordedEvents().get(3);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.roomReference()).isEqualTo(newRoom);
+    }
+
+    @Test
+    void changeRoom_throwsExceptionWhenNotPublished() {
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, false, NOW);
+        RoomReference newRoom = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 50);
+
+        assertThatThrownBy(() -> workshop.changeRoom(newRoom, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.SCHEDULED);
+                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.PUBLISHED);
+                });
+    }
+
+    @Test
+    void changeRoom_throwsExceptionWhenNewRoomCapacityIsSmallerThanWorkshopCapacity() {
+        Workshop workshop = createPublished();
+        RoomReference tooSmallRoom = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 10);
+
+        assertThatThrownBy(() -> workshop.changeRoom(tooSmallRoom, NOW))
+                .isInstanceOf(WorkshopCapacityExceedsRoomException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // adjustCapacity (post-publish)
+    // ----------------------------------------------------------------
+
+    @Test
+    void adjustCapacity_successfulWhenValid() {
+        Workshop workshop = createPublished();
+        WorkshopCapacity newCapacity = WorkshopCapacity.of(40);
+        Instant adjustedAt = NOW.plusSeconds(1);
+
+        workshop.adjustCapacity(newCapacity, 25, adjustedAt);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
+        assertThat(workshop.capacity()).isEqualTo(newCapacity);
+        assertThat(workshop.updatedAt()).isEqualTo(adjustedAt);
+
+        assertThat(workshop.recordedEvents())
+                .hasSize(4)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class,
+                        WorkshopPublished.class, WorkshopCapacityAdjusted.class);
+
+        WorkshopCapacityAdjusted event = (WorkshopCapacityAdjusted) workshop.recordedEvents().get(3);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.newCapacity()).isEqualTo(newCapacity);
+    }
+
+    @Test
+    void adjustCapacity_throwsExceptionWhenNewCapacityLessThanActiveRegistrations() {
+        Workshop workshop = createPublished();
+
+        assertThatThrownBy(() -> workshop.adjustCapacity(WorkshopCapacity.of(20), 25, NOW))
+                .isInstanceOf(WorkshopCapacityBelowRegistrationsException.class);
+    }
+
+    @Test
+    void adjustCapacity_throwsExceptionWhenNewCapacityExceedsRoomCapacity() {
+        Workshop workshop = createPublished();
+
+        assertThatThrownBy(() -> workshop.adjustCapacity(WorkshopCapacity.of(80), 25, NOW))
+                .isInstanceOf(WorkshopCapacityExceedsRoomException.class);
+    }
+
+    @Test
+    void adjustCapacity_throwsExceptionWhenNotPublished() {
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, false, NOW);
+
+        assertThatThrownBy(() -> workshop.adjustCapacity(WorkshopCapacity.of(40), 25, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // cancel (post-publish)
+    // ----------------------------------------------------------------
+
+    @Test
+    void cancel_successfulWhenBeforeStartTime() {
+        Workshop workshop = createPublished();
+        Instant cancelAt = START.minusSeconds(3600);
+
+        workshop.cancel(cancelAt);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.CANCELLED);
+        assertThat(workshop.updatedAt()).isEqualTo(cancelAt);
+
+        assertThat(workshop.recordedEvents())
+                .hasSize(4)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class,
+                        WorkshopPublished.class, WorkshopCancelled.class);
+
+        WorkshopCancelled event = (WorkshopCancelled) workshop.recordedEvents().get(3);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+    }
+
+    @Test
+    void cancel_throwsExceptionWhenNowIsAfterOrEqualsStartTime() {
+        Workshop workshop = createPublished();
+
+        assertThatThrownBy(() -> workshop.cancel(START))
+                .isInstanceOf(WorkshopAlreadyStartedException.class);
+        assertThatThrownBy(() -> workshop.cancel(START.plusSeconds(1)))
+                .isInstanceOf(WorkshopAlreadyStartedException.class)
+                .satisfies(e -> {
+                    WorkshopAlreadyStartedException ex = (WorkshopAlreadyStartedException) e;
+                    assertThat(ex.workshopId()).isEqualTo(workshop.id());
+                    assertThat(ex.startTime()).isEqualTo(START);
+                });
+    }
+
+    @Test
+    void cancel_throwsExceptionWhenNotPublished() {
+        Workshop workshop = createDraft();
+        workshop.schedule(ROOM, false, NOW);
+
+        assertThatThrownBy(() -> workshop.cancel(NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.SCHEDULED);
+                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.PUBLISHED);
+                });
+    }
+
+    @Test
+    void cancel_rejectsNullNow() {
+        Workshop workshop = createPublished();
+
+        assertThatThrownBy(() -> workshop.cancel(null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // ----------------------------------------------------------------
