@@ -6,6 +6,8 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Roo
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopPersistenceException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
@@ -39,6 +41,18 @@ class WorkshopExceptionAdvice {
     @ExceptionHandler(WorkshopCapacityBelowRegistrationsException.class)
     @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
     ProblemDetail handleCapacityBelowRegistrations(WorkshopCapacityBelowRegistrationsException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidWorkshopTimeRangeException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+    ProblemDetail handleInvalidTimeRange(InvalidWorkshopTimeRangeException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+    }
+
+    @ExceptionHandler(RescheduleDeadlineExceededException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+    ProblemDetail handleRescheduleDeadline(RescheduleDeadlineExceededException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
     }
 

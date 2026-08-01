@@ -240,6 +240,50 @@ class RegistrationTest {
     }
 
     // ----------------------------------------------------------------
+    // refreshWorkshopStartTime
+    // ----------------------------------------------------------------
+
+    @Test
+    void refreshWorkshopStartTime_updatesSnapshotAndKeepsStatus() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        Instant newStart = START.plusSeconds(7200);
+
+        registration.refreshWorkshopStartTime(WorkshopReference.of(WORKSHOP_ID, newStart), NOW.plusSeconds(1));
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.REGISTERED);
+        assertThat(registration.workshopReference().startTime()).isEqualTo(newStart);
+        assertThat(registration.registeredAt()).isEqualTo(NOW);
+        assertThat(registration.cancelledAt()).isNull();
+        assertThat(registration.updatedAt()).isEqualTo(NOW.plusSeconds(1));
+        // Projection refresh only — no domain event.
+        assertThat(registration.recordedEvents())
+                .hasSize(1)
+                .hasOnlyElementsOfType(RegistrationCreated.class);
+    }
+
+    @Test
+    void refreshWorkshopStartTime_worksInCancelledStateToo() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        registration.cancel(DEADLINE.minusSeconds(1));
+
+        Instant newStart = START.plusSeconds(7200);
+        registration.refreshWorkshopStartTime(WorkshopReference.of(WORKSHOP_ID, newStart), NOW.plusSeconds(1));
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
+        assertThat(registration.workshopReference().startTime()).isEqualTo(newStart);
+    }
+
+    @Test
+    void refreshWorkshopStartTime_rejectsNull() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+
+        assertThatThrownBy(() -> registration.refreshWorkshopStartTime(null, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registration.refreshWorkshopStartTime(workshop(), null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------
     // reconstruct / misc
     // ----------------------------------------------------------------
 

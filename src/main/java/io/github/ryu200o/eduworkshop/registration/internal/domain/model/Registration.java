@@ -165,6 +165,27 @@ public class Registration {
                 workshopReference.startTime(), updatedAt));
     }
 
+    /**
+     * Refreshes the {@link WorkshopReference} {@code startTime} snapshot because the workshop was
+     * rescheduled.
+     *
+     * <p>Called by the {@code WorkshopRescheduledEventHandler} (ADR 0007 selective snapshotting).
+     * Only the snapshot changes — the student's {@code REGISTERED} status, the booking timestamps
+     * and the (re)activation history are all preserved. Does not emit a domain event: this is a
+     * projection refresh, not a user-facing registration transition.</p>
+     *
+     * @param updatedReference the reference carrying the rescheduled start time
+     * @param now              the current instant, used for {@code updatedAt}
+     * @throws IllegalArgumentException if {@code updatedReference} or {@code now} is null
+     */
+    public void refreshWorkshopStartTime(WorkshopReference updatedReference, Instant now) {
+        requireNonNull(updatedReference, "workshop reference must not be null");
+        requireNonNull(now, "now cannot be null");
+
+        this.workshopReference = updatedReference;
+        this.touch(now);
+    }
+
     // ---------------------------------------------------------------------
     // Guards / helpers
     // ---------------------------------------------------------------------

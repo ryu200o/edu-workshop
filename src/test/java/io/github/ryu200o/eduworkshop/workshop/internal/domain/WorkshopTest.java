@@ -9,11 +9,14 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitl
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRescheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
@@ -21,6 +24,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.Wo
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -146,16 +150,46 @@ class WorkshopTest {
     }
 
     @Test
-    void plan_rejectsNonDraftState() {
+    void plan_rejectsNonDraftOrPlannedState() {
         Workshop workshop = createDraft();
         workshop.plan(ROOM, false, NOW);
+        workshop.publish(NOW, 50);
 
-        // Already PLANNED — re-plan must be rejected.
+        // PUBLISHED is not a planning state — re-plan must be rejected.
         assertThatThrownBy(() -> workshop.plan(ROOM, false, NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class)
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
-                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PLANNED);
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PUBLISHED);
+                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.DRAFT);
+                });
+    }
+
+    @Test
+    void plan_fromPlanned_replansRoomDirectly() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);
+        RoomReference roomB = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 50);
+
+        workshop.plan(roomB, true, NOW.plusSeconds(1));
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.PLANNED);
+        assertThat(workshop.roomReference()).isEqualTo(roomB);
+        assertThat(workshop.hasRoomWarning()).isTrue();
+        assertThat(workshop.recordedEvents())
+                .hasSize(3)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class, WorkshopPlanned.class);
+    }
+
+    @Test
+    void plan_fromPublished_isRejected() {
+        Workshop workshop = createPublished();
+
+        assertThatThrownBy(() -> workshop.plan(ROOM, false, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PUBLISHED);
                     assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.DRAFT);
                 });
     }
@@ -391,6 +425,185 @@ class WorkshopTest {
 
         assertThatThrownBy(() -> workshop.cancel(null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // reschedule (post-publish)
+    // ----------------------------------------------------------------
+
+    @Test
+    void reschedule_fromPublished_ok() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+        Instant rescheduleAt = NOW.plusSeconds(1);
+
+        workshop.reschedule(newStart, newEnd, rescheduleAt);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
+        assertThat(workshop.roomReference()).isEqualTo(ROOM);
+        assertThat(workshop.startTime()).isEqualTo(newStart);
+        assertThat(workshop.endTime()).isEqualTo(newEnd);
+        assertThat(workshop.updatedAt()).isEqualTo(rescheduleAt);
+
+        assertThat(workshop.recordedEvents())
+                .hasSize(4)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class,
+                        WorkshopPublished.class, WorkshopRescheduled.class);
+    }
+
+    @Test
+    void reschedule_emitsEventWithOldAndNewTimes() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+        Instant rescheduleAt = NOW.plusSeconds(1);
+
+        workshop.reschedule(newStart, newEnd, rescheduleAt);
+
+        WorkshopRescheduled event = (WorkshopRescheduled) workshop.recordedEvents().get(3);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.oldStartTime()).isEqualTo(START);
+        assertThat(event.oldEndTime()).isEqualTo(END);
+        assertThat(event.newStartTime()).isEqualTo(newStart);
+        assertThat(event.newEndTime()).isEqualTo(newEnd);
+        assertThat(event.occurredAt()).isEqualTo(rescheduleAt);
+    }
+
+    @Test
+    void reschedule_rejectsNonPublished() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        assertThatThrownBy(() -> workshop.reschedule(newStart, newEnd, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PLANNED);
+                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.PUBLISHED);
+                });
+    }
+
+    @Test
+    void reschedule_rejectsEndNotAfterStart() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.minusSeconds(1);
+
+        assertThatThrownBy(() -> workshop.reschedule(newStart, newEnd, NOW))
+                .isInstanceOf(InvalidWorkshopTimeRangeException.class)
+                .hasMessageContaining("after newStartTime");
+    }
+
+    @Test
+    void reschedule_rejectsStartNotInFuture() {
+        Workshop workshop = createPublished();
+        Instant newStart = NOW.minusSeconds(1);
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        assertThatThrownBy(() -> workshop.reschedule(newStart, newEnd, NOW))
+                .isInstanceOf(InvalidWorkshopTimeRangeException.class)
+                .hasMessageContaining("in the future");
+    }
+
+    @Test
+    void reschedule_rejectsAfterDeadline() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+        Instant within24h = START.minus(Duration.ofHours(12));
+
+        assertThatThrownBy(() -> workshop.reschedule(newStart, newEnd, within24h))
+                .isInstanceOf(RescheduleDeadlineExceededException.class)
+                .satisfies(e -> {
+                    RescheduleDeadlineExceededException ex = (RescheduleDeadlineExceededException) e;
+                    assertThat(ex.getWorkshopId()).isEqualTo(workshop.id());
+                    assertThat(ex.getDeadline()).isEqualTo(START.minus(Duration.ofHours(24)));
+                    assertThat(ex.getAttemptedAt()).isEqualTo(within24h);
+                });
+    }
+
+    @Test
+    void reschedule_allowsExactlyAtDeadline() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+        Instant atDeadline = START.minus(Duration.ofHours(24));
+
+        workshop.reschedule(newStart, newEnd, atDeadline);
+
+        assertThat(workshop.startTime()).isEqualTo(newStart);
+    }
+
+    @Test
+    void reschedule_rejectsNull() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(3));
+
+        assertThatThrownBy(() -> workshop.reschedule(null, newStart, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> workshop.reschedule(newStart, null, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> workshop.reschedule(newStart, newStart, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // evictPlanningOnConflict
+    // ----------------------------------------------------------------
+
+    @Test
+    void evictPlanningOnConflict_keepsRoomAndWarningAndTimes() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, true, NOW);
+        Instant evictAt = NOW.plusSeconds(1);
+
+        workshop.evictPlanningOnConflict(evictAt);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.DRAFT);
+        assertThat(workshop.roomReference()).isEqualTo(ROOM);
+        assertThat(workshop.hasRoomWarning()).isTrue();
+        assertThat(workshop.startTime()).isEqualTo(START);
+        assertThat(workshop.endTime()).isEqualTo(END);
+        assertThat(workshop.updatedAt()).isEqualTo(evictAt);
+        assertThat(workshop.recordedEvents())
+                .hasSize(2)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class);
+    }
+
+    @Test
+    void evictPlanningOnConflict_rejectsNonPlanned() {
+        Workshop workshop = createDraft();
+
+        assertThatThrownBy(() -> workshop.evictPlanningOnConflict(NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    @Test
+    void evictedWorkshop_canBeReplanned() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);
+        workshop.evictPlanningOnConflict(NOW.plusSeconds(1));
+
+        RoomReference roomB = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 50);
+        workshop.plan(roomB, false, NOW.plusSeconds(2));
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.PLANNED);
+        assertThat(workshop.roomReference()).isEqualTo(roomB);
+    }
+
+    @Test
+    void returnToDraft_stillClearsRoomAndWarning() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, true, NOW);
+
+        workshop.returnToDraft(NOW.plusSeconds(1));
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.DRAFT);
+        assertThat(workshop.roomReference()).isNull();
+        assertThat(workshop.hasRoomWarning()).isFalse();
     }
 
     // ----------------------------------------------------------------

@@ -150,3 +150,16 @@ These trade-offs are **accepted** as the price of transparency-first planning.
   planned-workshop list for State B.
 - Cross-module note: Room events are currently **recorded-only** (not published), so reactive snapshot refresh
   (ADR 0007) remains deferred; this ADR's policy is independent of that and can ship without the Event Bus.
+
+## Eviction (Phase 3)
+
+When a `PUBLISHED` workshop claims a time window occupied by `PLANNED` workshops, those `PLANNED` workshops are
+evicted to `DRAFT` via `evictPlanningOnConflict`. This differs from `returnToDraft` (used by `DELETE /plan` and
+room deactivation):
+
+| Method | Room reference | Maintenance warning | Time window | Domain event |
+|---|---|---|---|---|
+| `evictPlanningOnConflict` | **Kept** | **Kept** | **Kept** | None (internal side effect) |
+| `returnToDraft` | Cleared (`null`) | Cleared (`false`) | Kept | `WorkshopUnplanned` |
+
+Eviction keeps the room so the admin can adjust the time on the retained window and re-plan without re-selecting a room.

@@ -186,19 +186,21 @@ class PublishWorkshopCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(planned));
+            given(workshopRepository.findOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(List.of(planned));
 
             PublishWorkshopCommand.Result result = handler.handle(
                     new PublishWorkshopCommand(WORKSHOP_ID));
 
             assertThat(result.id()).isEqualTo(WORKSHOP_ID);
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
-            // Overlapping PLANNED workshop was kicked back to DRAFT, freeing the room.
+            // Overlapping PLANNED workshop was evicted back to DRAFT (keeps its room — UX upgrade).
             assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);
-            assertThat(planned.roomReference()).isNull();
+            assertThat(planned.roomReference()).isNotNull();
+            assertThat(planned.roomReference().roomId()).isEqualTo(ROOM_ID);
 
             verify(workshopRepository).save(workshop);
-            verify(workshopRepository).save(planned);
+            verify(workshopRepository).saveAll(any());
             verify(workshopDomainEventPublisher).publish(any());
         }
 
@@ -215,7 +217,8 @@ class PublishWorkshopCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(planned));
+            given(workshopRepository.findOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(List.of());
 
             handler.handle(new PublishWorkshopCommand(WORKSHOP_ID));
 

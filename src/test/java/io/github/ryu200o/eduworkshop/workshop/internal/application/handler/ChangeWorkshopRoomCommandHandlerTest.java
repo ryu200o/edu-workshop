@@ -127,7 +127,8 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.loadByRoomId(NEW_ROOM_ID)).willReturn(List.of());
+            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(List.of());
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
                     new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
@@ -153,19 +154,21 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.loadByRoomId(NEW_ROOM_ID)).willReturn(List.of(planned));
+            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(List.of(planned));
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
                     new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
 
             assertThat(result.roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
-            // PLANNED workshop B was kicked back to DRAFT, freeing the new room.
+            // PLANNED workshop B was evicted back to DRAFT (keeps its room — UX upgrade).
             assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);
-            assertThat(planned.roomReference()).isNull();
+            assertThat(planned.roomReference()).isNotNull();
+            assertThat(planned.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
 
             verify(workshopRepository).save(workshop);
-            verify(workshopRepository).save(planned);
+            verify(workshopRepository).saveAll(any());
             verify(workshopDomainEventPublisher).publish(any());
         }
 
@@ -181,7 +184,8 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.loadByRoomId(NEW_ROOM_ID)).willReturn(List.of(planned));
+            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(List.of());
 
             handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
 
