@@ -47,6 +47,7 @@ public class Registration {
     private RegistrationState state;
     private Instant registeredAt;
     private Instant cancelledAt;
+    private final Instant createdAt;
     private Instant updatedAt;
 
     private List<RegistrationDomainEvent> recordedEvents = new ArrayList<>();
@@ -57,6 +58,7 @@ public class Registration {
                          RegistrationState state,
                          Instant registeredAt,
                          Instant cancelledAt,
+                         Instant createdAt,
                          Instant updatedAt) {
         this.id = requireNonNull(id, "RegistrationId cannot be null");
         this.studentId = requireNonNull(studentId, "StudentId cannot be null");
@@ -64,6 +66,7 @@ public class Registration {
         this.state = requireNonNull(state, "state cannot be null");
         this.registeredAt = requireNonNull(registeredAt, "registeredAt cannot be null");
         this.cancelledAt = cancelledAt;
+        this.createdAt = requireNonNull(createdAt, "createdAt cannot be null");
         this.updatedAt = requireNonNull(updatedAt, "updatedAt cannot be null");
     }
 
@@ -80,7 +83,7 @@ public class Registration {
         requireNonNull(now, "now cannot be null");
 
         Registration registration = new Registration(id, studentId, workshopReference,
-                RegistrationState.REGISTERED, now, null, now);
+                RegistrationState.REGISTERED, now, null, now, now);
         registration.record(new RegistrationCreated(id, workshopReference.workshopId(), studentId,
                 workshopReference.startTime(), now));
         return registration;
@@ -96,8 +99,10 @@ public class Registration {
                                            RegistrationState state,
                                            Instant registeredAt,
                                            Instant cancelledAt,
+                                           Instant createdAt,
                                            Instant updatedAt) {
-        return new Registration(id, studentId, workshopReference, state, registeredAt, cancelledAt, updatedAt);
+        return new Registration(id, studentId, workshopReference, state, registeredAt, cancelledAt,
+                createdAt, updatedAt);
     }
 
     /**
@@ -194,6 +199,10 @@ public class Registration {
 
     public Instant cancelledAt() {
         return cancelledAt;
+    }
+
+    public Instant createdAt() {
+        return createdAt;
     }
 
     public Instant updatedAt() {

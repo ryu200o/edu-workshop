@@ -46,6 +46,7 @@ class RegistrationTest {
         assertThat(registration.workshopReference()).isEqualTo(workshop());
         assertThat(registration.state()).isEqualTo(RegistrationState.REGISTERED);
         assertThat(registration.registeredAt()).isEqualTo(NOW);
+        assertThat(registration.createdAt()).isEqualTo(NOW);
         assertThat(registration.cancelledAt()).isNull();
 
         assertThat(registration.recordedEvents())
@@ -198,10 +199,11 @@ class RegistrationTest {
     void reconstruct_bypassesInvariants() {
         Registration registration = Registration.reconstruct(
                 RegistrationId.generate(), STUDENT, workshop(),
-                RegistrationState.CANCELLED, NOW, DEADLINE, DEADLINE);
+                RegistrationState.CANCELLED, NOW, DEADLINE, NOW, DEADLINE);
 
         assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
         assertThat(registration.cancelledAt()).isEqualTo(DEADLINE);
+        assertThat(registration.createdAt()).isEqualTo(NOW);
         assertThat(registration.recordedEvents()).isEmpty();
     }
 
