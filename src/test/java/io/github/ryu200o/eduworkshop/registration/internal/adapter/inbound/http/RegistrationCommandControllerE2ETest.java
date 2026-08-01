@@ -84,11 +84,11 @@ class RegistrationCommandControllerE2ETest {
 
     private UUID publishWorkshop(UUID roomId) throws Exception {
         UUID workshopId = createWorkshop("WS-" + UUID.randomUUID(), START, END);
-        HttpResponse<String> scheduled = post("/api/v1/workshops/" + workshopId + "/schedule",
+        HttpResponse<String> planned = post("/api/v1/workshops/" + workshopId + "/plan",
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(scheduled.statusCode()).as("schedule workshop: %s", scheduled.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan workshop: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
         assertThat(published.statusCode()).as("publish workshop: %s", published.body()).isEqualTo(HttpStatus.OK.value());
         return workshopId;
@@ -141,11 +141,11 @@ class RegistrationCommandControllerE2ETest {
     void register_workshopNotPublished_returnsConflict() throws Exception {
         UUID roomId = createRoom("DRAFT");
         UUID workshopId = createWorkshop("WS-" + UUID.randomUUID(), START, END);
-        HttpResponse<String> scheduled = post("/api/v1/workshops/" + workshopId + "/schedule",
+        HttpResponse<String> planned = post("/api/v1/workshops/" + workshopId + "/plan",
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(scheduled.statusCode()).as("schedule: %s", scheduled.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
 
         HttpResponse<String> registered = register(workshopId, UUID.randomUUID());
         assertThat(registered.statusCode()).as("register draft: %s", registered.body())
@@ -186,11 +186,11 @@ class RegistrationCommandControllerE2ETest {
         Instant soonStart = Instant.now().plus(Duration.ofHours(10));
         UUID roomId = createRoom("DEADLINE");
         UUID workshopId = createWorkshop("WS-" + UUID.randomUUID(), soonStart, soonStart.plus(Duration.ofHours(2)));
-        HttpResponse<String> scheduled = post("/api/v1/workshops/" + workshopId + "/schedule",
+        HttpResponse<String> planned = post("/api/v1/workshops/" + workshopId + "/plan",
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(scheduled.statusCode()).as("schedule: %s", scheduled.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
         assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.OK.value());
         UUID userId = UUID.randomUUID();

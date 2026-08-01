@@ -10,7 +10,7 @@ import java.util.UUID;
  * open for booking.
  *
  * <p>Per the SA+PO decision, seats are only sold/opened once a workshop is {@code PUBLISHED};
- * {@code DRAFT}/{@code SCHEDULED} are still planning stages. This is a cross-aggregate rule
+ * {@code DRAFT}/{@code PLANNED} are still planning stages. This is a cross-aggregate rule
  * orchestrated by the Application handler (ADR 0005), not a domain invariant.</p>
  */
 public final class WorkshopNotOpenForRegistrationException extends ApplicationException {

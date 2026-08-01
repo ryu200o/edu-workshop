@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * Domain event emitted when a workshop is first created (DRAFT). Carries the planning data
  * (time window, capacity) set at creation. The room is not yet assigned — that is a separate
- * {@link WorkshopScheduled} event.
+ * {@link WorkshopPlanned} event.
  */
 public record WorkshopCreated(
         UUID workshopId,

@@ -10,7 +10,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReferenc
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
@@ -94,16 +94,16 @@ class WorkshopTest {
     }
 
     // ----------------------------------------------------------------
-    // schedule
+    // plan
     // ----------------------------------------------------------------
 
     @Test
-    void schedule_fromDraft_assignsRoomAndEmitsScheduled() {
+    void plan_fromDraft_assignsRoomAndEmitsPlanned() {
         Workshop workshop = createDraft();
 
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
 
-        assertThat(workshop.state()).isEqualTo(WorkshopState.SCHEDULED);
+        assertThat(workshop.state()).isEqualTo(WorkshopState.PLANNED);
         assertThat(workshop.roomReference()).isEqualTo(ROOM);
 
         // Time/capacity unchanged from creation
@@ -113,49 +113,49 @@ class WorkshopTest {
 
         assertThat(workshop.recordedEvents())
                 .hasSize(2)
-                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class);
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class);
 
-        WorkshopScheduled event = (WorkshopScheduled) workshop.recordedEvents().get(1);
+        WorkshopPlanned event = (WorkshopPlanned) workshop.recordedEvents().get(1);
         assertThat(event.workshopId()).isEqualTo(workshop.id());
         assertThat(event.roomReference()).isEqualTo(ROOM);
         assertThat(event.occurredAt()).isNotNull();
     }
 
     @Test
-    void schedule_preventsOverlappingSchedulingByAllowingIt() {
-        // ADR 0008: SCHEDULED is planning-only. Two workshops may share a room + overlap.
-        // This test asserts the aggregate does NOT reject such a schedule (conflict is a publish-time concern).
+    void plan_allowsOverlappingPlanning() {
+        // ADR 0008: PLANNED is planning-only. Two workshops may share a room + overlap.
+        // This test asserts the aggregate does NOT reject such a plan (conflict is a publish-time concern).
         Workshop a = createDraft();
         Workshop b = Workshop.create(newId(), WorkshopTitle.of("Other WS"), description(), START, END, CAPACITY, NOW);
         RoomReference sameRoom = RoomReference.of(ROOM.roomId(), "Room 201", "Floor 2", 50);
 
-        a.schedule(sameRoom, false, NOW);
-        b.schedule(sameRoom, false, NOW);
+        a.plan(sameRoom, false, NOW);
+        b.plan(sameRoom, false, NOW);
 
-        assertThat(a.state()).isEqualTo(WorkshopState.SCHEDULED);
-        assertThat(b.state()).isEqualTo(WorkshopState.SCHEDULED);
+        assertThat(a.state()).isEqualTo(WorkshopState.PLANNED);
+        assertThat(b.state()).isEqualTo(WorkshopState.PLANNED);
     }
 
     @Test
-    void schedule_rejectsNullRoom() {
+    void plan_rejectsNullRoom() {
         Workshop workshop = createDraft();
 
-        assertThatThrownBy(() -> workshop.schedule(null, false, NOW))
+        assertThatThrownBy(() -> workshop.plan(null, false, NOW))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("room must be assigned");
     }
 
     @Test
-    void schedule_rejectsNonDraftState() {
+    void plan_rejectsNonDraftState() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
 
-        // Already SCHEDULED — re-schedule must be rejected.
-        assertThatThrownBy(() -> workshop.schedule(ROOM, false, NOW))
+        // Already PLANNED — re-plan must be rejected.
+        assertThatThrownBy(() -> workshop.plan(ROOM, false, NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class)
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
-                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.SCHEDULED);
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PLANNED);
                     assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.DRAFT);
                 });
     }
@@ -173,16 +173,16 @@ class WorkshopTest {
     // ----------------------------------------------------------------
 
     @Test
-    void publish_fromScheduled_reservesAndEmitsPublished() {
+    void publish_fromPlanned_reservesAndEmitsPublished() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
 
         workshop.publish(NOW, 50);
 
         assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
         assertThat(workshop.recordedEvents())
                 .hasSize(3)
-                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class, WorkshopPublished.class);
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class, WorkshopPublished.class);
 
         WorkshopPublished event = (WorkshopPublished) workshop.recordedEvents().get(2);
         assertThat(event.workshopId()).isEqualTo(workshop.id());
@@ -191,7 +191,7 @@ class WorkshopTest {
     @Test
     void publish_whenCapacityExceedsRoom_isRejected() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
 
         assertThatThrownBy(() -> workshop.publish(NOW, 20))
                 .isInstanceOf(WorkshopCapacityExceedsRoomException.class);
@@ -206,16 +206,16 @@ class WorkshopTest {
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
                     assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.DRAFT);
-                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.SCHEDULED);
+                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.PLANNED);
                 });
     }
 
     @Test
     void publish_doesNotRevalidateRoomTimeCapacity() {
-        // The aggregate trusts schedule()'s invariants; publish() only transitions state.
+        // The aggregate trusts plan()'s invariants; publish() only transitions state.
         // (Global availability conflict is an Application-layer concern, not enforced here.)
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
 
         workshop.publish(NOW, 50);
 
@@ -231,7 +231,7 @@ class WorkshopTest {
 
     private Workshop createPublished() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
         workshop.publish(NOW, 50);
         return workshop;
     }
@@ -250,7 +250,7 @@ class WorkshopTest {
 
         assertThat(workshop.recordedEvents())
                 .hasSize(4)
-                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class,
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class,
                         WorkshopPublished.class, WorkshopRoomChanged.class);
 
         WorkshopRoomChanged event = (WorkshopRoomChanged) workshop.recordedEvents().get(3);
@@ -261,14 +261,14 @@ class WorkshopTest {
     @Test
     void changeRoom_throwsExceptionWhenNotPublished() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
         RoomReference newRoom = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 50);
 
         assertThatThrownBy(() -> workshop.changeRoom(newRoom, NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class)
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
-                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.SCHEDULED);
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PLANNED);
                     assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.PUBLISHED);
                 });
     }
@@ -300,7 +300,7 @@ class WorkshopTest {
 
         assertThat(workshop.recordedEvents())
                 .hasSize(4)
-                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class,
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class,
                         WorkshopPublished.class, WorkshopCapacityAdjusted.class);
 
         WorkshopCapacityAdjusted event = (WorkshopCapacityAdjusted) workshop.recordedEvents().get(3);
@@ -327,7 +327,7 @@ class WorkshopTest {
     @Test
     void adjustCapacity_throwsExceptionWhenNotPublished() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
 
         assertThatThrownBy(() -> workshop.adjustCapacity(WorkshopCapacity.of(40), 25, NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class);
@@ -349,7 +349,7 @@ class WorkshopTest {
 
         assertThat(workshop.recordedEvents())
                 .hasSize(4)
-                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduled.class,
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class,
                         WorkshopPublished.class, WorkshopCancelled.class);
 
         WorkshopCancelled event = (WorkshopCancelled) workshop.recordedEvents().get(3);
@@ -374,13 +374,13 @@ class WorkshopTest {
     @Test
     void cancel_throwsExceptionWhenNotPublished() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
 
         assertThatThrownBy(() -> workshop.cancel(NOW))
                 .isInstanceOf(InvalidWorkshopStateException.class)
                 .satisfies(e -> {
                     InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
-                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.SCHEDULED);
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PLANNED);
                     assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.PUBLISHED);
                 });
     }
@@ -398,9 +398,9 @@ class WorkshopTest {
     // ----------------------------------------------------------------
 
     @Test
-    void publish_twiceFromScheduled_isRejected() {
+    void publish_twiceFromPlanned_isRejected() {
         Workshop workshop = createDraft();
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
         workshop.publish(NOW, 50);
 
         assertThatThrownBy(() -> workshop.publish(NOW, 50))
@@ -412,12 +412,12 @@ class WorkshopTest {
         Workshop workshop = createDraft();
         Instant created = workshop.updatedAt();
 
-        workshop.schedule(ROOM, false, NOW);
+        workshop.plan(ROOM, false, NOW);
         assertThat(workshop.updatedAt()).isAfterOrEqualTo(created);
 
-        Instant scheduledUpdate = workshop.updatedAt();
+        Instant plannedUpdate = workshop.updatedAt();
         workshop.publish(NOW, 50);
-        assertThat(workshop.updatedAt()).isAfterOrEqualTo(scheduledUpdate);
+        assertThat(workshop.updatedAt()).isAfterOrEqualTo(plannedUpdate);
     }
 
     @Test

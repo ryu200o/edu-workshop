@@ -90,27 +90,27 @@ class PublishWorkshopCommandHandlerTest {
     void setUp() {
         handler = new PublishWorkshopCommandHandler(
                 workshopRepository, roomExposeApi, workshopDomainEventPublisher,
-                new ScheduledWorkshopKicker(workshopRepository), fixedClock);
+                new PlannedWorkshopKicker(workshopRepository), fixedClock);
     }
 
-    private Workshop createScheduledWorkshop(int capacity) {
-        return createScheduledWorkshop(capacity, WORKSHOP_ID, START, END);
+    private Workshop createPlannedWorkshop(int capacity) {
+        return createPlannedWorkshop(capacity, WORKSHOP_ID, START, END);
     }
 
-    private Workshop createScheduledWorkshop(int capacity, UUID workshopId) {
-        return createScheduledWorkshop(capacity, workshopId, START, END);
+    private Workshop createPlannedWorkshop(int capacity, UUID workshopId) {
+        return createPlannedWorkshop(capacity, workshopId, START, END);
     }
 
-    private Workshop createScheduledWorkshop(int capacity, UUID workshopId, Instant start, Instant end) {
+    private Workshop createPlannedWorkshop(int capacity, UUID workshopId, Instant start, Instant end) {
         Workshop workshop = Workshop.create(
                 WorkshopId.of(workshopId),
-                WorkshopTitle.of("Scheduled Workshop"),
+                WorkshopTitle.of("Planned Workshop"),
                 WorkshopDescription.of("Description"),
                 start, end,
                 WorkshopCapacity.of(capacity),
                 NOW
         );
-        workshop.schedule(
+        workshop.plan(
                 RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50),
                 false,
                 NOW
@@ -123,7 +123,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void publishesSuccessfully() {
-            Workshop workshop = createScheduledWorkshop(30);
+            Workshop workshop = createPlannedWorkshop(30);
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
@@ -144,7 +144,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void clearsWarningFlag_whenRoomIsNowAllowed() {
-            Workshop workshop = createScheduledWorkshop(30);
+            Workshop workshop = createPlannedWorkshop(30);
             workshop.markMaintenanceWarning(NOW);
             assertThat(workshop.hasRoomWarning()).isTrue();
 
@@ -162,7 +162,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void rejectsWhenCapacityExceedsRoom() {
-            Workshop workshop = createScheduledWorkshop(60);
+            Workshop workshop = createPlannedWorkshop(60);
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
@@ -174,38 +174,38 @@ class PublishWorkshopCommandHandlerTest {
     }
 
     @Nested
-    class KickOutScheduled {
+    class KickOutPlanned {
 
         @Test
-        void publish_kicksOutOverlappingScheduledWorkshops() {
-            Workshop workshop = createScheduledWorkshop(30);
-            Workshop scheduled = createScheduledWorkshop(20, UUID.randomUUID());
+        void publish_kicksOutOverlappingPlannedWorkshops() {
+            Workshop workshop = createPlannedWorkshop(30);
+            Workshop planned = createPlannedWorkshop(20, UUID.randomUUID());
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(scheduled));
+            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(planned));
 
             PublishWorkshopCommand.Result result = handler.handle(
                     new PublishWorkshopCommand(WORKSHOP_ID));
 
             assertThat(result.id()).isEqualTo(WORKSHOP_ID);
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
-            // Overlapping SCHEDULED workshop was kicked back to DRAFT, freeing the room.
-            assertThat(scheduled.state()).isEqualTo(WorkshopState.DRAFT);
-            assertThat(scheduled.roomReference()).isNull();
+            // Overlapping PLANNED workshop was kicked back to DRAFT, freeing the room.
+            assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);
+            assertThat(planned.roomReference()).isNull();
 
             verify(workshopRepository).save(workshop);
-            verify(workshopRepository).save(scheduled);
+            verify(workshopRepository).save(planned);
             verify(workshopDomainEventPublisher).publish(any());
         }
 
         @Test
-        void publish_keepsNonOverlappingScheduledWorkshop() {
-            Workshop workshop = createScheduledWorkshop(30);
-            Workshop scheduled = createScheduledWorkshop(
+        void publish_keepsNonOverlappingPlannedWorkshop() {
+            Workshop workshop = createPlannedWorkshop(30);
+            Workshop planned = createPlannedWorkshop(
                     20, UUID.randomUUID(),
                     Instant.parse("2026-09-01T12:00:00Z"),
                     Instant.parse("2026-09-01T14:00:00Z"));
@@ -215,13 +215,13 @@ class PublishWorkshopCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(scheduled));
+            given(workshopRepository.loadByRoomId(ROOM_ID)).willReturn(List.of(planned));
 
             handler.handle(new PublishWorkshopCommand(WORKSHOP_ID));
 
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
-            assertThat(scheduled.state()).isEqualTo(WorkshopState.SCHEDULED);
-            verify(workshopRepository, never()).save(scheduled);
+            assertThat(planned.state()).isEqualTo(WorkshopState.PLANNED);
+            verify(workshopRepository, never()).save(planned);
         }
     }
 
@@ -230,7 +230,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void throwsException_whenRoomIsBlocked() {
-            Workshop workshop = createScheduledWorkshop(30);
+            Workshop workshop = createPlannedWorkshop(30);
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
@@ -247,7 +247,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void throwsException_whenRoomIsUnderMaintenance() {
-            Workshop workshop = createScheduledWorkshop(30);
+            Workshop workshop = createPlannedWorkshop(30);
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
@@ -264,7 +264,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void throwsException_whenOverlappingPublishedWorkshopExists() {
-            Workshop workshop = createScheduledWorkshop(30);
+            Workshop workshop = createPlannedWorkshop(30);
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
@@ -282,7 +282,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void throwsReferencedRoomNotFoundException() {
-            Workshop workshop = createScheduledWorkshop(30);
+            Workshop workshop = createPlannedWorkshop(30);
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))

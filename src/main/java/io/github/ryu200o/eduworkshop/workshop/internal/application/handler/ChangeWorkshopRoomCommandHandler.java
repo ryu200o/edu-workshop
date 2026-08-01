@@ -31,18 +31,18 @@ class ChangeWorkshopRoomCommandHandler
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
-    private final ScheduledWorkshopKicker scheduledWorkshopKicker;
+    private final PlannedWorkshopKicker plannedWorkshopKicker;
     private final Clock clock;
 
     ChangeWorkshopRoomCommandHandler(WorkshopRepository workshopRepository,
                                      RoomExposeAPI roomExposeApi,
                                      WorkshopDomainEventPublisher workshopDomainEventPublisher,
-                                     ScheduledWorkshopKicker scheduledWorkshopKicker,
+                                     PlannedWorkshopKicker plannedWorkshopKicker,
                                      Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
-        this.scheduledWorkshopKicker = scheduledWorkshopKicker;
+        this.plannedWorkshopKicker = plannedWorkshopKicker;
         this.clock = clock;
     }
 
@@ -69,7 +69,7 @@ class ChangeWorkshopRoomCommandHandler
             throw new RoomConflictException(newRoomId, command.workshopId());
         }
 
-        List<Workshop> kickedOut = scheduledWorkshopKicker.kickOutOverlappingScheduled(newRoomId, workshop, now);
+        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(newRoomId, workshop, now);
 
         RoomReference newRoomRef = RoomReference.of(
                 permission.planning().roomId(),

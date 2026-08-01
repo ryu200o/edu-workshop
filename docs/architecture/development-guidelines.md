@@ -402,7 +402,7 @@ class RoomExposeAPIImpl implements RoomExposeAPI {
 Workshop Application handler consumes the Facade (never imports the impl):
 
 ```java
-// workshop/internal/application/handler/ScheduleWorkshopCommandHandler.java
+// workshop/internal/application/handler/PlanWorkshopCommandHandler.java
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.room.contract.RoomSnapshot;
 

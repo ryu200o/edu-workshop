@@ -71,7 +71,7 @@ class CancelWorkshopCommandHandlerTest {
                 START, END,
                 WorkshopCapacity.of(30),
                 NOW);
-        workshop.schedule(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
         workshop.publish(NOW, 50);
         return workshop;
     }

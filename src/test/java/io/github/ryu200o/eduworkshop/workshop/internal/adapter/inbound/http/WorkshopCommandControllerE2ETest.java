@@ -83,12 +83,12 @@ class WorkshopCommandControllerE2ETest {
         return UUID.fromString(readField(response, "id"));
     }
 
-    private UUID schedule(UUID workshopId, UUID roomId) throws Exception {
-        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/schedule",
+    private UUID plan(UUID workshopId, UUID roomId) throws Exception {
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/plan",
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(response.statusCode()).as("schedule: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.statusCode()).as("plan: %s", response.body()).isEqualTo(HttpStatus.OK.value());
         return workshopId;
     }
 
@@ -134,7 +134,7 @@ class WorkshopCommandControllerE2ETest {
     @Test
     void cancel_publishedWorkshopWithSeats_flipsAllSeatsToCancelled() throws Exception {
         UUID roomId = createRoom("CXL", 50);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), roomId));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
         register(workshopId, UUID.randomUUID());
         register(workshopId, UUID.randomUUID());
         assertThat(activeRegistrations(workshopId)).isEqualTo(2);
@@ -150,7 +150,7 @@ class WorkshopCommandControllerE2ETest {
     void cancel_afterStartTime_returnsConflict() throws Exception {
         Instant pastStart = Instant.now().minus(Duration.ofHours(1));
         UUID roomId = createRoom("CXL2", 50);
-        UUID workshopId = publish(schedule(
+        UUID workshopId = publish(plan(
                 createWorkshop("WS", pastStart, pastStart.plus(Duration.ofHours(2)), 30), roomId));
 
         HttpResponse<String> cancelled = post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of());
@@ -163,7 +163,7 @@ class WorkshopCommandControllerE2ETest {
     void changeRoom_toAvailableRoom_returnsOkAndMovesWorkshop() throws Exception {
         UUID oldRoom = createRoom("CRM", 50);
         UUID newRoom = createRoom("CRN", 50);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), oldRoom));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), oldRoom));
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
@@ -179,7 +179,7 @@ class WorkshopCommandControllerE2ETest {
         UUID oldRoom = createRoom("CR1", 50);
         UUID newRoom = createRoom("CR2", 50);
         placeUnderMaintenance(newRoom);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), oldRoom));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), oldRoom));
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
@@ -194,9 +194,9 @@ class WorkshopCommandControllerE2ETest {
     void changeRoom_toRoomWithOverlappingPublished_returnsConflict() throws Exception {
         UUID oldRoom = createRoom("CR3", 50);
         UUID newRoom = createRoom("CR4", 50);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), oldRoom));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), oldRoom));
         // Another PUBLISHED workshop already reserves the new room for the same window.
-        publish(schedule(createWorkshop("WS2", START, END, 30), newRoom));
+        publish(plan(createWorkshop("WS2", START, END, 30), newRoom));
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
@@ -211,7 +211,7 @@ class WorkshopCommandControllerE2ETest {
     void changeRoom_toRoomWithSmallerCapacity_returnsBadRequest() throws Exception {
         UUID oldRoom = createRoom("CR5", 50);
         UUID newRoom = createRoom("CR6", 20);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), oldRoom));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), oldRoom));
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
@@ -223,12 +223,12 @@ class WorkshopCommandControllerE2ETest {
     }
 
     @Test
-    void changeRoom_kicksOutOverlappingScheduledWorkshop() throws Exception {
+    void changeRoom_kicksOutOverlappingPlannedWorkshop() throws Exception {
         UUID oldRoom = createRoom("CR7", 50);
         UUID newRoom = createRoom("CR8", 50);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), oldRoom));
-        // Workshop B is only SCHEDULED in the new room for the same window → gets kicked to DRAFT.
-        UUID scheduledB = schedule(createWorkshop("WSB", START, END, 20), newRoom);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), oldRoom));
+        // Workshop B is only PLANNED in the new room for the same window → gets kicked to DRAFT.
+        UUID plannedB = plan(createWorkshop("WSB", START, END, 20), newRoom);
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
@@ -237,13 +237,13 @@ class WorkshopCommandControllerE2ETest {
 
         assertThat(changed.statusCode()).as("change-room kick-out: %s", changed.body())
                 .isEqualTo(HttpStatus.OK.value());
-        assertThat(workshopState(scheduledB)).isEqualTo("DRAFT");
+        assertThat(workshopState(plannedB)).isEqualTo("DRAFT");
     }
 
     @Test
     void adjustCapacity_belowActiveRegistrations_returnsUnprocessable() throws Exception {
         UUID roomId = createRoom("CAP", 50);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), roomId));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
         register(workshopId, UUID.randomUUID());
         register(workshopId, UUID.randomUUID());
 
@@ -259,7 +259,7 @@ class WorkshopCommandControllerE2ETest {
     @Test
     void adjustCapacity_valid_returnsOk() throws Exception {
         UUID roomId = createRoom("CAP2", 50);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), roomId));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
@@ -274,7 +274,7 @@ class WorkshopCommandControllerE2ETest {
     @Test
     void adjustCapacity_exceedsRoomCapacity_returnsBadRequest() throws Exception {
         UUID roomId = createRoom("CAP3", 50);
-        UUID workshopId = publish(schedule(createWorkshop("WS", START, END, 30), roomId));
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """

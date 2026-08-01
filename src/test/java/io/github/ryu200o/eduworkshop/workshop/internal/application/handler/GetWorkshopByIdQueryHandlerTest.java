@@ -34,7 +34,7 @@ class GetWorkshopByIdQueryHandlerTest {
         WorkshopDetailView expected = new WorkshopDetailView(
                 id, "Test Title", "A description",
                 UUID.randomUUID(), "F-201", "F/2", 50, false,
-                now, now.plusSeconds(7200), 25, "SCHEDULED", now, now);
+                now, now.plusSeconds(7200), 25, "PLANNED", now, now);
         when(workshopReader.findById(id)).thenReturn(Optional.of(expected));
 
         WorkshopDetailView result = handler().handle(new GetWorkshopByIdQuery(id));

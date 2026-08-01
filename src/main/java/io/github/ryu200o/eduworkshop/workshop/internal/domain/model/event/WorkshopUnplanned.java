@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 
 import java.time.Instant;
 
-public record WorkshopUnscheduled(
+public record WorkshopUnplanned(
         WorkshopId workshopId,
         Instant occurredAt
 ) implements WorkshopDomainEvent {

@@ -7,7 +7,7 @@ import io.github.ryu200o.eduworkshop.room.contract.RoomPlanningPermission.RoomPl
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPlanningException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ScheduleWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PlanWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
@@ -36,7 +36,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class ScheduleWorkshopCommandHandlerTest {
+class PlanWorkshopCommandHandlerTest {
 
     private static final Instant NOW = Instant.parse("2026-07-23T10:00:00Z");
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
@@ -73,11 +73,11 @@ class ScheduleWorkshopCommandHandlerTest {
 
     private final Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
 
-    private ScheduleWorkshopCommandHandler handler;
+    private PlanWorkshopCommandHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new ScheduleWorkshopCommandHandler(workshopRepository, roomExposeApi, fixedClock);
+        handler = new PlanWorkshopCommandHandler(workshopRepository, roomExposeApi, fixedClock);
     }
 
     private Workshop createDraftWorkshop() {
@@ -95,21 +95,21 @@ class ScheduleWorkshopCommandHandlerTest {
     class RoomAllowed {
 
         @Test
-        void schedulesSuccessfully() {
+        void plansSuccessfully() {
             var workshop = createDraftWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
 
-            var result = handler.handle(new ScheduleWorkshopCommand(WORKSHOP_ID, ROOM_ID));
+            var result = handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
 
             assertThat(result.id()).isEqualTo(WORKSHOP_ID);
             assertThat(result.roomId()).isEqualTo(ROOM_ID);
             assertThat(result.updatedAt()).isEqualTo(NOW);
             assertThat(result.hasRoomWarning()).isFalse();
 
-            assertThat(workshop.state().name()).isEqualTo("SCHEDULED");
+            assertThat(workshop.state().name()).isEqualTo("PLANNED");
             assertThat(workshop.roomReference()).isNotNull();
             assertThat(workshop.roomReference().roomId()).isEqualTo(ROOM_ID);
             assertThat(workshop.roomReference().roomNameSnapshot()).isEqualTo(ROOM_NAME);
@@ -128,7 +128,7 @@ class ScheduleWorkshopCommandHandlerTest {
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
-            var result = handler.handle(new ScheduleWorkshopCommand(WORKSHOP_ID, ROOM_ID));
+            var result = handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
 
             assertThat(result.hasRoomWarning()).isTrue();
             assertThat(workshop.hasRoomWarning()).isTrue();
@@ -147,7 +147,7 @@ class ScheduleWorkshopCommandHandlerTest {
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(BLOCKED_PERMISSION));
 
-            assertThatThrownBy(() -> handler.handle(new ScheduleWorkshopCommand(WORKSHOP_ID, ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID)))
                     .isInstanceOf(RoomNotAvailableForPlanningException.class)
                     .hasMessageContaining("Room is deactivated");
         }
@@ -164,7 +164,7 @@ class ScheduleWorkshopCommandHandlerTest {
             given(roomExposeApi.checkPlanningPermission(ROOM_ID))
                     .willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> handler.handle(new ScheduleWorkshopCommand(WORKSHOP_ID, ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID)))
                     .isInstanceOf(ReferencedRoomNotFoundException.class);
         }
     }
@@ -177,7 +177,7 @@ class ScheduleWorkshopCommandHandlerTest {
             given(workshopRepository.loadById(any()))
                     .willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> handler.handle(new ScheduleWorkshopCommand(WORKSHOP_ID, ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID)))
                     .isInstanceOf(WorkshopNotFoundException.class);
         }
     }

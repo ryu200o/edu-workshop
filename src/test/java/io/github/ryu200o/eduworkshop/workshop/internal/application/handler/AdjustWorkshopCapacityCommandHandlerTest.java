@@ -70,7 +70,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
                 START, END,
                 WorkshopCapacity.of(capacity),
                 NOW);
-        workshop.schedule(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
         workshop.publish(NOW, 50);
         return workshop;
     }

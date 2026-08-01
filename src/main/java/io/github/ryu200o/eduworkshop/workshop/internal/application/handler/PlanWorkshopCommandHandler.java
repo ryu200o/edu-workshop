@@ -6,7 +6,7 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.ReferencedRoomNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPlanningException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ScheduleWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PlanWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
@@ -19,16 +19,16 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class ScheduleWorkshopCommandHandler
-        implements CommandHandler<ScheduleWorkshopCommand, ScheduleWorkshopCommand.Result> {
+class PlanWorkshopCommandHandler
+        implements CommandHandler<PlanWorkshopCommand, PlanWorkshopCommand.Result> {
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
     private final Clock clock;
 
-    ScheduleWorkshopCommandHandler(WorkshopRepository workshopRepository,
-                                   RoomExposeAPI roomExposeApi,
-                                   Clock clock) {
+    PlanWorkshopCommandHandler(WorkshopRepository workshopRepository,
+                               RoomExposeAPI roomExposeApi,
+                               Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
         this.clock = clock;
@@ -36,7 +36,7 @@ class ScheduleWorkshopCommandHandler
 
     @Override
     @Transactional
-    public ScheduleWorkshopCommand.Result handle(ScheduleWorkshopCommand command) {
+    public PlanWorkshopCommand.Result handle(PlanWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -60,11 +60,11 @@ class ScheduleWorkshopCommandHandler
                 locationSnapshot,
                 permission.planning().capacity());
 
-        workshop.schedule(roomRef, hasRoomWarning, now);
+        workshop.plan(roomRef, hasRoomWarning, now);
 
         workshopRepository.save(workshop);
 
-        return new ScheduleWorkshopCommand.Result(
+        return new PlanWorkshopCommand.Result(
                 workshop.id().value(),
                 workshop.roomReference().roomId(),
                 workshop.updatedAt(),

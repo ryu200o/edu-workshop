@@ -7,7 +7,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreate
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ScheduleWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PlanWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
@@ -117,7 +117,7 @@ class EventPublicationDurabilityTest {
                 "Intro to DDD", "workshop description",
                 Instant.parse("2026-09-01T09:00:00Z"), Instant.parse("2026-09-01T11:00:00Z"), 25));
 
-        commandBus.execute(new ScheduleWorkshopCommand(created.id(), roomId));
+        commandBus.execute(new PlanWorkshopCommand(created.id(), roomId));
 
         commandBus.execute(new RenameRoomCommand(roomId, "F-205"));
 

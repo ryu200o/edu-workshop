@@ -109,7 +109,7 @@ Rules that require observing the aggregate set are handled by the Application la
 
 **Workshop examples (already compliant):**
 
-- `ScheduleWorkshopCommandHandler`: loads workshop → calls `roomExposeApi.checkPlanningPermission()` → calls `workshop.schedule(roomRef)` → saves
+- `PlanWorkshopCommandHandler`: loads workshop → calls `roomExposeApi.checkPlanningPermission()` → calls `workshop.plan(roomRef)` → saves
 - `PublishWorkshopCommandHandler`: loads workshop with lock → calls `roomExposeApi.checkPlanningPermission()` → calls `repository.countOverlapping()` → calls `workshop.publish()` → saves
 
 The check and the execute are separate steps, both in the Application handler.
