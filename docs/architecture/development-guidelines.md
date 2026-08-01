@@ -143,9 +143,10 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
 
 ### 2.5 CommandBus (Shared Kernel — ADR 0006)
 `CommandBus` là interface chia sẻ ở `shared.application.cqs.api` (shared kernel) (không còn per-module). `CommandBus.execute(C command)`
-được delegate tới `CommandDispatcher` (Coordinator) → `HandlerResolver` (resolve handler qua `ResolvableType`)
-→ `CommandPipeline` (chain `CommandBehavior`, mặc định pass-through) → `CommandHandler`. Duplicate/missing
-handler fail fast bằng `DuplicateCommandHandlerException` / `MissingCommandHandlerException`.
+được delegate tới `CommandDispatcher` (Coordinator) → `CommandHandlerResolver` (resolve handler qua registry)
+→ `CommandPipeline` (chain `CommandBehavior`, mặc định pass-through) → `CommandHandler`. Command handler
+được scan **eager tại startup** bởi `CommandHandlerRegistry` (qua `ObjectProvider`, rồi freeze immutable) —
+duplicate/missing handler fail fast bằng `DuplicateCommandHandlerException` / `MissingCommandHandlerException`.
 ```java
 RenameRoomCommand.Result result = commandBus.execute(command);
 ```
@@ -284,10 +285,68 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
 
 ### 3.5 QueryBus (Shared Kernel — ADR 0006)
 Tương tự CommandBus, `QueryBus` là interface chia sẻ ở `shared.application.cqs.api` (shared kernel). `QueryBus.execute(Q query)` delegate
-tới `QueryDispatcher` → `HandlerRegistry` resolve `QueryHandler` qua `ResolvableType` → invoke. Query là
-read-only nên không có behavior chain.
+tới `QueryDispatcher` → `QueryHandlerResolver` → `QueryHandlerRegistry` resolve `QueryHandler` qua `ObjectProvider`
+(lazy, scan tại lần dispatch đầu tiên) → invoke. Query là read-only nên **không có behavior chain** (zero-pipeline).
 
-### 3.6 Driven persistence — tách Command (JPA) / Query (JOOQ), CQRS logical split (ADR 0002)
+> **Bất đối xứng Command vs Query (chủ đích — ADR 0006):** Command registry (`CommandHandlerRegistry`) scan
+> **eager tại startup** (fail-fast duplicate/missing); Query registry (`QueryHandlerRegistry`) scan **lazy tại
+> runtime** (thread-safe, scan-once). Cả 2 đều nhận `ObjectProvider` trong constructor — **không `@Lazy`, không
+> proxy** — để xóa vĩnh viễn startup bean cycle khi handler phụ thuộc bus. Query không có pipeline (đọc trực tiếp,
+> zero-overhead); pipeline `CommandBehavior` chỉ thuộc Command subsystem (`dispatch/command/pipeline/`).
+
+### 3.6 Shared Kernel CQS — cấu trúc + quy chuẩn đặt tên (ADR 0006)
+
+Cây thư mục chuẩn của shared kernel `shared.application.cqs` (không nằm trong module nào):
+
+```
+shared/application/cqs/
+├── api/                                  # CQS contracts + bus interfaces (public, import từ module)
+│   ├── Command.java / Query.java
+│   ├── CommandHandler.java / QueryHandler.java
+│   └── CommandBus.java / QueryBus.java
+├── config/
+│   └── BusConfiguration.java             # @Configuration khai báo toàn bộ bean (2 subsystem đối xứng)
+├── exception/
+│   ├── DuplicateCommandHandlerException / MissingCommandHandlerException
+│   └── DuplicateQueryHandlerException / MissingQueryHandlerException
+└── dispatch/
+    ├── command/                          # COMMAND SUBSYSTEM — Ghi / Mutate / có Side-effects
+    │   ├── CommandDispatcher.java
+    │   ├── CommandHandlerRegistry.java   # EAGER scan @startup via ObjectProvider, freeze immutable
+    │   ├── CommandHandlerResolver.java
+    │   ├── RegistryCommandHandlerResolver.java
+    │   └── pipeline/                     # Chain of Responsibility — CHỈ của Command side
+    │       ├── BehaviorChain.java
+    │       ├── CommandBehavior.java
+    │       ├── CommandPipeline.java
+    │       ├── CommandPolicyResolver.java
+    │       └── CompositeCommandPolicyResolver.java
+    └── query/                            # QUERY SUBSYSTEM — Đọc / Projection / Zero-Pipeline
+        ├── QueryDispatcher.java
+        ├── QueryHandlerRegistry.java     # LAZY scan @runtime via ObjectProvider (first dispatch)
+        ├── QueryHandlerResolver.java
+        └── RegistryQueryHandlerResolver.java
+```
+
+**Bảng quy chuẩn đặt tên (Symmetry Matrix):**
+
+| Chức năng | Command side (Write) | Query side (Read) |
+| --- | --- | --- |
+| Dispatcher (Coordinator) | `CommandDispatcher` | `QueryDispatcher` |
+| Registry (gom handler beans) | `CommandHandlerRegistry` | `QueryHandlerRegistry` |
+| Resolver (interface lookup) | `CommandHandlerResolver` | `QueryHandlerResolver` |
+| Resolver (impl, registry-backed) | `RegistryCommandHandlerResolver` | `RegistryQueryHandlerResolver` |
+| Handler scan | **Eager @startup** — fail-fast duplicate/missing | **Lazy @runtime** — duplicate/missing tại dispatch |
+| Pipeline | CÓ — `pipeline/` (`CommandBehavior` chain) | KHÔNG — zero-pipeline, đọc trực tiếp |
+| Exception | `Duplicate/MissingCommandHandlerException` | `Duplicate/MissingQueryHandlerException` |
+
+> **Luật đặt tên:** mọi class nội bộ của dispatch engine phải mang tiền tố rõ ràng theo subsystem —
+> `Command*` cho write, `Query*` cho read. Không bao giờ để tên chung chung không tiền tố (VD: `HandlerRegistry`
+> là tên cũ đã bị thay bằng `CommandHandlerRegistry`). Constructor của cả 2 registry nhận
+> `ObjectProvider<CommandHandler<?, ?>>` / `ObjectProvider<QueryHandler<?, ?>>` — gom beans qua Spring, không scan
+> thủ công bằng `ListableBeanFactory`.
+
+### 3.7 Driven persistence — tách Command (JPA) / Query (JOOQ), CQRS logical split (ADR 0002)
 > Write và read **cùng 1 datasource** (logical split, không tách DB vật lý). Mỗi bên có adapter + mapping riêng.
 - **Command side (`persistence/jpa/`):** `JpaRoomWriteAdapter` impl `RoomRepository` (save / loadById /
   existsByCoordinate). Mapping domain ↔ JPA entity nằm ở đây. Flyway là **schema owner duy nhất**.
@@ -302,7 +361,7 @@ read-only nên không có behavior chain.
 
 ---
 
-## 3.7 Module Facade — Cross-Module API (ADR 0010)
+### 3.8 Module Facade — Cross-Module API (ADR 0010)
 
 The `*ExposeAPI` + its implementation in `internal/facade/` constitute the **Module Facade**:
 

@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.registration.RegistrationExposeAPI;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
+import io.github.ryu200o.eduworkshop.workshop.contract.CountActiveRegistrationsQuery;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.AdjustWorkshopCapacityCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
@@ -46,7 +47,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
     private WorkshopRepository workshopRepository;
 
     @Mock
-    private RegistrationExposeAPI registrationExposeApi;
+    private QueryBus queryBus;
 
     @Mock
     private WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -58,7 +59,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new AdjustWorkshopCapacityCommandHandler(
-                workshopRepository, registrationExposeApi, workshopDomainEventPublisher, fixedClock);
+                workshopRepository, queryBus, workshopDomainEventPublisher, fixedClock);
     }
 
     private Workshop createPublishedWorkshop(int capacity) {
@@ -79,7 +80,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
         Workshop workshop = createPublishedWorkshop(30);
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
-        given(registrationExposeApi.countActiveRegistrations(WORKSHOP_ID)).willReturn(20);
+        given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(20);
 
         AdjustWorkshopCapacityCommand.Result result = handler.handle(
                 new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 40));
@@ -98,7 +99,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
         Workshop workshop = createPublishedWorkshop(30);
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
-        given(registrationExposeApi.countActiveRegistrations(WORKSHOP_ID)).willReturn(25);
+        given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(25);
 
         assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 20)))
                 .isInstanceOf(WorkshopCapacityBelowRegistrationsException.class);
@@ -109,7 +110,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
         Workshop workshop = createPublishedWorkshop(30);
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
-        given(registrationExposeApi.countActiveRegistrations(WORKSHOP_ID)).willReturn(10);
+        given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(10);
 
         assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 60)))
                 .isInstanceOf(WorkshopCapacityExceedsRoomException.class);

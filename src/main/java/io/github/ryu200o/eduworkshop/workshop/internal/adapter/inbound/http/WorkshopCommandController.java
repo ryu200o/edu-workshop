@@ -1,6 +1,9 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.http;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.AdjustWorkshopCapacityCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CancelWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PublishWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ScheduleWorkshopCommand;
@@ -58,6 +61,29 @@ class WorkshopCommandController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/{id}/cancel")
+    ResponseEntity<CancelWorkshopCommand.Result> cancel(@PathVariable UUID id) {
+        var command = new CancelWorkshopCommand(id);
+        CancelWorkshopCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/change-room")
+    ResponseEntity<ChangeWorkshopRoomCommand.Result> changeRoom(@PathVariable UUID id,
+                                                                @RequestBody ChangeWorkshopRoomRequest request) {
+        var command = new ChangeWorkshopRoomCommand(id, request.roomId());
+        ChangeWorkshopRoomCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/adjust-capacity")
+    ResponseEntity<AdjustWorkshopCapacityCommand.Result> adjustCapacity(@PathVariable UUID id,
+                                                                        @RequestBody AdjustWorkshopCapacityRequest request) {
+        var command = new AdjustWorkshopCapacityCommand(id, request.newCapacity());
+        AdjustWorkshopCapacityCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
     record CreateWorkshopRequest(
             String title,
             String description,
@@ -68,5 +94,11 @@ class WorkshopCommandController {
     }
 
     record ScheduleWorkshopRequest(UUID roomId) {
+    }
+
+    record ChangeWorkshopRoomRequest(UUID roomId) {
+    }
+
+    record AdjustWorkshopCapacityRequest(int newCapacity) {
     }
 }

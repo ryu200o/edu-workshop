@@ -1,7 +1,8 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.registration.RegistrationExposeAPI;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
+import io.github.ryu200o.eduworkshop.workshop.contract.CountActiveRegistrationsQuery;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.AdjustWorkshopCapacityCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
@@ -21,16 +22,16 @@ class AdjustWorkshopCapacityCommandHandler
         implements CommandHandler<AdjustWorkshopCapacityCommand, AdjustWorkshopCapacityCommand.Result> {
 
     private final WorkshopRepository workshopRepository;
-    private final RegistrationExposeAPI registrationExposeApi;
+    private final QueryBus queryBus;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
     private final Clock clock;
 
     AdjustWorkshopCapacityCommandHandler(WorkshopRepository workshopRepository,
-                                         RegistrationExposeAPI registrationExposeApi,
+                                         QueryBus queryBus,
                                          WorkshopDomainEventPublisher workshopDomainEventPublisher,
                                          Clock clock) {
         this.workshopRepository = workshopRepository;
-        this.registrationExposeApi = registrationExposeApi;
+        this.queryBus = queryBus;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
         this.clock = clock;
     }
@@ -44,7 +45,7 @@ class AdjustWorkshopCapacityCommandHandler
         Workshop workshop = workshopRepository.loadByIdWithLock(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
-        int activeRegistrations = registrationExposeApi.countActiveRegistrations(command.workshopId());
+        int activeRegistrations = queryBus.execute(new CountActiveRegistrationsQuery(command.workshopId()));
 
         WorkshopCapacity newCapacity = WorkshopCapacity.of(command.newCapacity());
         workshop.adjustCapacity(newCapacity, activeRegistrations, now);
