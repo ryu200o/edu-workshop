@@ -14,9 +14,13 @@ import java.util.UUID;
 /**
  * Application-layer helper (ADR 0005) that kicks {@code PLANNED} workshops back to {@code DRAFT}
  * when a workshop formally establishes exclusive ownership ({@code PUBLISHED}) over a room's time
- * window. Used by both {@link PublishWorkshopCommandHandler} and
- * {@link ChangeWorkshopRoomCommandHandler}: overlapping {@code PLANNED} workshops are planning-only
+ * window. Used by {@link PublishWorkshopCommandHandler}, {@link ChangeWorkshopRoomCommandHandler}
+ * and {@link RescheduleWorkshopCommandHandler}: overlapping {@code PLANNED} workshops are planning-only
  * (ADR 0008) and must not keep believing they hold the room.
+ *
+ * <p>Kicked workshops are evicted via {@code evictPlanningOnConflict} — they keep their room
+ * reference, maintenance warning and time window (UX upgrade): the admin only adjusts the time on
+ * the retained window and re-plans.</p>
  */
 @Component
 class PlannedWorkshopKicker {
@@ -33,8 +37,8 @@ class PlannedWorkshopKicker {
      * caller can merge its recorded domain events.
      *
      * @param roomId the room id the target is establishing ownership over
-     * @param target the workshop that is being published / moved into the room (never kicked)
-     * @param now    the current instant, forwarded to {@code returnToDraft}
+     * @param target the workshop that is being published / moved / rescheduled into the room (never kicked)
+     * @param now    the current instant, forwarded to {@code evictPlanningOnConflict}
      * @return the list of workshops that were kicked back to {@code DRAFT}
      */
     List<Workshop> kickOutOverlappingPlanned(UUID roomId, Workshop target, Instant now) {
@@ -49,7 +53,7 @@ class PlannedWorkshopKicker {
             if (!overlaps(other, target)) {
                 continue;
             }
-            other.returnToDraft(now);
+            other.evictPlanningOnConflict(now);
             workshopRepository.save(other);
             kickedOut.add(other);
         }

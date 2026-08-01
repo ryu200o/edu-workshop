@@ -193,9 +193,10 @@ class PublishWorkshopCommandHandlerTest {
 
             assertThat(result.id()).isEqualTo(WORKSHOP_ID);
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
-            // Overlapping PLANNED workshop was kicked back to DRAFT, freeing the room.
+            // Overlapping PLANNED workshop was evicted back to DRAFT (keeps its room — UX upgrade).
             assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);
-            assertThat(planned.roomReference()).isNull();
+            assertThat(planned.roomReference()).isNotNull();
+            assertThat(planned.roomReference().roomId()).isEqualTo(ROOM_ID);
 
             verify(workshopRepository).save(workshop);
             verify(workshopRepository).save(planned);

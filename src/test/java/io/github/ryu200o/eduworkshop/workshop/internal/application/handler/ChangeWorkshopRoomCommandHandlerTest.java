@@ -160,9 +160,10 @@ class ChangeWorkshopRoomCommandHandlerTest {
 
             assertThat(result.roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
-            // PLANNED workshop B was kicked back to DRAFT, freeing the new room.
+            // PLANNED workshop B was evicted back to DRAFT (keeps its room — UX upgrade).
             assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);
-            assertThat(planned.roomReference()).isNull();
+            assertThat(planned.roomReference()).isNotNull();
+            assertThat(planned.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
 
             verify(workshopRepository).save(workshop);
             verify(workshopRepository).save(planned);

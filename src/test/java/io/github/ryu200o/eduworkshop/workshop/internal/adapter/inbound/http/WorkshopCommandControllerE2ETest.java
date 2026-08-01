@@ -64,6 +64,14 @@ class WorkshopCommandControllerE2ETest {
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> delete(String path, Map<String, String> headers) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "application/json")
+                .DELETE();
+        headers.forEach(builder::header);
+        return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     private UUID createRoom(String building, int capacity) throws Exception {
         HttpResponse<String> response = post("/api/v1/rooms",
                 """
@@ -121,6 +129,11 @@ class WorkshopCommandControllerE2ETest {
     private String workshopState(UUID workshopId) {
         return jdbcTemplate.queryForObject(
                 "SELECT state FROM workshops WHERE id = ?", String.class, workshopId.toString());
+    }
+
+    private UUID workshopRoomId(UUID workshopId) {
+        return UUID.fromString(jdbcTemplate.queryForObject(
+                "SELECT room_id FROM workshops WHERE id = ?", String.class, workshopId.toString()));
     }
 
     private static String readField(HttpResponse<String> response, String field) {
@@ -223,11 +236,12 @@ class WorkshopCommandControllerE2ETest {
     }
 
     @Test
-    void changeRoom_kicksOutOverlappingPlannedWorkshop() throws Exception {
+    void changeRoom_kicksOutPlanned_keepsRoom() throws Exception {
         UUID oldRoom = createRoom("CR7", 50);
         UUID newRoom = createRoom("CR8", 50);
         UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), oldRoom));
-        // Workshop B is only PLANNED in the new room for the same window → gets kicked to DRAFT.
+        // Workshop B is only PLANNED in the new room for the same window → evicted to DRAFT
+        // but keeps its room reference (UX upgrade).
         UUID plannedB = plan(createWorkshop("WSB", START, END, 20), newRoom);
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
@@ -238,6 +252,95 @@ class WorkshopCommandControllerE2ETest {
         assertThat(changed.statusCode()).as("change-room kick-out: %s", changed.body())
                 .isEqualTo(HttpStatus.OK.value());
         assertThat(workshopState(plannedB)).isEqualTo("DRAFT");
+        assertThat(workshopRoomId(plannedB)).isEqualTo(newRoom);
+    }
+
+    // ----------------------------------------------------------------
+    // reschedule
+    // ----------------------------------------------------------------
+
+    @Test
+    void reschedule_published_returnsOk() throws Exception {
+        UUID roomId = createRoom("RES", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s"}
+                """.formatted(newStart, newEnd), Map.of());
+
+        assertThat(rescheduled.statusCode()).as("reschedule: %s", rescheduled.body())
+                .isEqualTo(HttpStatus.OK.value());
+        assertThat(rescheduled.body()).contains(newStart.toString());
+    }
+
+    @Test
+    void reschedule_conflictWithPublished_returnsConflict() throws Exception {
+        UUID roomId = createRoom("RES2", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+        // Another PUBLISHED workshop already reserves the room for the new window.
+        UUID other = publish(plan(createWorkshop("WS2", START.plus(Duration.ofDays(3)),
+                START.plus(Duration.ofDays(3)).plusSeconds(7200), 20), roomId));
+
+        HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s"}
+                """.formatted(START.plus(Duration.ofDays(3)), START.plus(Duration.ofDays(3)).plusSeconds(7200)), Map.of());
+
+        assertThat(rescheduled.statusCode()).as("reschedule conflict: %s", rescheduled.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void reschedule_invalidTimeWindow_returnsUnprocessable() throws Exception {
+        UUID roomId = createRoom("RES3", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+
+        HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s"}
+                """.formatted(END, START), Map.of());
+
+        assertThat(rescheduled.statusCode()).as("reschedule invalid window: %s", rescheduled.body())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
+    }
+
+    @Test
+    void reschedule_pastDeadline_returnsUnprocessable() throws Exception {
+        UUID roomId = createRoom("RES4", 50);
+        // Workshop starts in 12h → deadline is 36h from now (24h before start).
+        // NOW is 2026-08-01; start is 2026-08-01T21:00:00Z (12h from now).
+        Instant nearStart = Instant.now().plus(Duration.ofHours(12));
+        Instant nearEnd = nearStart.plusSeconds(7200);
+        UUID workshopId = publish(plan(
+                createWorkshop("WS", nearStart, nearEnd, 30), roomId));
+
+        HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s"}
+                """.formatted(nearStart.plus(Duration.ofDays(3)), nearEnd.plus(Duration.ofDays(3))), Map.of());
+
+        assertThat(rescheduled.statusCode()).as("reschedule past deadline: %s", rescheduled.body())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
+    }
+
+    // ----------------------------------------------------------------
+    // unplan (DELETE /plan)
+    // ----------------------------------------------------------------
+
+    @Test
+    void unplan_planned_returnsOkAndReleasesRoom() throws Exception {
+        UUID roomId = createRoom("UNP", 50);
+        UUID workshopId = plan(createWorkshop("WS", START, END, 30), roomId);
+
+        HttpResponse<String> unplan = delete("/api/v1/workshops/" + workshopId + "/plan", Map.of());
+
+        assertThat(unplan.statusCode()).as("unplan: %s", unplan.body())
+                .isEqualTo(HttpStatus.OK.value());
+        assertThat(workshopState(workshopId)).isEqualTo("DRAFT");
+        assertThat(unplan.body()).contains(workshopId.toString());
     }
 
     @Test

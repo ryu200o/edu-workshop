@@ -127,6 +127,8 @@ Business audit log for workshop lifecycle events. One record per state change, c
 
 **Event types recorded**: lifecycle — `DRAFT_CREATED`, `CONTENT_UPDATED`, `PLANNED`, `PUBLISHED`, `RESCHEDULED`, `STARTED`, `COMPLETED`, `CANCELLED`, `ROOM_CHANGED`, `CAPACITY_CHANGED`; cross-module (from `RoomEventHandler`, deferred until Event Bus is enabled) — `ROOM_RENAMED`, `ROOM_RENAMED_DURING_SESSION`, `ROOM_LOCATION_CHANGED`, `ROOM_LOCATION_CHANGED_EMERGENCY`, `ROOM_DEACTIVATED`.
 
+**Eviction semantics (Phase 3)**: when a `PUBLISHED` workshop claims a time window occupied by `PLANNED` workshops, those `PLANNED` workshops are evicted to `DRAFT` via `evictPlanningOnConflict`. Unlike `returnToDraft` (used by `DELETE /plan` and room deactivation), eviction **keeps** the room reference, the maintenance warning, and the time window — the admin simply adjusts the time on the retained window and re-plans. The `RESCHEDULED` event also triggers the Registration module to refresh the `workshop_start_time` snapshot for all active seats (ADR 0007/0012).
+
 ---
 
 ### 5. `workshop_snapshots` Table (Workshop Module — Report)

@@ -6,6 +6,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRescheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnplanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
@@ -13,11 +14,14 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.Wo
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Aggregate Root of the Workshop module.
@@ -28,15 +32,25 @@ import java.util.List;
  *
  * <p>Lifecycle (see {@link WorkshopState}): born {@code DRAFT} → {@link #plan} to {@code PLANNED}
  * (planning only, no room reservation — ADR 0008) → {@link #publish} to {@code PUBLISHED} (the room is
- * reserved). Post-publish changes ({@link #changeRoom}, {@link #adjustCapacity}, {@link #cancel}) are
- * only allowed in {@code PUBLISHED}. A room going {@code DEACTIVATED} returns the workshop to
- * {@code DRAFT} ({@link #returnToDraft}).</p>
+ * reserved). Post-publish changes ({@link #changeRoom}, {@link #adjustCapacity}, {@link #cancel},
+ * {@link #reschedule}) are only allowed in {@code PUBLISHED}. A room going {@code DEACTIVATED} returns
+ * the workshop to {@code DRAFT} ({@link #returnToDraft}). A {@code PLANNED} workshop that loses its slot
+ * to a {@code PUBLISHED} one is evicted back to {@code DRAFT} keeping its room
+ * ({@link #evictPlanningOnConflict}).</p>
  *
  * <p>Local invariants are enforced here (state transitions, capacity vs room, time-window validity);
  * global / set-based rules (uniqueness of availability, conflict with other PUBLISHED workshops,
  * capacity vs active registrations) are orchestrated by the Application layer (ADR 0005).</p>
  */
 public class Workshop {
+
+    /**
+     * A {@code PUBLISHED} workshop can only be rescheduled while {@code now <= startTime − 24h} —
+     * mirroring {@code Registration.CANCELLATION_DEADLINE} — so that students relying on the
+     * published schedule are not surprised at the last minute. Local business invariant, enforced
+     * by {@link #reschedule} via {@link RescheduleDeadlineExceededException}.
+     */
+    public static final Duration RESCHEDULE_DEADLINE = Duration.ofHours(24);
 
     private final WorkshopId id;
     private final WorkshopTitle title;
@@ -129,23 +143,26 @@ public class Workshop {
     }
 
     /**
-     * Assigns a room and moves the workshop DRAFT → {@code PLANNED}.
+     * Assigns a room and moves the workshop DRAFT → {@code PLANNED} (or re-plans an already
+     * {@code PLANNED} workshop onto a different room, e.g. A → B).
      *
      * <p>Per ADR 0008 this is a <em>planning</em> act, not a reservation: overlapping plans for the
-     * same room are allowed, and no global availability check happens here. The {@code hasRoomWarning}
-     * flag is carried over from the Application handler (a room in {@code MAINTENANCE} still permits
-     * planning, with a warning). Records a {@link WorkshopPlanned} event.</p>
+     * same room are allowed, and no global availability check happens here. Re-planning from
+     * {@code PLANNED} is allowed and deliberately performs <em>no</em> eviction of other PLANNED
+     * workshops (planning is non-exclusive). The {@code hasRoomWarning} flag is carried over from the
+     * Application handler (a room in {@code MAINTENANCE} still permits planning, with a warning).
+     * Records a {@link WorkshopPlanned} event.</p>
      *
      * @param room           the room reference (id + name/location/capacity snapshots, ADR 0007)
      * @param hasRoomWarning whether the room is under maintenance (planning allowed, with warning)
      * @param now            the current instant, used for {@code updatedAt}
-     * @throws InvalidWorkshopStateException if the workshop is not in {@code DRAFT}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code DRAFT} or {@code PLANNED}
      */
     public void plan(RoomReference room, boolean hasRoomWarning, Instant now) {
         requireNonNull(room, "room must be assigned before planning");
         requireNonNull(now, "now cannot be null");
 
-        requireState(WorkshopState.DRAFT, "plan");
+        requireStateIn(Set.of(WorkshopState.DRAFT, WorkshopState.PLANNED), "plan");
 
         this.roomReference = room;
         this.hasRoomWarning = hasRoomWarning;
@@ -263,6 +280,28 @@ public class Workshop {
     }
 
     /**
+     * Evicts a {@code PLANNED} workshop back to {@code DRAFT} because a {@code PUBLISHED} workshop now
+     * claims its time slot.
+     *
+     * <p>Deliberately <em>keeps</em> the room reference, the maintenance warning, and the time window
+     * (a {@code DRAFT} is not counted by {@code countOverlapping}, which filters {@code PUBLISHED}
+     * only) — the admin simply adjusts the time on the retained window and re-plans (UX upgrade).
+     * This differs from {@link #returnToDraft} (used by {@code DELETE /plan} and room deactivation),
+     * which releases the room and clears the warning. Does <em>not</em> emit a domain event: the
+     * eviction is an internal side effect of a reschedule, not a user-facing transition.</p>
+     *
+     * @param now the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not in {@code PLANNED}
+     */
+    public void evictPlanningOnConflict(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.PLANNED, "evictPlanningOnConflict");
+
+        this.state = WorkshopState.DRAFT;
+        this.touch(now);
+    }
+
+    /**
      * Moves a PUBLISHED workshop to a different room.
      *
      * <p>Post-publish change ("đổi trả"). The room must be {@code ALLOWED} and free of conflicts —
@@ -350,6 +389,51 @@ public class Workshop {
         record(new WorkshopCancelled(id, updatedAt));
     }
 
+    /**
+     * Reschedules a PUBLISHED workshop to a new time window, keeping the room and all student
+     * registrations.
+     *
+     * <p>Post-publish change. To respect the customers' schedule, rescheduling is only allowed while
+     * {@code now <= startTime − RESCHEDULE_DEADLINE} (24h) — mirroring {@code Registration.cancel}.
+     * The global "no other PUBLISHED workshop occupies the window in this room" conflict check is
+     * orchestrated by the Application handler before this call (ADR 0005), which also evicts
+     * overlapping {@code PLANNED} workshops. Records a {@link WorkshopRescheduled} event.</p>
+     *
+     * @param newStartTime the new start instant; must be strictly in the future
+     * @param newEndTime   the new end instant; must be after {@code newStartTime}
+     * @param now          the current instant, used for the deadline check and {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
+     * @throws RescheduleDeadlineExceededException if {@code now} is after {@code startTime − RESCHEDULE_DEADLINE}
+     * @throws InvalidWorkshopTimeRangeException if {@code newEndTime} is not after {@code newStartTime},
+     *         or {@code newStartTime} is not strictly in the future
+     */
+    public void reschedule(Instant newStartTime, Instant newEndTime, Instant now) {
+        requireNonNull(newStartTime, "newStartTime cannot be null");
+        requireNonNull(newEndTime, "newEndTime cannot be null");
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.PUBLISHED, "reschedule");
+
+        Instant deadline = this.startTime.minus(RESCHEDULE_DEADLINE);
+        if (now.isAfter(deadline)) {
+            throw new RescheduleDeadlineExceededException(id, deadline, now);
+        }
+
+        if (!newEndTime.isAfter(newStartTime)) {
+            throw new InvalidWorkshopTimeRangeException("newEndTime must be after newStartTime");
+        }
+        if (!newStartTime.isAfter(now)) {
+            throw new InvalidWorkshopTimeRangeException("newStartTime must be in the future");
+        }
+
+        Instant oldStartTime = this.startTime;
+        Instant oldEndTime = this.endTime;
+        this.startTime = newStartTime;
+        this.endTime = newEndTime;
+        this.touch(now);
+
+        record(new WorkshopRescheduled(id, oldStartTime, oldEndTime, newStartTime, newEndTime, updatedAt));
+    }
+
     // ---------------------------------------------------------------------
     // Guards / helpers
     // ---------------------------------------------------------------------
@@ -360,6 +444,15 @@ public class Workshop {
                     id, state,
                     expected,
                     "Cannot " + operation + " a workshop in state " + state + "; expected " + expected + ".");
+        }
+    }
+
+    private void requireStateIn(Set<WorkshopState> expected, String operation) {
+        if (!expected.contains(state)) {
+            throw new InvalidWorkshopStateException(
+                    id, state,
+                    expected.iterator().next(),
+                    "Cannot " + operation + " a workshop in state " + state + "; expected one of " + expected + ".");
         }
     }
 
