@@ -7,6 +7,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.StudentI
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.WorkshopReference;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationCancelled;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationCreated;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationGracePeriodGranted;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationReactivated;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationRefunded;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.CancellationDeadlineExceededException;
@@ -116,6 +117,54 @@ class RegistrationTest {
                     assertThat(ex.getDeadline()).isEqualTo(DEADLINE);
                     assertThat(ex.getAttemptedAt()).isEqualTo(DEADLINE.plusSeconds(1));
                 });
+    }
+
+    @Test
+    void cancel_past24hDeadline_noGracePeriod_throwsException() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        // Past the 24h deadline and no grace window granted → rejected.
+        Instant cancelAt = DEADLINE.plusSeconds(60);
+
+        assertThatThrownBy(() -> registration.cancel(cancelAt))
+                .isInstanceOf(CancellationDeadlineExceededException.class);
+    }
+
+    @Test
+    void cancel_past24hDeadline_withinGracePeriod_success() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        // Reschedule happens at the instant just after the standard deadline, opening a 12h grace window.
+        Instant rescheduledAt = DEADLINE.plusSeconds(60);
+        registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
+        // Cancel a bit later — still past the standard 24h deadline, but within the still-open grace window.
+        Instant cancelAt = rescheduledAt.plusSeconds(60);
+        assertThat(cancelAt).isBefore(START);
+
+        registration.cancel(cancelAt);
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
+    }
+
+    @Test
+    void cancel_past24hDeadline_gracePeriodExpired_throwsException() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        // Grace granted just after the deadline, then a much later cancel attempt is past the 12h expiry.
+        Instant rescheduledAt = DEADLINE.plusSeconds(60);
+        registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
+        Instant cancelAt = rescheduledAt.plus(Registration.GRACE_PERIOD).plusSeconds(1);
+        assertThat(cancelAt).isBefore(START);
+
+        assertThatThrownBy(() -> registration.cancel(cancelAt))
+                .isInstanceOf(CancellationDeadlineExceededException.class);
+    }
+
+    @Test
+    void cancel_afterWorkshopStarted_evenWithinGracePeriod_throwsException() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        // Grace window wide open (extends past start), but the workshop has already started → always rejected.
+        registration.grantGracePeriod(NOW, START, NOW);
+
+        assertThatThrownBy(() -> registration.cancel(START.plusSeconds(1)))
+                .isInstanceOf(CancellationDeadlineExceededException.class);
     }
 
     @Test
@@ -295,46 +344,54 @@ class RegistrationTest {
     }
 
     // ----------------------------------------------------------------
-    // refreshWorkshopStartTime
+    // grantGracePeriod
     // ----------------------------------------------------------------
 
     @Test
-    void refreshWorkshopStartTime_updatesSnapshotAndKeepsStatus() {
+    void grantGracePeriod_setsGraceUntil12HoursAndUpdatesSnapshot() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        Instant rescheduledAt = NOW.plusSeconds(60);
         Instant newStart = START.plusSeconds(7200);
 
-        registration.refreshWorkshopStartTime(WorkshopReference.of(WORKSHOP_ID, newStart), NOW.plusSeconds(1));
+        registration.grantGracePeriod(rescheduledAt, newStart, NOW.plusSeconds(1));
 
         assertThat(registration.state()).isEqualTo(RegistrationState.REGISTERED);
         assertThat(registration.workshopReference().startTime()).isEqualTo(newStart);
-        assertThat(registration.registeredAt()).isEqualTo(NOW);
-        assertThat(registration.cancelledAt()).isNull();
+        assertThat(registration.gracePeriodUntil()).isEqualTo(rescheduledAt.plus(Registration.GRACE_PERIOD));
         assertThat(registration.updatedAt()).isEqualTo(NOW.plusSeconds(1));
-        // Projection refresh only — no domain event.
+
         assertThat(registration.recordedEvents())
-                .hasSize(1)
-                .hasOnlyElementsOfType(RegistrationCreated.class);
+                .hasSize(2)
+                .hasExactlyElementsOfTypes(RegistrationCreated.class, RegistrationGracePeriodGranted.class);
+
+        RegistrationGracePeriodGranted event = (RegistrationGracePeriodGranted) registration.recordedEvents().get(1);
+        assertThat(event.registrationId()).isEqualTo(registration.id());
+        assertThat(event.gracePeriodUntil()).isEqualTo(rescheduledAt.plus(Registration.GRACE_PERIOD));
     }
 
     @Test
-    void refreshWorkshopStartTime_worksInCancelledStateToo() {
+    void grantGracePeriod_repeatedReschedule_extendsWindow() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        registration.cancel(DEADLINE.minusSeconds(1));
+        Instant firstReschedule = NOW.plusSeconds(1);
+        registration.grantGracePeriod(firstReschedule, START, firstReschedule);
+        registration.clearDomainEvents();
 
-        Instant newStart = START.plusSeconds(7200);
-        registration.refreshWorkshopStartTime(WorkshopReference.of(WORKSHOP_ID, newStart), NOW.plusSeconds(1));
+        Instant secondReschedule = firstReschedule.plusSeconds(100);
+        registration.grantGracePeriod(secondReschedule, START.plusSeconds(3600), secondReschedule);
 
-        assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
-        assertThat(registration.workshopReference().startTime()).isEqualTo(newStart);
+        assertThat(registration.gracePeriodUntil()).isEqualTo(secondReschedule.plus(Registration.GRACE_PERIOD));
+        assertThat(registration.workshopReference().startTime()).isEqualTo(START.plusSeconds(3600));
     }
 
     @Test
-    void refreshWorkshopStartTime_rejectsNull() {
+    void grantGracePeriod_rejectsNull() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
 
-        assertThatThrownBy(() -> registration.refreshWorkshopStartTime(null, NOW))
+        assertThatThrownBy(() -> registration.grantGracePeriod(null, START, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> registration.refreshWorkshopStartTime(workshop(), null))
+        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, null, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -346,11 +403,12 @@ class RegistrationTest {
     void reconstruct_bypassesInvariants() {
         Registration registration = Registration.reconstruct(
                 RegistrationId.generate(), STUDENT, workshop(),
-                RegistrationState.CANCELLED, NOW, DEADLINE, NOW, DEADLINE);
+                RegistrationState.CANCELLED, NOW, DEADLINE, NOW, DEADLINE, null);
 
         assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
         assertThat(registration.cancelledAt()).isEqualTo(DEADLINE);
         assertThat(registration.createdAt()).isEqualTo(NOW);
+        assertThat(registration.gracePeriodUntil()).isNull();
         assertThat(registration.recordedEvents()).isEmpty();
     }
 
