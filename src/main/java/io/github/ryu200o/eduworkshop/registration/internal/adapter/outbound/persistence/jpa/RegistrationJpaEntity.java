@@ -38,6 +38,9 @@ class RegistrationJpaEntity {
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
+    @Column(name = "grace_period_until")
+    private Instant gracePeriodUntil;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -49,7 +52,7 @@ class RegistrationJpaEntity {
     }
 
     RegistrationJpaEntity(UUID id, UUID workshopId, UUID userId, String status, Instant workshopStartTime,
-                          Instant registeredAt, Instant cancelledAt, Instant createdAt, Instant updatedAt) {
+                          Instant registeredAt, Instant cancelledAt, Instant gracePeriodUntil, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.workshopId = workshopId;
         this.userId = userId;
@@ -57,6 +60,7 @@ class RegistrationJpaEntity {
         this.workshopStartTime = workshopStartTime;
         this.registeredAt = registeredAt;
         this.cancelledAt = cancelledAt;
+        this.gracePeriodUntil = gracePeriodUntil;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -87,6 +91,10 @@ class RegistrationJpaEntity {
 
     Instant getCancelledAt() {
         return cancelledAt;
+    }
+
+    Instant getGracePeriodUntil() {
+        return gracePeriodUntil;
     }
 
     Instant getCreatedAt() {

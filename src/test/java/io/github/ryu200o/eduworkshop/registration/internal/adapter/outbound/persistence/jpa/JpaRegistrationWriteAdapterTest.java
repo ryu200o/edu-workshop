@@ -34,6 +34,10 @@ class JpaRegistrationWriteAdapterTest {
     void saveAndLoadById_roundTrip() {
         Registration registration = Registration.create(RegistrationId.generate(), StudentId.of(USER_ID),
                 WorkshopReference.of(WORKSHOP_ID, START), Instant.parse("2026-08-01T10:00:00Z"));
+        Instant graceUntil = Instant.parse("2026-08-02T10:00:00Z");
+        // Grant a grace window so the round-trip also covers the new nullable column.
+        registration.grantGracePeriod(graceUntil.minus(Registration.GRACE_PERIOD),
+                START.plusSeconds(7200), Instant.parse("2026-08-02T10:00:00Z"));
 
         Registration saved = adapter.save(registration);
 
@@ -48,6 +52,18 @@ class JpaRegistrationWriteAdapterTest {
         assertThat(loaded.registeredAt()).isNotNull();
         assertThat(loaded.createdAt()).isNotNull();
         assertThat(loaded.cancelledAt()).isNull();
+        assertThat(loaded.gracePeriodUntil()).isEqualTo(graceUntil);
+    }
+
+    @Test
+    void saveAndLoadById_gracePeriodNullByDefault() {
+        Registration registration = Registration.create(RegistrationId.generate(), StudentId.of(USER_ID),
+                WorkshopReference.of(WORKSHOP_ID, START), Instant.parse("2026-08-01T10:00:00Z"));
+
+        adapter.save(registration);
+
+        Registration loaded = adapter.loadById(registration.id()).orElseThrow();
+        assertThat(loaded.gracePeriodUntil()).isNull();
     }
 
     @Test
