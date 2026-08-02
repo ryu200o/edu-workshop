@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.registration.internal.domain.model;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationCancelled;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationCreated;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationDomainEvent;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationGracePeriodGranted;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationReactivated;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationRefunded;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.CancellationDeadlineExceededException;
@@ -42,6 +43,9 @@ public class Registration {
     /** Business invariant: cancellation is only allowed no later than 24h before start. */
     public static final Duration CANCELLATION_DEADLINE = Duration.ofHours(24);
 
+    /** Urgent cancellation window granted on reschedule: 12 hours from the reschedule moment. */
+    public static final Duration GRACE_PERIOD = Duration.ofHours(12);
+
     private final RegistrationId id;
     private final StudentId studentId;
     private WorkshopReference workshopReference;
@@ -50,6 +54,7 @@ public class Registration {
     private Instant cancelledAt;
     private final Instant createdAt;
     private Instant updatedAt;
+    private Instant gracePeriodUntil;
 
     private List<RegistrationDomainEvent> recordedEvents = new ArrayList<>();
 
@@ -60,7 +65,8 @@ public class Registration {
                          Instant registeredAt,
                          Instant cancelledAt,
                          Instant createdAt,
-                         Instant updatedAt) {
+                         Instant updatedAt,
+                         Instant gracePeriodUntil) {
         this.id = requireNonNull(id, "RegistrationId cannot be null");
         this.studentId = requireNonNull(studentId, "StudentId cannot be null");
         this.workshopReference = requireNonNull(workshopReference, "workshopReference cannot be null");
@@ -69,6 +75,7 @@ public class Registration {
         this.cancelledAt = cancelledAt;
         this.createdAt = requireNonNull(createdAt, "createdAt cannot be null");
         this.updatedAt = requireNonNull(updatedAt, "updatedAt cannot be null");
+        this.gracePeriodUntil = gracePeriodUntil;
     }
 
     /**
@@ -84,7 +91,7 @@ public class Registration {
         requireNonNull(now, "now cannot be null");
 
         Registration registration = new Registration(id, studentId, workshopReference,
-                RegistrationState.REGISTERED, now, null, now, now);
+                RegistrationState.REGISTERED, now, null, now, now, null);
         registration.record(new RegistrationCreated(id, workshopReference.workshopId(), studentId,
                 workshopReference.startTime(), now));
         return registration;
@@ -101,22 +108,40 @@ public class Registration {
                                            Instant registeredAt,
                                            Instant cancelledAt,
                                            Instant createdAt,
-                                           Instant updatedAt) {
+                                           Instant updatedAt,
+                                           Instant gracePeriodUntil) {
         return new Registration(id, studentId, workshopReference, state, registeredAt, cancelledAt,
-                createdAt, updatedAt);
+                createdAt, updatedAt, gracePeriodUntil);
     }
 
     /**
-     * Cancels the seat (REGISTERED → CANCELLED), but only before the 24-hour deadline.
+     * Cancels the seat (REGISTERED → CANCELLED), subject to the cancellation invariant.
      *
-     * @throws CancellationDeadlineExceededException if {@code now} is after {@code startTime − 24h}
+     * <p><strong>CanCancel</strong> (12h grace period, ADR-independent, Titik 1):
+     * {@code now < workshopStartTime} must always hold — the workshop must not have started. Within
+     * that, cancellation is allowed when {@code now < workshopStartTime − 24h} (standard deadline)
+     * <em>or</em> when a grace window has been granted and {@code now < gracePeriodUntil} (urgent
+     * 12h window opened by a reschedule).</p>
+     *
+     * @throws CancellationDeadlineExceededException if the user cannot cancel at {@code now}
      */
     public void cancel(Instant now) {
         requireNonNull(now, "now cannot be null");
         requireState(RegistrationState.REGISTERED, "cancel");
 
-        Instant deadline = workshopReference.startTime().minus(CANCELLATION_DEADLINE);
-        if (now.isAfter(deadline)) {
+        Instant startTime = workshopReference.startTime();
+
+        // Invariant 1: never cancel once the workshop has started (or is starting).
+        boolean notStarted = now.isBefore(startTime);
+
+        // Standard deadline window: allowed while now <= startTime - 24h (inclusive boundary).
+        Instant deadline = startTime.minus(CANCELLATION_DEADLINE);
+        boolean withinStandardDeadline = !now.isAfter(deadline);
+
+        // Urgent grace window opened by a reschedule.
+        boolean withinGrace = gracePeriodUntil != null && now.isBefore(gracePeriodUntil);
+
+        if (!notStarted || (!withinStandardDeadline && !withinGrace)) {
             throw new CancellationDeadlineExceededException(id, deadline, now);
         }
 
@@ -125,6 +150,30 @@ public class Registration {
         this.touch(now);
 
         record(new RegistrationCancelled(id, workshopReference.workshopId(), studentId, updatedAt));
+    }
+
+    /**
+     * Grants (or re-extends) the 12-hour urgent cancellation grace window after a reschedule, and
+     * refreshes the {@code startTime} snapshot to the rescheduled time.
+     *
+     * <p>Only meaningful for a {@code REGISTERED} seat. If the workshop is rescheduled a second
+     * time while a grace window is still open, {@code gracePeriodUntil} is extended to
+     * {@code rescheduledAt + 12h} (idempotent renewal — Invar 2).</p>
+     *
+     * @param rescheduledAt the moment the reschedule occurred ({@code event.occurredAt()})
+     * @param newStartTime  the rescheduled workshop start time
+     * @param now           the current instant, used for {@code updatedAt}
+     */
+    public void grantGracePeriod(Instant rescheduledAt, Instant newStartTime, Instant now) {
+        requireNonNull(rescheduledAt, "rescheduledAt cannot be null");
+        requireNonNull(newStartTime, "newStartTime cannot be null");
+        requireNonNull(now, "now cannot be null");
+
+        this.workshopReference = WorkshopReference.of(workshopReference.workshopId(), newStartTime);
+        this.gracePeriodUntil = rescheduledAt.plus(GRACE_PERIOD);
+        this.touch(now);
+
+        record(new RegistrationGracePeriodGranted(id, gracePeriodUntil, updatedAt));
     }
 
 /**
@@ -194,31 +243,6 @@ public class Registration {
                 workshopReference.startTime(), updatedAt));
     }
 
-    /**
-     * Refreshes the {@link WorkshopReference} {@code startTime} snapshot because the workshop was
-     * rescheduled.
-     *
-     * <p>Called by the {@code WorkshopRescheduledEventHandler} (ADR 0007 selective snapshotting).
-     * Only the snapshot changes — the student's {@code REGISTERED} status, the booking timestamps
-     * and the (re)activation history are all preserved. Does not emit a domain event: this is a
-     * projection refresh, not a user-facing registration transition.</p>
-     *
-     * @param updatedReference the reference carrying the rescheduled start time
-     * @param now              the current instant, used for {@code updatedAt}
-     * @throws IllegalArgumentException if {@code updatedReference} or {@code now} is null
-     */
-    public void refreshWorkshopStartTime(WorkshopReference updatedReference, Instant now) {
-        requireNonNull(updatedReference, "workshop reference must not be null");
-        requireNonNull(now, "now cannot be null");
-
-        this.workshopReference = updatedReference;
-        this.touch(now);
-    }
-
-    // ---------------------------------------------------------------------
-    // Guards / helpers
-    // ---------------------------------------------------------------------
-
     private void requireState(RegistrationState expected, String operation) {
         if (state != expected) {
             throw new InvalidRegistrationStateException(
@@ -276,6 +300,10 @@ public class Registration {
 
     public Instant updatedAt() {
         return updatedAt;
+    }
+
+    public Instant gracePeriodUntil() {
+        return gracePeriodUntil;
     }
 
     public List<RegistrationDomainEvent> recordedEvents() {
