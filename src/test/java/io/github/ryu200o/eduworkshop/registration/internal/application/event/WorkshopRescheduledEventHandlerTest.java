@@ -32,7 +32,8 @@ class WorkshopRescheduledEventHandlerTest {
 
     private static final Instant NOW = Instant.parse("2026-08-01T10:00:00Z");
     private static final Instant OLD_START = Instant.parse("2026-09-01T09:00:00Z");
-    private static final Instant NEW_START = Instant.parse("2026-09-03T09:00:00Z");
+    // Danger zone: new start is 30h after reschedule (24h ≤ 30h < 36h) so the grace window is granted.
+    private static final Instant NEW_START = NOW.plus(java.time.Duration.ofHours(30));
 
     @Autowired
     private RegistrationRepository registrationRepository;
