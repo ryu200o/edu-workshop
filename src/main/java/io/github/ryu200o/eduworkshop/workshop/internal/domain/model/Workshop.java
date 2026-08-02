@@ -18,9 +18,6 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.Wo
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopTitleLockedException;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -451,14 +448,13 @@ public class Workshop {
      *   <li>{@code CANCELLED}: read-only — rejected with {@link InvalidWorkshopStateException}.</li>
      * </ul>
      *
-     * @param newTitle           the new title (must not be blank; ignored when null)
-     * @param newDescription     the new description (nullable; ignored when null)
+     * @param newTitle           the new title (must not be null)
+     * @param newDescription     the new description (must not be null)
      * @param activeRegistrations the current count of active (REGISTERED) seats
      * @param now                the current instant, used for {@code updatedAt}
      * @throws InvalidWorkshopStateException if the workshop is {@code CANCELLED}
      * @throws WorkshopTitleLockedException if the workshop is {@code PUBLISHED} with
      *         {@code activeRegistrations > 0} and the title is being changed
-     * @throws InvalidWorkshopTimeRangeException if {@code newTitle} is blank
      */
     public void updateInformation(WorkshopTitle newTitle, WorkshopDescription newDescription,
                                       int activeRegistrations, Instant now) {
@@ -472,7 +468,14 @@ public class Workshop {
                     "Cannot update information of a CANCELLED workshop.");
         }
 
-        boolean titleChanged = !this.title.value().equals(newTitle.value());
+        boolean titleChanged = !this.title.equals(newTitle);
+        boolean descriptionChanged = !this.description.equals(newDescription);
+
+        // No-Op Guard: Không có thay đổi thì không phát Event thừa
+        if (!titleChanged && !descriptionChanged) {
+            return;
+        }
+
         if (titleChanged && state == WorkshopState.PUBLISHED && activeRegistrations > 0) {
             throw new WorkshopTitleLockedException(id, activeRegistrations);
         }
@@ -481,8 +484,11 @@ public class Workshop {
             //noinspection AssignmentToField
             this.title = newTitle;
         }
-        //noinspection AssignmentToField
-        this.description = newDescription;
+        if (descriptionChanged) {
+            //noinspection AssignmentToField
+            this.description = newDescription;
+        }
+
         this.touch(now);
 
         record(new WorkshopInformationUpdated(id, newTitle.value(), newDescription.value(), updatedAt));
@@ -516,6 +522,10 @@ public class Workshop {
 
         requireStateIn(List.of(WorkshopState.DRAFT, WorkshopState.PLANNED), "updateSchedule");
 
+        // No-Op Guard
+        if (this.startTime.equals(newStartTime) && this.endTime.equals(newEndTime)) {
+            return;
+        }
         if (!newEndTime.isAfter(newStartTime)) {
             throw new InvalidWorkshopTimeRangeException("newEndTime must be after newStartTime");
         }
