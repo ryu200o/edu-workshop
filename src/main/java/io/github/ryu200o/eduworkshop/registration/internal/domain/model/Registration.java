@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.Re
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationCreated;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationDomainEvent;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationReactivated;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationRefunded;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.CancellationDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.InvalidRegistrationStateException;
 
@@ -126,24 +127,52 @@ public class Registration {
         record(new RegistrationCancelled(id, workshopReference.workshopId(), studentId, updatedAt));
     }
 
-    /**
-     * Cancels the seat because the workshop itself was cancelled (REGISTERED → CANCELLED).
-     *
-     * <p>Unlike {@link #cancel(Instant)} this is a system-initiated cancellation, not a student's
-     * decision: the 24-hour deadline is <em>deliberately not</em> enforced — a cancelled workshop has
-     * no seats left, regardless of how close it was to start. Explicit domain intent, kept as a
-     * separate method so the two flows can never be confused.</p>
-     */
-    public void cancelOnWorkshopCancelled(Instant now) {
-        requireNonNull(now, "now cannot be null");
-        requireState(RegistrationState.REGISTERED, "cancelOnWorkshopCancelled");
+/**
+      * Cancels the seat because the workshop itself was cancelled (REGISTERED → CANCELLED).
+      *
+      * <p>Unlike {@link #cancel(Instant)} this is a system-initiated cancellation, not a student's
+      * decision: the 24-hour deadline is <em>deliberately not</em> enforced — a cancelled workshop has
+      * no seats left, regardless of how close it was to start. Explicit domain intent, kept as a
+      * separate method so the two flows can never be confused.</p>
+      */
+     public void cancelOnWorkshopCancelled(Instant now) {
+         requireNonNull(now, "now cannot be null");
+         requireState(RegistrationState.REGISTERED, "cancelOnWorkshopCancelled");
 
-        this.state = RegistrationState.CANCELLED;
-        this.cancelledAt = now;
-        this.touch(now);
+         this.state = RegistrationState.CANCELLED;
+         this.cancelledAt = now;
+         this.touch(now);
 
-        record(new RegistrationCancelled(id, workshopReference.workshopId(), studentId, updatedAt));
-    }
+         record(new RegistrationCancelled(id, workshopReference.workshopId(), studentId, updatedAt));
+     }
+
+     /**
+      * Refunds the seat because the workshop was cancelled (REGISTERED → REFUNDED).
+      *
+      * <p>Unlike {@link #cancelOnWorkshopCancelled} this transitions to {@code REFUNDED} instead of
+      * {@code CANCELLED}, preserving the distinction between a student's voluntary cancellation and a
+      * system-initiated refund for analytics accuracy.</p>
+      *
+      * <p><strong>Idempotent No-Op Guard:</strong> if the registration is already {@code CANCELLED}
+      * (student previously cancelled) or {@code REFUNDED} (system already refunded), the method
+      * silently returns without changing state or emitting an event. This guarantees safe replay /
+      * retry of the {@link WorkshopCancelledIntegrationEvent} through the outbox without breaking
+      * the transaction.</p>
+      *
+      * @param now the current instant, used for {@code updatedAt}
+      */
+     public void refundBySystem(Instant now) {
+         requireNonNull(now, "now cannot be null");
+
+         if (state == RegistrationState.REGISTERED) {
+             this.state = RegistrationState.REFUNDED;
+             this.cancelledAt = now;
+             this.touch(now);
+
+             record(new RegistrationRefunded(id, workshopReference.workshopId(), studentId, updatedAt));
+         }
+         // NO-OP for CANCELLED or REFUNDED — idempotent guard for outbox replay / retry
+     }
 
     /**
      * Re-activates a previously cancelled registration (CANCELLED → REGISTERED) on the same row.

@@ -10,5 +10,6 @@ package io.github.ryu200o.eduworkshop.registration.internal.domain.model;
  */
 public enum RegistrationState {
     REGISTERED,
-    CANCELLED
+    CANCELLED,
+    REFUNDED
 }

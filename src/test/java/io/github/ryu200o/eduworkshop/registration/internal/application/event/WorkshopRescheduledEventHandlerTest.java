@@ -73,12 +73,10 @@ class WorkshopRescheduledEventHandlerTest {
         handler.handle(new WorkshopRescheduledIntegrationEvent(
                 workshop, OLD_START, OLD_START.plusSeconds(7200), NEW_START, NEW_START.plusSeconds(7200), NOW));
 
-        assertThat(registrationRepository.loadAllByWorkshop(workshop))
-                .filteredOn(r -> r.state() == RegistrationState.REGISTERED)
+        assertThat(registrationRepository.loadAllByWorkshopIdAndState(workshop, RegistrationState.REGISTERED))
                 .allMatch(r -> r.workshopReference().startTime().equals(NEW_START))
                 .hasSize(2);
-        assertThat(registrationRepository.loadAllByWorkshop(workshop))
-                .filteredOn(r -> r.state() == RegistrationState.CANCELLED)
+        assertThat(registrationRepository.loadAllByWorkshopIdAndState(workshop, RegistrationState.CANCELLED))
                 .allMatch(r -> r.workshopReference().startTime().equals(OLD_START));
     }
 
@@ -89,6 +87,7 @@ class WorkshopRescheduledEventHandlerTest {
         handler.handle(new WorkshopRescheduledIntegrationEvent(
                 workshop, OLD_START, OLD_START.plusSeconds(7200), NEW_START, NEW_START.plusSeconds(7200), NOW));
 
-        assertThat(registrationRepository.loadAllByWorkshop(workshop)).isEmpty();
+        assertThat(registrationRepository.loadAllByWorkshopIdAndState(workshop, RegistrationState.REGISTERED))
+                .isEmpty();
     }
 }

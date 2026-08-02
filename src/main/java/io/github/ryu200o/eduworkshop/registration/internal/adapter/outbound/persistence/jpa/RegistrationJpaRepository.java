@@ -20,6 +20,11 @@ interface RegistrationJpaRepository extends JpaRepository<RegistrationJpaEntity,
     Optional<RegistrationJpaEntity> findByWorkshopIdAndUserId(UUID workshopId, UUID userId);
 
     /**
+     * Loads all registration rows belonging to a workshop with the given status.
+     */
+    List<RegistrationJpaEntity> findByWorkshopIdAndStatus(UUID workshopId, String status);
+
+    /**
      * Loads all registration rows belonging to a workshop.
      */
     List<RegistrationJpaEntity> findByWorkshopId(UUID workshopId);

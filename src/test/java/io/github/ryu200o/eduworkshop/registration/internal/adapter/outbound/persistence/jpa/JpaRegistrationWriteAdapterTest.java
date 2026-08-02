@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,7 +71,7 @@ class JpaRegistrationWriteAdapterTest {
     }
 
     @Test
-    void loadAllByWorkshop_returnsAllRowsForTheWorkshop() {
+    void loadAllByWorkshopIdAndState_returnsFilteredRows() {
         UUID workshopA = UUID.randomUUID();
         UUID workshopB = UUID.randomUUID();
 
@@ -85,9 +86,27 @@ class JpaRegistrationWriteAdapterTest {
         adapter.save(Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
                 WorkshopReference.of(workshopB, START), Instant.parse("2026-08-01T10:00:00Z")));
 
-        assertThat(adapter.loadAllByWorkshop(workshopA)).hasSize(3);
-        assertThat(adapter.loadAllByWorkshop(workshopB)).hasSize(1);
-        assertThat(adapter.loadAllByWorkshop(UUID.randomUUID())).isEmpty();
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopA, RegistrationState.REGISTERED)).hasSize(2);
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopA, RegistrationState.CANCELLED)).hasSize(1);
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopB, RegistrationState.REGISTERED)).hasSize(1);
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopB, RegistrationState.CANCELLED)).isEmpty();
+        assertThat(adapter.loadAllByWorkshopIdAndState(UUID.randomUUID(), RegistrationState.REGISTERED)).isEmpty();
+    }
+
+    @Test
+    void saveAll_persistsAllRegistrationsInOneBatch() {
+        UUID workshop = UUID.randomUUID();
+
+        List<Registration> registrations = List.of(
+                Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
+                        WorkshopReference.of(workshop, START), Instant.parse("2026-08-01T10:00:00Z")),
+                Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
+                        WorkshopReference.of(workshop, START), Instant.parse("2026-08-01T10:00:00Z"))
+        );
+
+        adapter.saveAll(registrations);
+
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshop, RegistrationState.REGISTERED)).hasSize(2);
     }
 
     @Test

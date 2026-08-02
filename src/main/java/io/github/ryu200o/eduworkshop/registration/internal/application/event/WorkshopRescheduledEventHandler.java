@@ -49,9 +49,8 @@ public class WorkshopRescheduledEventHandler {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(WorkshopRescheduledIntegrationEvent event) {
         Instant now = Instant.now(clock);
-        List<Registration> active = registrationRepository.loadAllByWorkshop(event.workshopId()).stream()
-                .filter(r -> r.state() == RegistrationState.REGISTERED)
-                .toList();
+        List<Registration> active = registrationRepository.loadAllByWorkshopIdAndState(
+                event.workshopId(), RegistrationState.REGISTERED);
 
         log.info("Workshop {} rescheduled to {} — refreshing start-time snapshot of {} active registration(s)",
                 event.workshopId(), event.newStartTime(), active.size());

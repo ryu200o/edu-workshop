@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.port.out
 
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationId;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationState;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,9 +34,16 @@ public interface RegistrationRepository {
     Optional<Registration> loadByWorkshopAndUser(UUID workshopId, UUID userId);
 
     /**
-     * Loads every registration row belonging to a workshop (both {@code REGISTERED} and
-     * {@code CANCELLED}). Used by the outbox listener that flips all active seats when the workshop
-     * itself is cancelled; the listener filters by state. Returns an empty list when none exist.
+     * Loads every registration row belonging to a workshop with the given state.
+     * Used by event handlers that need to process only seats in a specific state
+     * (e.g., {@code REGISTERED} for workshop cancellation or reschedule).
+     * Returns an empty list when none exist.
      */
-    List<Registration> loadAllByWorkshop(UUID workshopId);
+    List<Registration> loadAllByWorkshopIdAndState(UUID workshopId, RegistrationState state);
+
+    /**
+     * Batch-persists mutated Registration aggregates in a single operation,
+     * enabling JDBC batching at the adapter layer.
+     */
+    void saveAll(List<Registration> registrations);
 }
