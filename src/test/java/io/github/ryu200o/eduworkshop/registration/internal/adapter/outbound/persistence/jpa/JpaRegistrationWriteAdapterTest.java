@@ -35,9 +35,10 @@ class JpaRegistrationWriteAdapterTest {
         Registration registration = Registration.create(RegistrationId.generate(), StudentId.of(USER_ID),
                 WorkshopReference.of(WORKSHOP_ID, START), Instant.parse("2026-08-01T10:00:00Z"));
         Instant graceUntil = Instant.parse("2026-08-02T10:00:00Z");
-        // Grant a grace window so the round-trip also covers the new nullable column.
-        registration.grantGracePeriod(graceUntil.minus(Registration.GRACE_PERIOD),
-                START.plusSeconds(7200), Instant.parse("2026-08-02T10:00:00Z"));
+        Instant rescheduledAt = graceUntil.minus(Registration.GRACE_PERIOD);
+        // Urgent reschedule (new start 6h after reschedule → 6h < 12h) so the grace window is actually granted.
+        registration.grantGracePeriod(rescheduledAt,
+                rescheduledAt.plus(java.time.Duration.ofHours(6)), graceUntil);
 
         Registration saved = adapter.save(registration);
 

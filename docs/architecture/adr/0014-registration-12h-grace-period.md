@@ -47,20 +47,25 @@ Trong quá trình vận hành hệ thống **EduWorkshop**, hai lỗ hổng nghi
 ### 3.2 Cửa sổ Hủy vé Cấp bách 12 Giờ (12-Hour Emergency Grace Period)
 
 * Bổ sung thuộc tính `gracePeriodUntil` (`Instant`, nullable) vào Aggregate Root `Registration`.
-* Khi nhận `WorkshopRescheduledIntegrationEvent`, Handler kích hoạt `grantGracePeriod(rescheduledAt, newStartTime, now)`:
+* Khi nhận `WorkshopRescheduledIntegrationEvent`, Handler kích hoạt `grantGracePeriod(rescheduledAt, newStartTime, now)`.
+* **Grace Period chỉ được cấp khi Reschedule khẩn cấp (Urgent)**: giờ học mới đến trước 12 giờ kể từ thời điểm Reschedule diễn ra:
+
+$$\text{Urgent} = \big( \text{newStartTime} - \text{rescheduledAt} < 12\text{ Hours} \big)$$
+
+Nếu khẩn cấp ($\text{Urgent} = true$):
 
 $$\text{gracePeriodUntil} = \text{rescheduledAt} + 12\text{ Hours}$$
 
+Ngược lại (Reschedule xa, ví dụ vài ngày — deadline hủy 24h chuẩn đã đủ đảm bảo quyền lợi), **không cấp** cửa sổ grace: $\text{gracePeriodUntil}$ được đưa về `null`.
 
-
-Đồng thời cập nhật snapshot `workshopStartTime = newStartTime`.
+Đồng thời cập nhật snapshot `workshopStartTime = newStartTime` (trong cả hai nhánh).
 * Mở rộng quy tắc Guard Check trong `Registration.cancel(Instant now)`:
 
 $$\text{CanCancel} = (\text{now} < \text{workshopStartTime}) \quad \land \quad \Big[ (\text{now} < \text{workshopStartTime} - 24\text{h}) \ \lor \ (\text{gracePeriodUntil} \neq \text{null} \ \land \ \text{now} < \text{gracePeriodUntil}) \Big]$$
 
 * **Invariants bất biến**:
 1. Nếu $\text{now} \ge \text{workshopStartTime}$, lệnh hủy **luôn bị từ chối** (`CancellationDeadlineExceededException`), bất kể còn trong Grace Period hay không.
-2. Nếu bài học bị Reschedule lần 2, `gracePeriodUntil` sẽ được gia hạn thành $\text{newRescheduledAt} + 12\text{h}$.
+2. Nếu bài học bị Reschedule lần 2 **khẩn cấp**, `gracePeriodUntil` sẽ được gia hạn thành $\text{newRescheduledAt} + 12\text{h}$; nếu Reschedule không khẩn cấp, `gracePeriodUntil` được đưa về `null`.
 
 
 
@@ -89,7 +94,7 @@ $$\text{CanCancel} = (\text{now} < \text{workshopStartTime}) \quad \land \quad \
 ### Positive
 
 * **Báo cáo sạch (Clean Analytics)**: Phân định tuyệt đối giữa User Churn (`CANCELLED`) và System Refund (`REFUNDED`).
-* **Trải nghiệm khách hàng công bằng**: Học viên luôn có tối thiểu 12 giờ để phản ứng khi Ban tổ chức dời lịch học.
+* **Trải nghiệm khách hàng công bằng**: Khi Ban tổ chức dời lịch gấp (giờ mới trong vòng 12h), học viên luôn có tối thiểu 12 giờ để phản ứng hủy vé; khi dời xa, deadline hủy 24h chuẩn đã đảm bảo quyền lợi, nên không cấp cửa sổ dư thừa.
 * **Hiệu năng hệ thống cao**: Áp dụng 3-Phase Execution và JDBC Batching giúp Event Listener xử lý hàng ngàn bản ghi `Registration` trong 1 Database Roundtrip.
 
 ### Negative / Trade-offs

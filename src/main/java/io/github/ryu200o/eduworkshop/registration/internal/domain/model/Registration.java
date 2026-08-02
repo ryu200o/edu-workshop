@@ -153,12 +153,18 @@ public class Registration {
     }
 
     /**
-     * Grants (or re-extends) the 12-hour urgent cancellation grace window after a reschedule, and
-     * refreshes the {@code startTime} snapshot to the rescheduled time.
+     * Synchronizes the {@code startTime} snapshot after a reschedule, and grants the 12-hour urgent
+     * cancellation grace window <em>only when the reschedule is urgent</em>, i.e. the new start time
+     * is less than {@link #GRACE_PERIOD} (12h) away from the moment the reschedule occurred
+     * ({@code newStartTime − rescheduledAt < 12h}).
      *
-     * <p>Only meaningful for a {@code REGISTERED} seat. If the workshop is rescheduled a second
-     * time while a grace window is still open, {@code gracePeriodUntil} is extended to
-     * {@code rescheduledAt + 12h} (idempotent renewal — Invar 2).</p>
+     * <p>An urgent reschedule pushes the start time close enough that the standard 24-hour cancellation
+     * deadline is threatened, so the student gets a guaranteed 12h window to cancel freely. A non-urgent
+     * reschedule (e.g. rescheduled days in advance) needs no such bonus — the regular deadline applies —
+     * so any previously granted {@code gracePeriodUntil} is cleared back to {@code null}.</p>
+     *
+     * <p>The {@code startTime} snapshot is refreshed to {@code newStartTime} in both cases. Only a
+     * granted grace window records a domain event.</p>
      *
      * @param rescheduledAt the moment the reschedule occurred ({@code event.occurredAt()})
      * @param newStartTime  the rescheduled workshop start time
@@ -171,10 +177,14 @@ public class Registration {
         requireState(RegistrationState.REGISTERED, "grantGracePeriod");
 
         this.workshopReference = WorkshopReference.of(workshopReference.workshopId(), newStartTime);
-        this.gracePeriodUntil = rescheduledAt.plus(GRACE_PERIOD);
-        this.touch(now);
 
-        record(new RegistrationGracePeriodGranted(id, gracePeriodUntil, updatedAt));
+        boolean urgentReschedule = rescheduledAt.plus(GRACE_PERIOD).isAfter(newStartTime);
+        this.gracePeriodUntil = urgentReschedule ? rescheduledAt.plus(GRACE_PERIOD) : null;
+
+        if (urgentReschedule) {
+            record(new RegistrationGracePeriodGranted(id, gracePeriodUntil, updatedAt));
+        }
+        this.touch(now);
     }
 
 /**
