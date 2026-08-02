@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.Re
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopTitleLockedException;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -50,13 +51,19 @@ class WorkshopExceptionAdvice {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
     }
 
-    @ExceptionHandler(RescheduleDeadlineExceededException.class)
-    @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
-    ProblemDetail handleRescheduleDeadline(RescheduleDeadlineExceededException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
-    }
+@ExceptionHandler(RescheduleDeadlineExceededException.class)
+@ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+ProblemDetail handleRescheduleDeadline(RescheduleDeadlineExceededException ex) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+}
 
-    @ExceptionHandler(WorkshopDomainException.class)
+@ExceptionHandler(WorkshopTitleLockedException.class)
+@ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+ProblemDetail handleTitleLocked(WorkshopTitleLockedException ex) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+}
+
+@ExceptionHandler(WorkshopDomainException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     ProblemDetail handleWorkshopDomain(WorkshopDomainException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());

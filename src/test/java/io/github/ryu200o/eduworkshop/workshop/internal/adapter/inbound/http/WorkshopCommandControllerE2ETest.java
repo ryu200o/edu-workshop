@@ -72,6 +72,15 @@ class WorkshopCommandControllerE2ETest {
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> patch(String path, String body, Map<String, String> headers) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "application/json")
+                .method("PATCH", body == null ? HttpRequest.BodyPublishers.noBody()
+                        : HttpRequest.BodyPublishers.ofString(body));
+        headers.forEach(builder::header);
+        return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     private UUID createRoom(String building, int capacity) throws Exception {
         HttpResponse<String> response = post("/api/v1/rooms",
                 """
@@ -386,5 +395,108 @@ class WorkshopCommandControllerE2ETest {
 
         assertThat(adjusted.statusCode()).as("adjust-capacity exceeds room: %s", adjusted.body())
                 .isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    // ----------------------------------------------------------------
+    // updateInformation (PATCH /{id}/info)
+    // ----------------------------------------------------------------
+
+    @Test
+    void updateInfo_draft_returnsOkAndUpdatesTitleAndDescription() throws Exception {
+        UUID roomId = createRoom("INF1", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+
+        HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/info",
+                """
+                {"newTitle": "Updated Title", "newDescription": "Updated Description"}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateInfo draft: %s", response.body())
+                .isEqualTo(HttpStatus.OK.value());
+        assertThat(response.body()).contains("Updated Title");
+        assertThat(response.body()).contains("Updated Description");
+    }
+
+    @Test
+    void updateInfo_published_withNoRegistrations_returnsOkAndUpdatesTitle() throws Exception {
+        UUID roomId = createRoom("INF2", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+
+        HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/info",
+                """
+                {"newTitle": "New Title", "newDescription": "New Desc"}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateInfo published no regs: %s", response.body())
+                .isEqualTo(HttpStatus.OK.value());
+    }
+
+    @Test
+    void updateInfo_published_withRegistrations_titleLocked_returnsUnprocessable() throws Exception {
+        UUID roomId = createRoom("INF3", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+        register(workshopId, UUID.randomUUID());
+
+        HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/info",
+                """
+                {"newTitle": "Hacked Title", "newDescription": "New Desc"}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateInfo title locked: %s", response.body())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
+    }
+
+    // ----------------------------------------------------------------
+    // updateSchedule (PATCH /{id}/schedule)
+    // ----------------------------------------------------------------
+
+    @Test
+    void updateSchedule_draft_returnsOkAndUpdatesTimes() throws Exception {
+        UUID roomId = createRoom("SCH1", 50);
+        UUID workshopId = plan(createWorkshop("WS", START, END, 30), roomId);
+
+        Instant newStart = START.plus(Duration.ofDays(7));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/schedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s"}
+                """.formatted(newStart, newEnd), Map.of());
+
+        assertThat(response.statusCode()).as("updateSchedule draft: %s", response.body())
+                .isEqualTo(HttpStatus.OK.value());
+        assertThat(response.body()).contains(newStart.toString());
+        assertThat(response.body()).contains(newEnd.toString());
+    }
+
+    @Test
+    void updateSchedule_published_returnsUnprocessable() throws Exception {
+        UUID roomId = createRoom("SCH2", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+
+        Instant newStart = START.plus(Duration.ofDays(7));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/schedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s"}
+                """.formatted(newStart, newEnd), Map.of());
+
+        assertThat(response.statusCode()).as("updateSchedule published: %s", response.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void updateSchedule_invalidTimeRange_returnsUnprocessable() throws Exception {
+        UUID roomId = createRoom("SCH3", 50);
+        UUID workshopId = plan(createWorkshop("WS", START, END, 30), roomId);
+
+        HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/schedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s"}
+                """.formatted(END, START), Map.of());
+
+        assertThat(response.statusCode()).as("updateSchedule invalid range: %s", response.body())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
     }
 }

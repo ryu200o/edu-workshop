@@ -4,17 +4,20 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopInformationUpdated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRescheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduleUpdated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnplanned;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopTitleLockedException;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -52,8 +55,8 @@ public class Workshop {
     public static final Duration RESCHEDULE_DEADLINE = Duration.ofHours(24);
 
     private final WorkshopId id;
-    private final WorkshopTitle title;
-    private final WorkshopDescription description;
+    private WorkshopTitle title;
+    private WorkshopDescription description;
     private RoomReference roomReference;
     private Instant startTime;
     private Instant endTime;
@@ -431,6 +434,110 @@ public class Workshop {
         this.touch(now);
 
         record(new WorkshopRescheduled(id, oldStartTime, oldEndTime, newStartTime, newEndTime, updatedAt));
+    }
+
+    /**
+     * Updates the title and/or description of a workshop.
+     *
+     * <p>State-based access control (ADR 0008 / design spec):</p>
+     * <ul>
+     *   <li>{@code DRAFT} / {@code PLANNED}: free edit of both fields.</li>
+     *   <li>{@code PUBLISHED}: description is always mutable; title is locked when
+     *       {@code activeRegistrations > 0} (prevents topic drift on issued tickets).
+     *       Title changes are rejected with {@link WorkshopTitleLockedException}.</li>
+     *   <li>{@code CANCELLED}: read-only — rejected with {@link InvalidWorkshopStateException}.</li>
+     * </ul>
+     *
+     * @param newTitle           the new title (must not be null)
+     * @param newDescription     the new description (must not be null)
+     * @param activeRegistrations the current count of active (REGISTERED) seats
+     * @param now                the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is {@code CANCELLED}
+     * @throws WorkshopTitleLockedException if the workshop is {@code PUBLISHED} with
+     *         {@code activeRegistrations > 0} and the title is being changed
+     */
+    public void updateInformation(WorkshopTitle newTitle, WorkshopDescription newDescription,
+                                      int activeRegistrations, Instant now) {
+        requireNonNull(newTitle, "newTitle cannot be null");
+        requireNonNull(newDescription, "newDescription cannot be null");
+        requireNonNull(now, "now cannot be null");
+
+        if (state == WorkshopState.CANCELLED) {
+            throw new InvalidWorkshopStateException(
+                    id, state, null,
+                    "Cannot update information of a CANCELLED workshop.");
+        }
+
+        boolean titleChanged = !this.title.equals(newTitle);
+        boolean descriptionChanged = !this.description.equals(newDescription);
+
+        // No-Op Guard: Không có thay đổi thì không phát Event thừa
+        if (!titleChanged && !descriptionChanged) {
+            return;
+        }
+
+        if (titleChanged && state == WorkshopState.PUBLISHED && activeRegistrations > 0) {
+            throw new WorkshopTitleLockedException(id, activeRegistrations);
+        }
+
+        if (titleChanged) {
+            //noinspection AssignmentToField
+            this.title = newTitle;
+        }
+        if (descriptionChanged) {
+            //noinspection AssignmentToField
+            this.description = newDescription;
+        }
+
+        this.touch(now);
+
+        record(new WorkshopInformationUpdated(id, newTitle.value(), newDescription.value(), updatedAt));
+    }
+
+    /**
+     * Updates the time window of a pre-publish workshop.
+     *
+     * <p>Only allowed in {@code DRAFT} and {@code PLANNED} states. Post-publish
+     * schedule changes must go through {@link #reschedule} (which enforces the 24h
+     * deadline). When called in {@code PLANNED}, the existing {@code roomReference}
+     * is kept — room conflict checking is deferred to publish time (ADR 0008).</p>
+     *
+     * @param newStartTime the new start instant; must be strictly in the future
+     * @param newEndTime   the new end instant; must be after {@code newStartTime}
+     * @param now          the current instant, used for the deadline check and {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is {@code PUBLISHED} or {@code CANCELLED}
+     * @throws InvalidWorkshopTimeRangeException if {@code newEndTime} is not after {@code newStartTime},
+     *         or {@code newStartTime} is not strictly in the future
+     */
+    public void updateSchedule(Instant newStartTime, Instant newEndTime, Instant now) {
+        requireNonNull(newStartTime, "newStartTime cannot be null");
+        requireNonNull(newEndTime, "newEndTime cannot be null");
+        requireNonNull(now, "now cannot be null");
+
+        if (state == WorkshopState.PUBLISHED) {
+            throw new InvalidWorkshopStateException(
+                    id, state, WorkshopState.DRAFT,
+                    "Cannot update schedule of a PUBLISHED workshop; use reschedule instead.");
+        }
+
+        requireStateIn(List.of(WorkshopState.DRAFT, WorkshopState.PLANNED), "updateSchedule");
+
+        // No-Op Guard
+        if (this.startTime.equals(newStartTime) && this.endTime.equals(newEndTime)) {
+            return;
+        }
+        if (!newEndTime.isAfter(newStartTime)) {
+            throw new InvalidWorkshopTimeRangeException("newEndTime must be after newStartTime");
+        }
+        if (!newStartTime.isAfter(now)) {
+            throw new InvalidWorkshopTimeRangeException("newStartTime must be in the future");
+        }
+
+        this.startTime = newStartTime;
+        this.endTime = newEndTime;
+        this.touch(now);
+
+        record(new WorkshopScheduleUpdated(id, newStartTime, newEndTime, updatedAt));
     }
 
     // ---------------------------------------------------------------------
