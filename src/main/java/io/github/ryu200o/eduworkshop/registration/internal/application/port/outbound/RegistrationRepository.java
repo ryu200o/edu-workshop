@@ -40,4 +40,10 @@ public interface RegistrationRepository {
      * Returns an empty list when none exist.
      */
     List<Registration> loadAllByWorkshopIdAndState(UUID workshopId, RegistrationState state);
+
+    /**
+     * Batch-persists mutated Registration aggregates in a single operation,
+     * enabling JDBC batching at the adapter layer.
+     */
+    void saveAll(List<Registration> registrations);
 }

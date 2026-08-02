@@ -64,6 +64,21 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
                 .toList();
     }
 
+    @Override
+    public void saveAll(List<Registration> registrations) {
+        try {
+            repository.saveAll(registrations.stream()
+                    .map(JpaRegistrationWriteAdapter::toEntity)
+                    .toList());
+        } catch (DataIntegrityViolationException ex) {
+            // Race-proof gate (rào lần 2): the DB unique index is the authoritative guard against
+            // concurrent duplicate registrations. The handler's read is only fail-fast UX (rào lần 1).
+            throw new DuplicateRegistrationException(
+                    registrations.get(0).workshopReference().workshopId(),
+                    registrations.get(0).studentId().value());
+        }
+    }
+
     // ====================== MAPPER ======================
 
     private static RegistrationJpaEntity toEntity(Registration registration) {

@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.application.port.outb
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationState;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationDomainEvent;
 import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopCancelledIntegrationEvent;
 
 import org.slf4j.Logger;
@@ -15,6 +16,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -53,14 +55,25 @@ public class WorkshopCancelledEventHandler {
         List<Registration> active = registrationRepository.loadAllByWorkshopIdAndState(
                 event.workshopId(), RegistrationState.REGISTERED);
 
+        if (active.isEmpty()) {
+            return;
+        }
+
         log.info("Workshop {} cancelled — refunding {} active registration(s) to REFUNDED",
                 event.workshopId(), active.size());
 
+        // 1. Domain State Mutation & Event Collection
+        List<RegistrationDomainEvent> allDomainEvents = new ArrayList<>();
         for (Registration registration : active) {
             registration.refundBySystem(now);
-            registrationRepository.save(registration);
-            registrationDomainEventPublisher.publish(registration.recordedEvents());
+            allDomainEvents.addAll(registration.recordedEvents());
             registration.clearDomainEvents();
         }
+
+        // 2. Batch Persistence (Tận dụng JDBC Batching ở Adapter)
+        registrationRepository.saveAll(active);
+
+        // 3. Batch Event Publication
+        registrationDomainEventPublisher.publish(allDomainEvents);
     }
 }
