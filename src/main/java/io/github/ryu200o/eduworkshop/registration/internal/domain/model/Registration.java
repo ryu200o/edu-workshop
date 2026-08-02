@@ -168,6 +168,7 @@ public class Registration {
         requireNonNull(rescheduledAt, "rescheduledAt cannot be null");
         requireNonNull(newStartTime, "newStartTime cannot be null");
         requireNonNull(now, "now cannot be null");
+        requireState(RegistrationState.REGISTERED, "grantGracePeriod");
 
         this.workshopReference = WorkshopReference.of(workshopReference.workshopId(), newStartTime);
         this.gracePeriodUntil = rescheduledAt.plus(GRACE_PERIOD);
@@ -177,30 +178,11 @@ public class Registration {
     }
 
 /**
-      * Cancels the seat because the workshop itself was cancelled (REGISTERED → CANCELLED).
-      *
-      * <p>Unlike {@link #cancel(Instant)} this is a system-initiated cancellation, not a student's
-      * decision: the 24-hour deadline is <em>deliberately not</em> enforced — a cancelled workshop has
-      * no seats left, regardless of how close it was to start. Explicit domain intent, kept as a
-      * separate method so the two flows can never be confused.</p>
-      */
-     public void cancelOnWorkshopCancelled(Instant now) {
-         requireNonNull(now, "now cannot be null");
-         requireState(RegistrationState.REGISTERED, "cancelOnWorkshopCancelled");
-
-         this.state = RegistrationState.CANCELLED;
-         this.cancelledAt = now;
-         this.touch(now);
-
-         record(new RegistrationCancelled(id, workshopReference.workshopId(), studentId, updatedAt));
-     }
-
-     /**
       * Refunds the seat because the workshop was cancelled (REGISTERED → REFUNDED).
       *
-      * <p>Unlike {@link #cancelOnWorkshopCancelled} this transitions to {@code REFUNDED} instead of
-      * {@code CANCELLED}, preserving the distinction between a student's voluntary cancellation and a
-      * system-initiated refund for analytics accuracy.</p>
+      * <p>This is a system-initiated cancellation (the workshop itself was cancelled), distinct from
+      * the student's own {@link #cancel(Instant)} decision: the refund preserves the analytics
+      * distinction between a voluntary cancellation (Churn) and a system refund (Operational).</p>
       *
       * <p><strong>Idempotent No-Op Guard:</strong> if the registration is already {@code CANCELLED}
       * (student previously cancelled) or {@code REFUNDED} (system already refunded), the method

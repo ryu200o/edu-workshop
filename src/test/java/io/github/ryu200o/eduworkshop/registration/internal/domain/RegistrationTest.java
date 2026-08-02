@@ -176,54 +176,6 @@ class RegistrationTest {
                 .isInstanceOf(CancellationDeadlineExceededException.class);
     }
 
-    @Test
-    void cancelOnWorkshopCancelled_flipsToCancelledRegardlessOfDeadline() {
-        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        // Past the 24h deadline — a student-initiated cancel() would fail, but a workshop
-        // cancellation is system-initiated and must always succeed.
-        Instant flipAt = DEADLINE.plusSeconds(60);
-
-        registration.cancelOnWorkshopCancelled(flipAt);
-
-        assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
-        assertThat(registration.cancelledAt()).isEqualTo(flipAt);
-
-        assertThat(registration.recordedEvents())
-                .hasSize(2)
-                .hasExactlyElementsOfTypes(RegistrationCreated.class, RegistrationCancelled.class);
-
-        RegistrationCancelled event = (RegistrationCancelled) registration.recordedEvents().get(1);
-        assertThat(event.workshopId()).isEqualTo(WORKSHOP_ID);
-        assertThat(event.studentId()).isEqualTo(STUDENT);
-    }
-
-    @Test
-    void cancelOnWorkshopCancelled_afterWorkshopStarted_stillSucceeds() {
-        // A cancelled workshop has no seats left regardless of when the flip happens.
-        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-
-        registration.cancelOnWorkshopCancelled(START.plusSeconds(60));
-
-        assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
-    }
-
-    @Test
-    void cancelOnWorkshopCancelled_throwsWhenNotRegistered() {
-        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        registration.cancelOnWorkshopCancelled(NOW);
-
-        assertThatThrownBy(() -> registration.cancelOnWorkshopCancelled(NOW))
-                .isInstanceOf(RegistrationDomainException.class);
-    }
-
-    @Test
-    void cancelOnWorkshopCancelled_rejectsNullNow() {
-        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-
-        assertThatThrownBy(() -> registration.cancelOnWorkshopCancelled(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
     // ----------------------------------------------------------------
     // refundBySystem
     // ----------------------------------------------------------------
@@ -393,6 +345,15 @@ class RegistrationTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void grantGracePeriod_throwsWhenNotRegistered() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        registration.cancel(DEADLINE.minusSeconds(1));
+
+        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, NOW))
+                .isInstanceOf(RegistrationDomainException.class);
     }
 
     // ----------------------------------------------------------------
