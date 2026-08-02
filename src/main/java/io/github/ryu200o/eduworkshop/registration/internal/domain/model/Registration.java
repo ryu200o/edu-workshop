@@ -152,19 +152,23 @@ public class Registration {
         record(new RegistrationCancelled(id, workshopReference.workshopId(), studentId, updatedAt));
     }
 
-    /**
+/**
      * Synchronizes the {@code startTime} snapshot after a reschedule, and grants the 12-hour urgent
-     * cancellation grace window <em>only when the reschedule is urgent</em>, i.e. the new start time
-     * is less than {@link #GRACE_PERIOD} (12h) away from the moment the reschedule occurred
-     * ({@code newStartTime − rescheduledAt < 12h}).
+     * cancellation grace window <em>only when the reschedule lands in the danger zone</em>: the new
+     * start time is between 24 h and 36 h away from the reschedule moment
+     * ({@code 24h ≤ newStartTime − rescheduledAt < 36h}).
      *
-     * <p>An urgent reschedule pushes the start time close enough that the standard 24-hour cancellation
-     * deadline is threatened, so the student gets a guaranteed 12h window to cancel freely. A non-urgent
-     * reschedule (e.g. rescheduled days in advance) needs no such bonus — the regular deadline applies —
-     * so any previously granted {@code gracePeriodUntil} is cleared back to {@code null}.</p>
+     * <p>Why this range: the workshop module enforces {@code rescheduledAt ≤ newStartTime − 24h}
+     * (the admin can only reschedule with ≥ 24 h runway). Within that constraint the student's
+     * standard cancellation window after the reschedule is {@code (newStartTime − 24h) − rescheduledAt}
+     * hours. When that window is less than 12 h (i.e. the gap is under 36 h) the student would not
+     * have enough time to cancel under the normal 24-hour deadline, so we compensate by granting a
+     * 12 h bonus window. A non-danger reschedule (≥ 36 h) already gives the student ≥ 12 h to
+     * cancel under the standard deadline, so no bonus is needed and any previously granted
+     * {@code gracePeriodUntil} is cleared back to {@code null}.
      *
-     * <p>The {@code startTime} snapshot is refreshed to {@code newStartTime} in both cases. Only a
-     * granted grace window records a domain event.</p>
+     * <p>The {@code startTime} snapshot is refreshed to {@code newStartTime} in both branches. Only
+     * a granted grace window records a domain event.</p>
      *
      * @param rescheduledAt the moment the reschedule occurred ({@code event.occurredAt()})
      * @param newStartTime  the rescheduled workshop start time
@@ -178,10 +182,15 @@ public class Registration {
 
         this.workshopReference = WorkshopReference.of(workshopReference.workshopId(), newStartTime);
 
-        boolean urgentReschedule = rescheduledAt.plus(GRACE_PERIOD).isAfter(newStartTime);
-        this.gracePeriodUntil = urgentReschedule ? rescheduledAt.plus(GRACE_PERIOD) : null;
+        // Danger zone: 24h ≤ gap < 36h — student has <12h to cancel under the normal deadline.
+        Instant earliestPossibleStart = rescheduledAt.plus(CANCELLATION_DEADLINE);       // +24h
+        Instant graceCutoff = rescheduledAt.plus(CANCELLATION_DEADLINE).plus(GRACE_PERIOD); // +36h
+        boolean dangerZone = !newStartTime.isBefore(earliestPossibleStart)
+                && newStartTime.isBefore(graceCutoff);
 
-        if (urgentReschedule) {
+        this.gracePeriodUntil = dangerZone ? rescheduledAt.plus(GRACE_PERIOD) : null;
+
+        if (dangerZone) {
             record(new RegistrationGracePeriodGranted(id, gracePeriodUntil, updatedAt));
         }
         this.touch(now);

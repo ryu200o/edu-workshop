@@ -130,12 +130,12 @@ class RegistrationTest {
     }
 
     @Test
-    void cancel_pastDeadline_withUrgentGrace_success() {
+    void cancel_pastDeadline_withDangerZoneGrace_success() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        // Urgent reschedule: new start is 6h after the reschedule happened (6h < 12h) → 12h grace window opens.
-        Instant rescheduledAt = START.minus(java.time.Duration.ofHours(6));
+        // Danger zone: gap = 30h (24h ≤ 30h < 36h) → student has only 6h under standard 24h deadline → 12h grace granted.
+        Instant rescheduledAt = START.minus(java.time.Duration.ofHours(30));
         registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
-        // Cancel past the standard 24h deadline but within the freshly opened grace window (and before start).
+        // Cancel past the standard deadline but within the 12h grace window.
         Instant cancelAt = rescheduledAt.plusSeconds(60);
         assertThat(cancelAt).isBefore(START);
 
@@ -145,12 +145,11 @@ class RegistrationTest {
     }
 
     @Test
-    void cancel_pastDeadline_noUrgentGrace_throwsException() {
+    void cancel_pastDeadline_noDangerGrace_throwsException() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        // Non-urgent reschedule (new start 2 days out → 24h deadline already covers it) grants NO grace window.
+        // No danger zone: gap = 48h (≥ 36h) → student already has 24h under standard deadline → NO grace.
         Instant rescheduledAt = START.minus(java.time.Duration.ofHours(48));
         registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
-        // Cancelling just past the standard 24h deadline with no grace window → rejected.
         Instant cancelAt = START.minus(java.time.Duration.ofHours(23));
         assertThat(registration.gracePeriodUntil()).isNull();
 
@@ -161,8 +160,8 @@ class RegistrationTest {
     @Test
     void cancel_afterWorkshopStarted_evenWithinGracePeriod_throwsException() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        // Urgent reschedule (start 2h after reschedule) → grace window open, but workshop has already started.
-        Instant rescheduledAt = START.minus(java.time.Duration.ofHours(2));
+        // Danger zone (30h gap) → grace window open, but workshop has already started.
+        Instant rescheduledAt = START.minus(java.time.Duration.ofHours(30));
         registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
 
         assertThatThrownBy(() -> registration.cancel(START.plusSeconds(1)))
@@ -302,10 +301,10 @@ class RegistrationTest {
     // ----------------------------------------------------------------
 
     @Test
-    void grantGracePeriod_urgentReschedule_grantsGraceAndUpdatesSnapshot() {
+    void grantGracePeriod_dangerZone_grantsGraceAndUpdatesSnapshot() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        // Urgent: new start 6h after reschedule (6h < 12h) → grants 12h grace window.
-        Instant rescheduledAt = START.minus(java.time.Duration.ofHours(6));
+        // Danger zone: gap = 30h (24h ≤ 30h < 36h) → grants 12h grace window.
+        Instant rescheduledAt = START.minus(java.time.Duration.ofHours(30));
         Instant newStart = START;
 
         registration.grantGracePeriod(rescheduledAt, newStart, rescheduledAt.plusSeconds(1));
@@ -325,36 +324,38 @@ class RegistrationTest {
     }
 
     @Test
-    void grantGracePeriod_nonUrgentReschedule_clearsGrace() {
+    void grantGracePeriod_nonDangerZone_clearsGrace() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        // First an urgent reschedule grants a 12h grace window.
-        Instant firstReschedule = START.minus(java.time.Duration.ofHours(6));
+        // First reschedule in danger zone → grants grace.
+        Instant firstReschedule = START.minus(java.time.Duration.ofHours(30));
         registration.grantGracePeriod(firstReschedule, START, firstReschedule);
         assertThat(registration.gracePeriodUntil()).isNotNull();
         registration.clearDomainEvents();
 
-        // Then a non-urgent reschedule (new start 2 days out, 24h deadline suffices) clears the window.
+        // Second reschedule outside danger zone (gap = 48h ≥ 36h) → clears the window.
         Instant secondReschedule = firstReschedule.plusSeconds(60);
-        Instant newStart = START.plus(java.time.Duration.ofHours(48));
-        registration.grantGracePeriod(secondReschedule, newStart, secondReschedule);
+        Instant newStart2 = secondReschedule.plus(java.time.Duration.ofHours(48));
+        registration.grantGracePeriod(secondReschedule, newStart2, secondReschedule);
 
         assertThat(registration.gracePeriodUntil()).isNull();
-        assertThat(registration.workshopReference().startTime()).isEqualTo(newStart);
+        assertThat(registration.workshopReference().startTime()).isEqualTo(newStart2);
         assertThat(registration.recordedEvents()).isEmpty();
     }
 
     @Test
-    void grantGracePeriod_repeatedUrgentReschedule_extendsWindow() {
+    void grantGracePeriod_repeatedDangerZone_extendsWindow() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
-        Instant firstReschedule = START.minus(java.time.Duration.ofHours(6));
+        Instant firstReschedule = START.minus(java.time.Duration.ofHours(30));
         registration.grantGracePeriod(firstReschedule, START, firstReschedule);
         registration.clearDomainEvents();
 
         Instant secondReschedule = firstReschedule.plusSeconds(60);
-        registration.grantGracePeriod(secondReschedule, START.plusSeconds(100), secondReschedule);
+        // Second reschedule also in danger zone (gap to new start = 30h - 60s ≈ 29.99h).
+        Instant newStart2 = secondReschedule.plus(java.time.Duration.ofHours(30));
+        registration.grantGracePeriod(secondReschedule, newStart2, secondReschedule);
 
         assertThat(registration.gracePeriodUntil()).isEqualTo(secondReschedule.plus(Registration.GRACE_PERIOD));
-        assertThat(registration.workshopReference().startTime()).isEqualTo(START.plusSeconds(100));
+        assertThat(registration.workshopReference().startTime()).isEqualTo(newStart2);
     }
 
     @Test

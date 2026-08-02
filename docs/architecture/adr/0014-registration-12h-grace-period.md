@@ -48,15 +48,15 @@ Trong quá trình vận hành hệ thống **EduWorkshop**, hai lỗ hổng nghi
 
 * Bổ sung thuộc tính `gracePeriodUntil` (`Instant`, nullable) vào Aggregate Root `Registration`.
 * Khi nhận `WorkshopRescheduledIntegrationEvent`, Handler kích hoạt `grantGracePeriod(rescheduledAt, newStartTime, now)`.
-* **Grace Period chỉ được cấp khi Reschedule khẩn cấp (Urgent)**: giờ học mới đến trước 12 giờ kể từ thời điểm Reschedule diễn ra:
+* **Grace Period chỉ được cấp khi Reschedule rơi vào vùng nguy hiểm (Danger Zone)**: giờ học mới nằm trong khoảng từ 24h đến dưới 36h kể từ lúc Reschedule — tức là học viên chỉ còn dưới 12h để hủy vé theo deadline chuẩn 24h:
 
-$$\text{Urgent} = \big( \text{newStartTime} - \text{rescheduledAt} < 12\text{ Hours} \big)$$
+$$\text{Danger Zone} = \Big( 24\text{h} \le \text{newStartTime} - \text{rescheduledAt} < 36\text{h} \Big)$$
 
-Nếu khẩn cấp ($\text{Urgent} = true$):
+Ràng buộc Workshop: admin chỉ được phép Reschedule khi còn ≥ 24h trước giờ G (deadline reschedule). Trong vùng nguy hiểm, học viên bị dồn vào thế không còn đủ 12h hủy vé theo chuẩn → cấp 12h bonus window:
 
 $$\text{gracePeriodUntil} = \text{rescheduledAt} + 12\text{ Hours}$$
 
-Ngược lại (Reschedule xa, ví dụ vài ngày — deadline hủy 24h chuẩn đã đủ đảm bảo quyền lợi), **không cấp** cửa sổ grace: $\text{gracePeriodUntil}$ được đưa về `null`.
+Ngoài vùng nguy hiểm (≥ 36h), học viên đã có ≥ 12h hủy vé theo deadline chuẩn → **không cấp** cửa sổ grace: $\text{gracePeriodUntil}$ được đưa về `null`.
 
 Đồng thời cập nhật snapshot `workshopStartTime = newStartTime` (trong cả hai nhánh).
 * Mở rộng quy tắc Guard Check trong `Registration.cancel(Instant now)`:
@@ -65,7 +65,7 @@ $$\text{CanCancel} = (\text{now} < \text{workshopStartTime}) \quad \land \quad \
 
 * **Invariants bất biến**:
 1. Nếu $\text{now} \ge \text{workshopStartTime}$, lệnh hủy **luôn bị từ chối** (`CancellationDeadlineExceededException`), bất kể còn trong Grace Period hay không.
-2. Nếu bài học bị Reschedule lần 2 **khẩn cấp**, `gracePeriodUntil` sẽ được gia hạn thành $\text{newRescheduledAt} + 12\text{h}$; nếu Reschedule không khẩn cấp, `gracePeriodUntil` được đưa về `null`.
+2. Nếu bài học bị Reschedule lần 2 **vào vùng nguy hiểm**, `gracePeriodUntil` sẽ được gia hạn thành $\text{newRescheduledAt} + 12\text{h}$; nếu Reschedule ngoài vùng nguy hiểm, `gracePeriodUntil` được đưa về `null`.
 
 
 
@@ -94,7 +94,7 @@ $$\text{CanCancel} = (\text{now} < \text{workshopStartTime}) \quad \land \quad \
 ### Positive
 
 * **Báo cáo sạch (Clean Analytics)**: Phân định tuyệt đối giữa User Churn (`CANCELLED`) và System Refund (`REFUNDED`).
-* **Trải nghiệm khách hàng công bằng**: Khi Ban tổ chức dời lịch gấp (giờ mới trong vòng 12h), học viên luôn có tối thiểu 12 giờ để phản ứng hủy vé; khi dời xa, deadline hủy 24h chuẩn đã đảm bảo quyền lợi, nên không cấp cửa sổ dư thừa.
+* **Trải nghiệm khách hàng công bằng**: Khi Reschedule rơi vào vùng nguy hiểm (gap < 36h), học viên luôn có tối thiểu 12 giờ để phản ứng hủy vé; khi Reschedule xa (≥ 36h), deadline hủy 24h chuẩn đã đảm bảo quyền lợi, nên không cấp cửa sổ dư thừa.
 * **Hiệu năng hệ thống cao**: Áp dụng 3-Phase Execution và JDBC Batching giúp Event Listener xử lý hàng ngàn bản ghi `Registration` trong 1 Database Roundtrip.
 
 ### Negative / Trade-offs
