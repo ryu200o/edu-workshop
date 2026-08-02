@@ -74,8 +74,8 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
             // Race-proof gate (rào lần 2): the DB unique index is the authoritative guard against
             // concurrent duplicate registrations. The handler's read is only fail-fast UX (rào lần 1).
             throw new DuplicateRegistrationException(
-                    registrations.get(0).workshopReference().workshopId(),
-                    registrations.get(0).studentId().value());
+                    registrations.getFirst().workshopReference().workshopId(),
+                    registrations.getFirst().studentId().value());
         }
     }
 
