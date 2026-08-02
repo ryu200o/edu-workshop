@@ -9,10 +9,13 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PublishWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.RescheduleWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UnplanWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopInfoCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopScheduleCommand;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -87,11 +90,27 @@ class WorkshopCommandController {
         return ResponseEntity.ok(result);
     }
 
-    @PostMapping("/{id}/reschedule")
+@PostMapping("/{id}/reschedule")
     ResponseEntity<RescheduleWorkshopCommand.Result> reschedule(@PathVariable UUID id,
-                                                                @RequestBody RescheduleWorkshopRequest request) {
+                                                                 @RequestBody RescheduleWorkshopRequest request) {
         var command = new RescheduleWorkshopCommand(id, request.newStartTime(), request.newEndTime());
         RescheduleWorkshopCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PatchMapping("/{id}/info")
+    ResponseEntity<UpdateWorkshopInfoCommand.Result> updateInfo(@PathVariable UUID id,
+                                                                       @RequestBody UpdateWorkshopInfoRequest request) {
+        var command = new UpdateWorkshopInfoCommand(id, request.newTitle(), request.newDescription());
+        UpdateWorkshopInfoCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PatchMapping("/{id}/schedule")
+    ResponseEntity<UpdateWorkshopScheduleCommand.Result> updateSchedule(@PathVariable UUID id,
+                                                                               @RequestBody UpdateWorkshopScheduleRequest request) {
+        var command = new UpdateWorkshopScheduleCommand(id, request.newStartTime(), request.newEndTime());
+        UpdateWorkshopScheduleCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
 
@@ -120,5 +139,11 @@ class WorkshopCommandController {
     }
 
     record RescheduleWorkshopRequest(Instant newStartTime, Instant newEndTime) {
+    }
+
+    record UpdateWorkshopInfoRequest(String newTitle, String newDescription) {
+    }
+
+    record UpdateWorkshopScheduleRequest(Instant newStartTime, Instant newEndTime) {
     }
 }
