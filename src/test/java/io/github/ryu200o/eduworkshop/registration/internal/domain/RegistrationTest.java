@@ -8,6 +8,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Workshop
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationCancelled;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationCreated;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationReactivated;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationRefunded;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.CancellationDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.RegistrationDomainException;
 
@@ -171,6 +172,60 @@ class RegistrationTest {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
 
         assertThatThrownBy(() -> registration.cancelOnWorkshopCancelled(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // refundBySystem
+    // ----------------------------------------------------------------
+
+    @Test
+    void refundBySystem_REGISTERED_to_REFUNDED() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+
+        registration.refundBySystem(NOW);
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.REFUNDED);
+        assertThat(registration.cancelledAt()).isEqualTo(NOW);
+
+        assertThat(registration.recordedEvents())
+                .hasSize(2)
+                .hasExactlyElementsOfTypes(RegistrationCreated.class, RegistrationRefunded.class);
+
+        RegistrationRefunded event = (RegistrationRefunded) registration.recordedEvents().get(1);
+        assertThat(event.workshopId()).isEqualTo(WORKSHOP_ID);
+        assertThat(event.studentId()).isEqualTo(STUDENT);
+    }
+
+    @Test
+    void refundBySystem_idempotent_whenAlreadyRefunded() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        registration.refundBySystem(NOW);
+        registration.clearDomainEvents();
+
+        registration.refundBySystem(NOW.plusSeconds(60));
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.REFUNDED);
+        assertThat(registration.recordedEvents()).isEmpty();
+    }
+
+    @Test
+    void refundBySystem_idempotent_whenAlreadyCancelled() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        registration.cancel(DEADLINE.minusSeconds(1));
+        registration.clearDomainEvents();
+
+        registration.refundBySystem(NOW);
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
+        assertThat(registration.recordedEvents()).isEmpty();
+    }
+
+    @Test
+    void refundBySystem_rejectsNullNow() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+
+        assertThatThrownBy(() -> registration.refundBySystem(null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

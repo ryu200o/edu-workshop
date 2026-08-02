@@ -19,12 +19,12 @@ import java.util.List;
 
 /**
  * Consumes {@link WorkshopCancelledIntegrationEvent} (delivered via the transactional outbox) and
- * flips every active ({@code REGISTERED}) seat for the cancelled workshop to {@code CANCELLED}.
+ * flips every active ({@code REGISTERED}) seat for the cancelled workshop to {@code REFUNDED}.
  *
  * <p>Cross-module collaboration per ADR 0010 / ADR 0011: the Registration module reacts to the
  * Workshop module's integration event — never a direct call and never a cross-module JOIN. Because
  * the workshop is cancelled, the flip bypasses the 24-hour deadline (system-initiated, see
- * {@link Registration#cancelOnWorkshopCancelled(Instant)}).</p>
+ * {@link Registration#refundBySystem(Instant)}).</p>
  *
  * <p>Runs {@code AFTER_COMMIT} in a new transaction ({@code REQUIRES_NEW}) so a failure here never
  * rolls back the business transaction; the outbox guarantees durable (re)delivery of the event.</p>
@@ -54,11 +54,11 @@ public class WorkshopCancelledEventHandler {
                 .filter(r -> r.state() == RegistrationState.REGISTERED)
                 .toList();
 
-        log.info("Workshop {} cancelled — flipping {} active registration(s) to CANCELLED",
+        log.info("Workshop {} cancelled — refunding {} active registration(s) to REFUNDED",
                 event.workshopId(), active.size());
 
         for (Registration registration : active) {
-            registration.cancelOnWorkshopCancelled(now);
+            registration.refundBySystem(now);
             registrationRepository.save(registration);
             registrationDomainEventPublisher.publish(registration.recordedEvents());
             registration.clearDomainEvents();

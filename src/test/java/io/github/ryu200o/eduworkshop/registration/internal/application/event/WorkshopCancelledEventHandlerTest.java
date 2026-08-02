@@ -62,7 +62,7 @@ class WorkshopCancelledEventHandlerTest {
     }
 
     @Test
-    void handle_flipsAllActiveSeatsToCancelledRegardlessOfDeadline() {
+    void handle_flipsActiveSeatsToRefundedRegardlessOfDeadline() {
         UUID workshop = UUID.randomUUID();
         save(newRegistration(workshop));
         save(newRegistration(workshop));
@@ -73,9 +73,10 @@ class WorkshopCancelledEventHandlerTest {
 
         handler.handle(new WorkshopCancelledIntegrationEvent(workshop, NOW));
 
-        assertThat(registrationRepository.loadAllByWorkshop(workshop))
-                .allMatch(r -> r.state() == RegistrationState.CANCELLED)
-                .hasSize(3);
+        var all = registrationRepository.loadAllByWorkshop(workshop);
+        assertThat(all).hasSize(3);
+        assertThat(all.stream().filter(r -> r.state() == RegistrationState.REFUNDED)).hasSize(2);
+        assertThat(all.stream().filter(r -> r.state() == RegistrationState.CANCELLED)).hasSize(1);
     }
 
     @Test
