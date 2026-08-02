@@ -8,10 +8,12 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopStat
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopInformationUpdated;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRescheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduleUpdated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
@@ -21,6 +23,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.Wo
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopTitleLockedException;
 
 import org.junit.jupiter.api.Test;
 
@@ -548,6 +551,181 @@ class WorkshopTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> workshop.reschedule(newStart, newStart, null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // updateInformation
+    // ----------------------------------------------------------------
+
+    @Test
+    void updateInformation_draft_allowsTitleAndDescriptionChange() {
+        Workshop workshop = createDraft();
+        WorkshopTitle newTitle = WorkshopTitle.of("Advanced Spring Boot");
+        WorkshopDescription newDesc = WorkshopDescription.of("Deep dive into Modulith.");
+        Instant updatedAt = NOW.plusSeconds(1);
+
+        workshop.updateInformation(newTitle, newDesc, 0, updatedAt);
+
+        assertThat(workshop.title().value()).isEqualTo("Advanced Spring Boot");
+        assertThat(workshop.description().value()).isEqualTo("Deep dive into Modulith.");
+        assertThat(workshop.updatedAt()).isEqualTo(updatedAt);
+        assertThat(workshop.recordedEvents())
+                .hasSize(2)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopInformationUpdated.class);
+
+        WorkshopInformationUpdated event = (WorkshopInformationUpdated) workshop.recordedEvents().get(1);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.newTitle()).isEqualTo("Advanced Spring Boot");
+        assertThat(event.newDescription()).isEqualTo("Deep dive into Modulith.");
+    }
+
+    @Test
+    void updateInformation_planned_allowsTitleAndDescriptionChange() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);
+        WorkshopTitle newTitle = WorkshopTitle.of("Advanced Spring Boot");
+        WorkshopDescription newDesc = WorkshopDescription.of("Deep dive into Modulith.");
+        Instant updatedAt = NOW.plusSeconds(1);
+
+        workshop.updateInformation(newTitle, newDesc, 0, updatedAt);
+
+        assertThat(workshop.title().value()).isEqualTo("Advanced Spring Boot");
+        assertThat(workshop.description().value()).isEqualTo("Deep dive into Modulith.");
+    }
+
+    @Test
+    void updateInformation_published_noRegistrations_allowsTitleChange() {
+        Workshop workshop = createPublished();
+        WorkshopTitle newTitle = WorkshopTitle.of("Advanced Spring Boot");
+        Instant updatedAt = NOW.plusSeconds(1);
+
+        workshop.updateInformation(newTitle, description(), 0, updatedAt);
+
+        assertThat(workshop.title().value()).isEqualTo("Advanced Spring Boot");
+        assertThat(workshop.description().value()).isEqualTo("Hands-on intro to Spring Modulith.");
+    }
+
+    @Test
+    void updateInformation_published_withRegistrations_locksTitle() {
+        Workshop workshop = createPublished();
+        WorkshopTitle newTitle = WorkshopTitle.of("Advanced Spring Boot");
+
+        assertThatThrownBy(() -> workshop.updateInformation(newTitle, description(), 1, NOW))
+                .isInstanceOf(WorkshopTitleLockedException.class)
+                .satisfies(e -> {
+                    WorkshopTitleLockedException ex = (WorkshopTitleLockedException) e;
+                    assertThat(ex.getWorkshopId()).isEqualTo(workshop.id());
+                    assertThat(ex.getActiveRegistrations()).isEqualTo(1);
+                });
+    }
+
+    @Test
+    void updateInformation_published_withRegistrations_allowsDescriptionChange() {
+        Workshop workshop = createPublished();
+        WorkshopDescription newDesc = WorkshopDescription.of("Updated syllabus and materials.");
+        Instant updatedAt = NOW.plusSeconds(1);
+
+        workshop.updateInformation(title(), newDesc, 5, updatedAt);
+
+        assertThat(workshop.description().value()).isEqualTo("Updated syllabus and materials.");
+        assertThat(workshop.title().value()).isEqualTo("Spring Boot Workshop");
+    }
+
+    @Test
+    void updateInformation_cancelled_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.cancel(NOW.plusSeconds(1));
+
+        assertThatThrownBy(() -> workshop.updateInformation(title(), description(), 0, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // updateSchedule
+    // ----------------------------------------------------------------
+
+    @Test
+    void updateSchedule_draft_validRange_updatesTimes() {
+        Workshop workshop = createDraft();
+        Instant newStart = START.plus(Duration.ofDays(7));
+        Instant newEnd = newStart.plusSeconds(7200);
+        Instant updatedAt = NOW.plusSeconds(1);
+
+        workshop.updateSchedule(newStart, newEnd, updatedAt);
+
+        assertThat(workshop.startTime()).isEqualTo(newStart);
+        assertThat(workshop.endTime()).isEqualTo(newEnd);
+        assertThat(workshop.updatedAt()).isEqualTo(updatedAt);
+        assertThat(workshop.recordedEvents())
+                .hasSize(2)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopScheduleUpdated.class);
+
+        WorkshopScheduleUpdated event = (WorkshopScheduleUpdated) workshop.recordedEvents().get(1);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.newStartTime()).isEqualTo(newStart);
+        assertThat(event.newEndTime()).isEqualTo(newEnd);
+    }
+
+    @Test
+    void updateSchedule_planned_validRange_updatesTimes() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);
+        Instant newStart = START.plus(Duration.ofDays(7));
+        Instant newEnd = newStart.plusSeconds(7200);
+        Instant updatedAt = NOW.plusSeconds(1);
+
+        workshop.updateSchedule(newStart, newEnd, updatedAt);
+
+        assertThat(workshop.startTime()).isEqualTo(newStart);
+        assertThat(workshop.endTime()).isEqualTo(newEnd);
+        assertThat(workshop.roomReference()).isEqualTo(ROOM);
+    }
+
+    @Test
+    void updateSchedule_published_isRejected() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(7));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        assertThatThrownBy(() -> workshop.updateSchedule(newStart, newEnd, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PUBLISHED);
+                });
+    }
+
+    @Test
+    void updateSchedule_cancelled_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.cancel(NOW.plusSeconds(1));
+        Instant newStart = START.plus(Duration.ofDays(7));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        assertThatThrownBy(() -> workshop.updateSchedule(newStart, newEnd, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    @Test
+    void updateSchedule_rejectsEndNotAfterStart() {
+        Workshop workshop = createDraft();
+        Instant newStart = START.plus(Duration.ofDays(7));
+        Instant newEnd = newStart.minusSeconds(1);
+
+        assertThatThrownBy(() -> workshop.updateSchedule(newStart, newEnd, NOW))
+                .isInstanceOf(InvalidWorkshopTimeRangeException.class)
+                .hasMessageContaining("after newStartTime");
+    }
+
+    @Test
+    void updateSchedule_rejectsStartNotInFuture() {
+        Workshop workshop = createDraft();
+        Instant newStart = NOW.minusSeconds(1);
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        assertThatThrownBy(() -> workshop.updateSchedule(newStart, newEnd, NOW))
+                .isInstanceOf(InvalidWorkshopTimeRangeException.class)
+                .hasMessageContaining("in the future");
     }
 
     // ----------------------------------------------------------------
