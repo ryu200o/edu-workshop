@@ -73,10 +73,10 @@ class WorkshopCancelledEventHandlerTest {
 
         handler.handle(new WorkshopCancelledIntegrationEvent(workshop, NOW));
 
-        var all = registrationRepository.loadAllByWorkshop(workshop);
-        assertThat(all).hasSize(3);
-        assertThat(all.stream().filter(r -> r.state() == RegistrationState.REFUNDED)).hasSize(2);
-        assertThat(all.stream().filter(r -> r.state() == RegistrationState.CANCELLED)).hasSize(1);
+        assertThat(registrationRepository.loadAllByWorkshopIdAndState(workshop, RegistrationState.REFUNDED))
+                .hasSize(2);
+        assertThat(registrationRepository.loadAllByWorkshopIdAndState(workshop, RegistrationState.CANCELLED))
+                .hasSize(1);
     }
 
     @Test
@@ -85,6 +85,7 @@ class WorkshopCancelledEventHandlerTest {
 
         handler.handle(new WorkshopCancelledIntegrationEvent(workshop, NOW));
 
-        assertThat(registrationRepository.loadAllByWorkshop(workshop)).isEmpty();
+        assertThat(registrationRepository.loadAllByWorkshopIdAndState(workshop, RegistrationState.REFUNDED))
+                .isEmpty();
     }
 }

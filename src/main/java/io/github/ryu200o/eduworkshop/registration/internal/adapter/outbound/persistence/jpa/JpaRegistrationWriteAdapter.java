@@ -58,8 +58,8 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
     }
 
     @Override
-    public List<Registration> loadAllByWorkshop(UUID workshopId) {
-        return repository.findByWorkshopId(workshopId).stream()
+    public List<Registration> loadAllByWorkshopIdAndState(UUID workshopId, RegistrationState state) {
+        return repository.findByWorkshopIdAndStatus(workshopId, state.name()).stream()
                 .map(JpaRegistrationWriteAdapter::toRegistration)
                 .toList();
     }

@@ -70,7 +70,7 @@ class JpaRegistrationWriteAdapterTest {
     }
 
     @Test
-    void loadAllByWorkshop_returnsAllRowsForTheWorkshop() {
+    void loadAllByWorkshopIdAndState_returnsFilteredRows() {
         UUID workshopA = UUID.randomUUID();
         UUID workshopB = UUID.randomUUID();
 
@@ -85,9 +85,11 @@ class JpaRegistrationWriteAdapterTest {
         adapter.save(Registration.create(RegistrationId.generate(), StudentId.of(UUID.randomUUID()),
                 WorkshopReference.of(workshopB, START), Instant.parse("2026-08-01T10:00:00Z")));
 
-        assertThat(adapter.loadAllByWorkshop(workshopA)).hasSize(3);
-        assertThat(adapter.loadAllByWorkshop(workshopB)).hasSize(1);
-        assertThat(adapter.loadAllByWorkshop(UUID.randomUUID())).isEmpty();
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopA, RegistrationState.REGISTERED)).hasSize(2);
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopA, RegistrationState.CANCELLED)).hasSize(1);
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopB, RegistrationState.REGISTERED)).hasSize(1);
+        assertThat(adapter.loadAllByWorkshopIdAndState(workshopB, RegistrationState.CANCELLED)).isEmpty();
+        assertThat(adapter.loadAllByWorkshopIdAndState(UUID.randomUUID(), RegistrationState.REGISTERED)).isEmpty();
     }
 
     @Test

@@ -50,9 +50,8 @@ public class WorkshopCancelledEventHandler {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(WorkshopCancelledIntegrationEvent event) {
         Instant now = Instant.now(clock);
-        List<Registration> active = registrationRepository.loadAllByWorkshop(event.workshopId()).stream()
-                .filter(r -> r.state() == RegistrationState.REGISTERED)
-                .toList();
+        List<Registration> active = registrationRepository.loadAllByWorkshopIdAndState(
+                event.workshopId(), RegistrationState.REGISTERED);
 
         log.info("Workshop {} cancelled — refunding {} active registration(s) to REFUNDED",
                 event.workshopId(), active.size());
