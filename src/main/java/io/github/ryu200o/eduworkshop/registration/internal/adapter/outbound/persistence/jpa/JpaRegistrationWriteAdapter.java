@@ -90,6 +90,7 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
                 registration.workshopReference().startTime(),
                 registration.registeredAt(),
                 registration.cancelledAt(),
+                registration.gracePeriodUntil(),
                 registration.createdAt(),
                 registration.updatedAt()
         );
@@ -104,7 +105,8 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
                 entity.getRegisteredAt(),
                 entity.getCancelledAt(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                entity.getGracePeriodUntil()
         );
     }
 }
