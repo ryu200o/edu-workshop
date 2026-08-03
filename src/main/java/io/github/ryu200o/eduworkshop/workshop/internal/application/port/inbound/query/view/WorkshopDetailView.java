@@ -12,6 +12,8 @@ public record WorkshopDetailView(
         String roomLocationSnapshot,
         Integer roomCapacitySnapshot,
         boolean hasRoomWarning,
+        boolean isRoomEvicted,
+        Instant roomEvictedAt,
         Instant startTime,
         Instant endTime,
         int capacity,

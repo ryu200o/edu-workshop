@@ -39,6 +39,12 @@ class WorkshopJpaEntity {
     @Column(name = "has_room_warning", nullable = false)
     private boolean hasRoomWarning;
 
+    @Column(name = "is_room_evicted", nullable = false)
+    private boolean isRoomEvicted;
+
+    @Column(name = "room_evicted_at")
+    private Instant roomEvictedAt;
+
     @Column(name = "start_time", nullable = false)
     private Instant startTime;
 
@@ -123,6 +129,22 @@ class WorkshopJpaEntity {
 
     void setHasRoomWarning(boolean hasRoomWarning) {
         this.hasRoomWarning = hasRoomWarning;
+    }
+
+    public boolean isRoomEvicted() {
+        return isRoomEvicted;
+    }
+
+    void setIsRoomEvicted(boolean isRoomEvicted) {
+        this.isRoomEvicted = isRoomEvicted;
+    }
+
+    public Instant getRoomEvictedAt() {
+        return roomEvictedAt;
+    }
+
+    void setRoomEvictedAt(Instant roomEvictedAt) {
+        this.roomEvictedAt = roomEvictedAt;
     }
 
     public Instant getStartTime() {

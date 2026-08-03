@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop;
 
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRegistrationContract;
-import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactDto;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,5 +29,5 @@ public interface WorkshopExposeAPI {
      * @param startTime the maintenance window start (inclusive lower bound)
      * @param endTime   the maintenance window end (null = indefinite)
      */
-    List<WorkshopImpactDto> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
+    List<WorkshopImpactContract> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
 }

@@ -42,4 +42,15 @@ interface WorkshopJpaRepository extends JpaRepository<WorkshopJpaEntity, UUID> {
                                                    @Param("startTime") Instant startTime,
                                                    @Param("endTime") Instant endTime,
                                                    @Param("excludeWorkshopId") UUID excludeWorkshopId);
+
+    @Query("""
+            SELECT w FROM WorkshopJpaEntity w
+            WHERE w.roomId = :roomId
+              AND w.state = 'PUBLISHED'
+              AND (w.startTime < :endTime OR :endTime IS NULL)
+              AND w.endTime > :startTime
+            """)
+    List<WorkshopJpaEntity> loadPublishedOverlappingWithTimeWindow(@Param("roomId") UUID roomId,
+                                                                  @Param("startTime") Instant startTime,
+                                                                  @Param("endTime") Instant endTime);
 }

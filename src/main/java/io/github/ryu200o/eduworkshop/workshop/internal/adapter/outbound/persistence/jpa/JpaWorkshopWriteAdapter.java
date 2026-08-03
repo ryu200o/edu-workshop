@@ -60,6 +60,13 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
     }
 
     @Override
+    public List<Workshop> loadPublishedOverlappingWithTimeWindow(UUID roomId, Instant startTime, Instant endTime) {
+        return repository.loadPublishedOverlappingWithTimeWindow(roomId, startTime, endTime).stream()
+                .map(this::toWorkshop)
+                .toList();
+    }
+
+    @Override
     public Optional<Workshop> loadById(WorkshopId id) {
         return repository.findById(id.value()).map(this::toWorkshop);
     }
@@ -91,6 +98,8 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
         entity.setRoomLocationSnapshot(workshop.roomReference() != null ? workshop.roomReference().roomLocationSnapshot() : null);
         entity.setRoomCapacitySnapshot(workshop.roomReference() != null ? workshop.roomReference().roomCapacitySnapshot() : null);
         entity.setHasRoomWarning(workshop.hasRoomWarning());
+        entity.setIsRoomEvicted(workshop.isRoomEvicted());
+        entity.setRoomEvictedAt(workshop.roomEvictedAt());
         entity.setStartTime(workshop.startTime());
         entity.setEndTime(workshop.endTime());
         entity.setCapacity(workshop.capacity().value());
@@ -116,6 +125,8 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
                 entity.getEndTime(),
                 WorkshopCapacity.of(entity.getCapacity()),
                 entity.isHasRoomWarning(),
+                entity.isRoomEvicted(),
+                entity.getRoomEvictedAt(),
                 entity.getState(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()

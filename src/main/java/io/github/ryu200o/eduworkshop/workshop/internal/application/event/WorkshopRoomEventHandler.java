@@ -7,9 +7,11 @@ import io.github.ryu200o.eduworkshop.room.contract.RoomRelocatedIntegrationEvent
 import io.github.ryu200o.eduworkshop.room.contract.RoomRenamedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateChangedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateContract;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +22,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -28,10 +31,14 @@ public class WorkshopRoomEventHandler {
     private static final Logger log = LoggerFactory.getLogger(WorkshopRoomEventHandler.class);
 
     private final WorkshopRepository workshopRepository;
+    private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
     private final Clock clock;
 
-    WorkshopRoomEventHandler(WorkshopRepository workshopRepository, Clock clock) {
+    WorkshopRoomEventHandler(WorkshopRepository workshopRepository,
+                             WorkshopDomainEventPublisher workshopDomainEventPublisher,
+                             Clock clock) {
         this.workshopRepository = workshopRepository;
+        this.workshopDomainEventPublisher = workshopDomainEventPublisher;
         this.clock = clock;
     }
 
@@ -44,11 +51,52 @@ public class WorkshopRoomEventHandler {
                 case RoomRelocatedIntegrationEvent e -> handleRelocated(e);
                 case RoomStateChangedIntegrationEvent e -> handleStateChanged(e);
                 case RoomCapacityChangedIntegrationEvent e -> handleCapacityChanged(e);
-                case RoomMaintenanceScheduledIntegrationEvent e -> log.debug("Maintenance scheduled for room {} — auto-flagging deferred to Titik 2", e.roomId());
+                case RoomMaintenanceScheduledIntegrationEvent e -> handleMaintenanceScheduled(e);
             }
         } catch (Exception ex) {
             log.error("Failed to handle Room integration event: {}", event, ex);
         }
+    }
+
+    /**
+     * Auto-flags every PUBLISHED workshop whose time window overlaps the maintenance window with an
+     * eviction notice (Titik 2). The workshop's state is deliberately NOT changed —
+     * {@code Workshop.markRoomEvicted} only sets {@code isRoomEvicted = true} + {@code roomEvictedAt}
+     * (a notice, not a cancellation). Overlap condition:
+     * {@code w.startTime < maintEnd && w.endTime > maintStart}; a null {@code endTime} (indefinite
+     * maintenance) matches every workshop starting after {@code startTime}.
+     *
+     * <p>Follows the 3-Phase Execution Pattern: (1) mutate domain + collect events, (2) batch persist
+     * via {@code saveAll}, (3) batch publish domain events. Early-returns when no PUBLISHED workshop
+     * overlaps.</p>
+     */
+    private void handleMaintenanceScheduled(RoomMaintenanceScheduledIntegrationEvent event) {
+        Instant now = Instant.now(clock);
+        List<Workshop> affected = workshopRepository.loadPublishedOverlappingWithTimeWindow(
+                event.roomId(), event.startTime(), event.endTime());
+
+        if (affected.isEmpty()) {
+            log.debug("No PUBLISHED workshop overlaps maintenance window for room {} — nothing to flag",
+                    event.roomId());
+            return;
+        }
+
+        log.info("Room {} maintenance scheduled {} — flagging {} overlapping PUBLISHED workshop(s)",
+                event.roomId(), event.startTime(), affected.size());
+
+        // 1. Domain State Mutation & Event Collection
+        List<WorkshopDomainEvent> allDomainEvents = new ArrayList<>();
+        for (Workshop workshop : affected) {
+            workshop.markRoomEvicted(now);
+            allDomainEvents.addAll(workshop.recordedEvents());
+            workshop.clearDomainEvents();
+        }
+
+        // 2. Batch Persistence (JDBC batching)
+        workshopRepository.saveAll(affected);
+
+        // 3. Batch Event Publication
+        workshopDomainEventPublisher.publish(allDomainEvents);
     }
 
     private void handleRenamed(RoomRenamedIntegrationEvent event) {

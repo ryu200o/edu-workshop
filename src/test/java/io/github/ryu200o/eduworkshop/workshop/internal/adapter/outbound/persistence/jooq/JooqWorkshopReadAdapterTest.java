@@ -76,8 +76,26 @@ class JooqWorkshopReadAdapterTest {
         assertThat(view.roomId()).isNull();
         assertThat(view.roomNameSnapshot()).isNull();
         assertThat(view.roomLocationSnapshot()).isNull();
+        assertThat(view.isRoomEvicted()).isFalse();
+        assertThat(view.roomEvictedAt()).isNull();
         assertThat(view.createdAt()).isNotNull();
         assertThat(view.updatedAt()).isNotNull();
+    }
+
+    @Test
+    void saveEvictedWorkshop_thenFindById_readsEvictionColumns() {
+        Workshop workshop = newWorkshop();
+        workshop.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        workshop.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        workshop.markRoomEvicted(Instant.parse("2026-09-15T00:00:03Z"));
+        workshopRepository.save(workshop);
+
+        Optional<WorkshopDetailView> found = workshopReader.findById(workshop.id().value());
+
+        assertThat(found).isPresent();
+        assertThat(found.get().isRoomEvicted()).isTrue();
+        assertThat(found.get().roomEvictedAt()).isEqualTo(Instant.parse("2026-09-15T00:00:03Z"));
     }
 
     @Test
