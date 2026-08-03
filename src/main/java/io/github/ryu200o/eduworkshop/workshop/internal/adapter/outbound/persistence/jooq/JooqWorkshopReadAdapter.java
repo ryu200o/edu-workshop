@@ -36,6 +36,8 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                         WORKSHOPS.ROOM_LOCATION_SNAPSHOT,
                         WORKSHOPS.ROOM_CAPACITY_SNAPSHOT,
                         WORKSHOPS.HAS_ROOM_WARNING,
+                        WORKSHOPS.IS_ROOM_EVICTED,
+                        WORKSHOPS.ROOM_EVICTED_AT,
                         WORKSHOPS.START_TIME,
                         WORKSHOPS.END_TIME,
                         WORKSHOPS.CAPACITY,
@@ -55,6 +57,8 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                         WORKSHOPS.TITLE,
                         WORKSHOPS.START_TIME,
                         WORKSHOPS.END_TIME,
+                        WORKSHOPS.IS_ROOM_EVICTED,
+                        WORKSHOPS.ROOM_EVICTED_AT,
                         WORKSHOPS.STATE)
                 .from(WORKSHOPS)
                 .fetch()
@@ -73,6 +77,8 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                         WORKSHOPS.TITLE,
                         WORKSHOPS.START_TIME,
                         WORKSHOPS.END_TIME,
+                        WORKSHOPS.IS_ROOM_EVICTED,
+                        WORKSHOPS.ROOM_EVICTED_AT,
                         WORKSHOPS.STATE)
                 .from(WORKSHOPS)
                 .where(condition)
@@ -90,6 +96,8 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                 record.get(WORKSHOPS.ROOM_LOCATION_SNAPSHOT),
                 record.get(WORKSHOPS.ROOM_CAPACITY_SNAPSHOT),
                 record.get(WORKSHOPS.HAS_ROOM_WARNING) != null && record.get(WORKSHOPS.HAS_ROOM_WARNING),
+                record.get(WORKSHOPS.IS_ROOM_EVICTED) != null && record.get(WORKSHOPS.IS_ROOM_EVICTED),
+                toInstant(record.get(WORKSHOPS.ROOM_EVICTED_AT)),
                 toInstant(record.get(WORKSHOPS.START_TIME)),
                 toInstant(record.get(WORKSHOPS.END_TIME)),
                 record.get(WORKSHOPS.CAPACITY),
@@ -105,6 +113,8 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                 record.get(WORKSHOPS.TITLE),
                 toInstant(record.get(WORKSHOPS.START_TIME)),
                 toInstant(record.get(WORKSHOPS.END_TIME)),
+                record.get(WORKSHOPS.IS_ROOM_EVICTED) != null && record.get(WORKSHOPS.IS_ROOM_EVICTED),
+                toInstant(record.get(WORKSHOPS.ROOM_EVICTED_AT)),
                 record.get(WORKSHOPS.STATE)
         );
     }

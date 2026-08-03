@@ -55,6 +55,30 @@ class JpaWorkshopWriteAdapterTest {
     }
 
     @Test
+    void saveAndLoadById_roundTripsEvictionFlag() {
+        Instant now = Instant.now();
+        WorkshopId id = WorkshopId.generate();
+        Workshop workshop = Workshop.create(
+                id,
+                WorkshopTitle.of("Test Workshop"),
+                WorkshopDescription.of("Test description"),
+                Instant.parse("2026-09-01T09:00:00Z"),
+                Instant.parse("2026-09-01T11:00:00Z"),
+                WorkshopCapacity.of(25),
+                now);
+        workshop.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false, now);
+        workshop.publish(now, 50);
+        Instant evictedAt = now.plusSeconds(1);
+        workshop.markRoomEvicted(evictedAt);
+
+        adapter.save(workshop);
+        Workshop loaded = adapter.loadById(id).orElseThrow();
+
+        assertThat(loaded.isRoomEvicted()).isTrue();
+        assertThat(loaded.roomEvictedAt()).isEqualTo(evictedAt);
+    }
+
+    @Test
     void loadById_absent_returnsEmpty() {
         assertThat(adapter.loadById(WorkshopId.generate())).isEmpty();
     }

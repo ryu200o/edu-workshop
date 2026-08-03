@@ -34,4 +34,13 @@ public interface WorkshopRepository {
      * never loads irrelevant rows.
      */
     List<Workshop> findOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId);
+
+    /**
+     * Loads only the PUBLISHED workshops in the given room whose time window overlaps the given
+     * maintenance window. Overlap condition: {@code w.startTime < maintEnd && w.endTime > maintStart};
+     * when {@code endTime} is null (indefinite maintenance), every workshop starting after
+     * {@code startTime} matches. Used by {@code RoomMaintenanceScheduledEventListener} (Titik 2) to
+     * auto-flag affected workshops with an eviction notice without changing their state.
+     */
+    List<Workshop> loadPublishedOverlappingWithTimeWindow(UUID roomId, Instant startTime, Instant endTime);
 }

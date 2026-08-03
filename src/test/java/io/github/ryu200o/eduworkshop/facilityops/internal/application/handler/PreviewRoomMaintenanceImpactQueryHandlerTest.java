@@ -7,7 +7,7 @@ import io.github.ryu200o.eduworkshop.registration.RegistrationExposeAPI;
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopStateContract;
-import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactDto;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,8 +51,8 @@ class PreviewRoomMaintenanceImpactQueryHandlerTest {
                 Instant.parse("2026-08-01T12:00:00Z"));
     }
 
-    private static WorkshopImpactDto workshop(UUID id, WorkshopStateContract state) {
-        return new WorkshopImpactDto(id, state);
+    private static WorkshopImpactContract workshop(UUID id, WorkshopStateContract state) {
+        return new WorkshopImpactContract(id, state, false, null);
     }
 
     @Test

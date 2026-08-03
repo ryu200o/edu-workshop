@@ -7,7 +7,7 @@ import io.github.ryu200o.eduworkshop.registration.RegistrationExposeAPI;
 import io.github.ryu200o.eduworkshop.room.RoomExposeAPI;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryHandler;
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
-import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactDto;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
 
 import org.springframework.stereotype.Component;
 
@@ -43,14 +43,14 @@ class PreviewRoomMaintenanceImpactQueryHandler
             throw new FacilityRoomNotFoundException(query.roomId());
         }
 
-        List<WorkshopImpactDto> workshops = workshopExposeAPI.findByRoomAndTimeOverlap(
+        List<WorkshopImpactContract> workshops = workshopExposeAPI.findByRoomAndTimeOverlap(
                 query.roomId(), query.startTime(), query.endTime());
 
         int publishedCount = 0;
         int plannedCount = 0;
         List<UUID> publishedIds = new ArrayList<>();
 
-        for (WorkshopImpactDto ws : workshops) {
+        for (WorkshopImpactContract ws : workshops) {
             switch (ws.state()) {
                 case PUBLISHED -> {
                     publishedCount++;

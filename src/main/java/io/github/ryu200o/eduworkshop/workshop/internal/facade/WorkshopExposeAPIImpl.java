@@ -1,7 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.facade;
 
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
-import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactDto;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRegistrationContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopStateContract;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
@@ -34,9 +34,13 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
     }
 
     @Override
-    public List<WorkshopImpactDto> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
+    public List<WorkshopImpactContract> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
         return workshopReader.findByRoomAndTimeOverlap(roomId, startTime, endTime).stream()
-                .map(view -> new WorkshopImpactDto(view.id(), mapState(view.state())))
+                .map(view -> new WorkshopImpactContract(
+                        view.id(),
+                        mapState(view.state()),
+                        view.isRoomEvicted(),
+                        view.roomEvictedAt()))
                 .toList();
     }
 

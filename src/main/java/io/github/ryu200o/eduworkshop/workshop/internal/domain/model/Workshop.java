@@ -10,6 +10,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRescheduled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduleUpdated;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomEvicted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnplanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
@@ -38,7 +39,9 @@ import java.util.List;
  * {@link #reschedule}) are only allowed in {@code PUBLISHED}. A room going {@code DEACTIVATED} returns
  * the workshop to {@code DRAFT} ({@link #returnToDraft}). A {@code PLANNED} workshop that loses its slot
  * to a {@code PUBLISHED} one is evicted back to {@code DRAFT} keeping its room
- * ({@link #evictPlanningOnConflict}).</p>
+ * ({@link #evictPlanningOnConflict}). A {@code PUBLISHED} workshop whose room gets a maintenance
+ * window is flagged with an eviction notice ({@link #markRoomEvicted}) without changing state;
+ * {@link #changeRoom} and {@link #reschedule} auto-reset that notice.</p>
  *
  * <p>Local invariants are enforced here (state transitions, capacity vs room, time-window validity);
  * global / set-based rules (uniqueness of availability, conflict with other PUBLISHED workshops,
@@ -62,6 +65,8 @@ public class Workshop {
     private Instant endTime;
     private WorkshopCapacity capacity;
     private boolean hasRoomWarning;
+    private boolean isRoomEvicted;
+    private Instant roomEvictedAt;
     private WorkshopState state;
     private final Instant createdAt;
     private Instant updatedAt;
@@ -76,6 +81,8 @@ public class Workshop {
                      Instant endTime,
                      WorkshopCapacity capacity,
                      boolean hasRoomWarning,
+                     boolean isRoomEvicted,
+                     Instant roomEvictedAt,
                      WorkshopState state,
                      Instant createdAt,
                      Instant updatedAt) {
@@ -87,6 +94,8 @@ public class Workshop {
         this.endTime = requireNonNull(endTime, "endTime cannot be null");
         this.capacity = requireNonNull(capacity, "capacity cannot be null");
         this.hasRoomWarning = hasRoomWarning;
+        this.isRoomEvicted = isRoomEvicted;
+        this.roomEvictedAt = roomEvictedAt;
         this.state = requireNonNull(state, "WorkshopState cannot be null");
         this.createdAt = requireNonNull(createdAt, "CreatedAt cannot be null");
         this.updatedAt = requireNonNull(updatedAt, "UpdatedAt cannot be null");
@@ -117,7 +126,7 @@ public class Workshop {
         Workshop workshop = new Workshop(
                 id, title, description,
                 null, startTime, endTime, capacity,
-                false, WorkshopState.DRAFT, now, now);
+                false, false, null, WorkshopState.DRAFT, now, now);
         workshop.record(new WorkshopCreated(id.value(), id, startTime, endTime, capacity, now));
         return workshop;
     }
@@ -137,11 +146,13 @@ public class Workshop {
                                        Instant endTime,
                                        WorkshopCapacity capacity,
                                        boolean hasRoomWarning,
+                                       boolean isRoomEvicted,
+                                       Instant roomEvictedAt,
                                        WorkshopState state,
                                        Instant createdAt,
                                        Instant updatedAt) {
         return new Workshop(id, title, description, roomReference, startTime, endTime,
-                capacity, hasRoomWarning, state, createdAt, updatedAt);
+                capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
     }
 
     /**
@@ -259,6 +270,34 @@ public class Workshop {
     }
 
     /**
+     * Flags this workshop with an eviction notice because a room maintenance window now overlaps its
+     * time slot ({@code isRoomEvicted = true}, {@code roomEvictedAt = now}).
+     *
+     * <p>Called by {@code RoomMaintenanceScheduledEventListener} when a maintenance schedule is
+     * created for the workshop's room. The workshop's state is deliberately NOT changed — it stays
+     * {@code PUBLISHED} — this is a notice, not a cancellation (Titik 2). Local guard: only a
+     * {@code PUBLISHED} workshop that is not already flagged can be (re-)flagged. Records a
+     * {@link WorkshopRoomEvicted} domain event (internal; no integration event — YAGNI).</p>
+     *
+     * @param now the current instant, used for {@code roomEvictedAt} and {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
+     */
+    public void markRoomEvicted(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.PUBLISHED, "markRoomEvicted");
+
+        if (this.isRoomEvicted) {
+            return;
+        }
+
+        this.isRoomEvicted = true;
+        this.roomEvictedAt = now;
+        this.touch(now);
+
+        record(new WorkshopRoomEvicted(id, roomReference.roomId(), updatedAt));
+    }
+
+    /**
      * Releases the room and moves the workshop back {@code PLANNED → DRAFT}.
      *
      * <p>Called by the {@code WorkshopRoomEventHandler} when the room is {@code DEACTIVATED}
@@ -327,6 +366,7 @@ public class Workshop {
         }
 
         this.roomReference = newRoomRef;
+        clearRoomEviction();
         this.touch(now);
 
         record(new WorkshopRoomChanged(id, newRoomRef, updatedAt));
@@ -431,6 +471,7 @@ public class Workshop {
         Instant oldEndTime = this.endTime;
         this.startTime = newStartTime;
         this.endTime = newEndTime;
+        clearRoomEviction();
         this.touch(now);
 
         record(new WorkshopRescheduled(id, oldStartTime, oldEndTime, newStartTime, newEndTime, updatedAt));
@@ -566,6 +607,19 @@ public class Workshop {
         this.updatedAt = now;
     }
 
+    /**
+     * Clears the eviction notice ({@code isRoomEvicted = false}, {@code roomEvictedAt = null}).
+     * Called by the self-healing auto-reset rules in {@link #changeRoom} and {@link #reschedule}:
+     * once the workshop is moved to a different room or to a non-overlapping window, the notice no
+     * longer applies. Does not emit a domain event (silent reset).
+     */
+    private void clearRoomEviction() {
+        if (this.isRoomEvicted) {
+            this.isRoomEvicted = false;
+            this.roomEvictedAt = null;
+        }
+    }
+
     private void record(WorkshopDomainEvent event) {
         recordedEvents.add(event);
     }
@@ -604,6 +658,14 @@ public class Workshop {
 
     public boolean hasRoomWarning() {
         return hasRoomWarning;
+    }
+
+    public boolean isRoomEvicted() {
+        return isRoomEvicted;
+    }
+
+    public Instant roomEvictedAt() {
+        return roomEvictedAt;
     }
 
     public WorkshopState state() {

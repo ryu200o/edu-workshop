@@ -16,5 +16,6 @@ public sealed interface WorkshopDomainEvent
                 WorkshopCancelled,
                 WorkshopRescheduled,
                 WorkshopInformationUpdated,
-                WorkshopScheduleUpdated {
+                WorkshopScheduleUpdated,
+                WorkshopRoomEvicted {
 }

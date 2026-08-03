@@ -16,6 +16,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduleUpdated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomEvicted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
@@ -782,6 +783,82 @@ class WorkshopTest {
         assertThat(workshop.state()).isEqualTo(WorkshopState.DRAFT);
         assertThat(workshop.roomReference()).isNull();
         assertThat(workshop.hasRoomWarning()).isFalse();
+    }
+
+    // ----------------------------------------------------------------
+    // markRoomEvicted (Titik 2)
+    // ----------------------------------------------------------------
+
+    @Test
+    void markRoomEvicted_publishedWorkshop_setsFlagAndEmitsEvent() {
+        Workshop workshop = createPublished();
+        Instant evictedAt = NOW.plusSeconds(1);
+
+        workshop.markRoomEvicted(evictedAt);
+
+        assertThat(workshop.isRoomEvicted()).isTrue();
+        assertThat(workshop.roomEvictedAt()).isEqualTo(evictedAt);
+        assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
+        assertThat(workshop.updatedAt()).isEqualTo(evictedAt);
+
+        assertThat(workshop.recordedEvents())
+                .hasSize(4)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class,
+                        WorkshopPublished.class, WorkshopRoomEvicted.class);
+
+        WorkshopRoomEvicted event = (WorkshopRoomEvicted) workshop.recordedEvents().get(3);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.roomId()).isEqualTo(ROOM.roomId());
+        assertThat(event.occurredAt()).isEqualTo(evictedAt);
+    }
+
+    @Test
+    void markRoomEvicted_alreadyEvicted_isIdempotent() {
+        Workshop workshop = createPublished();
+        workshop.markRoomEvicted(NOW.plusSeconds(1));
+        workshop.clearDomainEvents();
+
+        workshop.markRoomEvicted(NOW.plusSeconds(2));
+
+        assertThat(workshop.isRoomEvicted()).isTrue();
+        assertThat(workshop.roomEvictedAt()).isEqualTo(NOW.plusSeconds(1));
+        assertThat(workshop.recordedEvents()).isEmpty();
+    }
+
+    @Test
+    void markRoomEvicted_nonPublished_isRejected() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);
+
+        assertThatThrownBy(() -> workshop.markRoomEvicted(NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    @Test
+    void changeRoom_whenEvicted_clearsEvictionFlag() {
+        Workshop workshop = createPublished();
+        workshop.markRoomEvicted(NOW.plusSeconds(1));
+        RoomReference newRoom = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 50);
+
+        workshop.changeRoom(newRoom, NOW.plusSeconds(2));
+
+        assertThat(workshop.isRoomEvicted()).isFalse();
+        assertThat(workshop.roomEvictedAt()).isNull();
+        assertThat(workshop.roomReference()).isEqualTo(newRoom);
+    }
+
+    @Test
+    void reschedule_whenEvicted_clearsEvictionFlag() {
+        Workshop workshop = createPublished();
+        workshop.markRoomEvicted(NOW.plusSeconds(1));
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        workshop.reschedule(newStart, newEnd, NOW.plusSeconds(2));
+
+        assertThat(workshop.isRoomEvicted()).isFalse();
+        assertThat(workshop.roomEvictedAt()).isNull();
+        assertThat(workshop.startTime()).isEqualTo(newStart);
     }
 
     // ----------------------------------------------------------------
