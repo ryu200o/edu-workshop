@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound;
 
-import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopIntegrationEvent;
 
 /**
  * Outbound port for publishing cross-module integration events emitted by the Workshop module.

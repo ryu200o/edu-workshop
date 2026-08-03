@@ -38,6 +38,11 @@ class JpaRoomWriteAdapter implements RoomRepository {
     }
 
     @Override
+    public Optional<Room> loadByIdWithLock(RoomId id) {
+        return repository.findByIdForUpdate(id.value()).map(JpaRoomWriteAdapter::toRoom);
+    }
+
+    @Override
     public boolean existsByCoordinate(RoomLocation location, RoomCode code) {
         return repository.existsByBuildingAndFloorAndCode(location.building(), location.floor(), code.value());
     }

@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.port.outboun
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,4 +24,16 @@ public interface WorkshopReader {
      * Lists all workshops as lightweight summaries. Returns an empty list when no workshops exist.
      */
     List<WorkshopSummaryView> findAll();
+
+    /**
+     * Finds workshops assigned to a given room whose time window overlaps the specified range.
+     * Overlap condition: {@code wsStart < maintEnd && wsEnd > maintStart}.
+     * If {@code maintEnd} is null (indefinite maintenance), all workshops starting after {@code maintStart} match.
+     *
+     * @param roomId    the room to filter by
+     * @param startTime the maintenance window start (inclusive lower bound)
+     * @param endTime   the maintenance window end (null = indefinite)
+     * @return list of matching workshops as lightweight summaries
+     */
+    List<WorkshopSummaryView> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
 }

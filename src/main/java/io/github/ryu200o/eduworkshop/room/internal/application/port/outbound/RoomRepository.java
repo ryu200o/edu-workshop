@@ -26,6 +26,18 @@ public interface RoomRepository {
     Optional<Room> loadById(RoomId id);
 
     /**
+     * Loads the persisted Room aggregate by id, taking a {@code SELECT ... FOR UPDATE} pessimistic
+     * write lock (ADR 0015). Blocks concurrent transactions that target the same aggregate root so
+     * set-based / temporal-overlap invariants are validated against a consistent snapshot. Returns
+     * empty when absent.
+     *
+     * <p>MUST be used by handlers that validate cross-record invariants (e.g. maintenance-overlap
+     * checks) whose correctness depends on more than one persisted record inside the same
+     * transaction.</p>
+     */
+    Optional<Room> loadByIdWithLock(RoomId id);
+
+    /**
      * {@code true} when another room already occupies the {@code (location, code)} coordinate.
      * Used by handlers for the fast-fail uniqueness check before calling the aggregate.
      */

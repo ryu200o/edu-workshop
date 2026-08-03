@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.workshop.contract.events;
+package io.github.ryu200o.eduworkshop.workshop.contract;
 
 import java.time.Instant;
 import java.util.UUID;

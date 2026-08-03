@@ -7,7 +7,8 @@ public sealed interface RoomIntegrationEvent
         permits RoomRenamedIntegrationEvent,
                 RoomRelocatedIntegrationEvent,
                 RoomCapacityChangedIntegrationEvent,
-                RoomStateChangedIntegrationEvent {
+                RoomStateChangedIntegrationEvent,
+                RoomMaintenanceScheduledIntegrationEvent {
 
     UUID roomId();
 

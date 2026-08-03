@@ -61,6 +61,25 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                 .map(JooqWorkshopReadAdapter::toSummaryView);
     }
 
+    @Override
+    public List<WorkshopSummaryView> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
+        var condition = WORKSHOPS.ROOM_ID.eq(roomId)
+                .and(WORKSHOPS.END_TIME.greaterThan(OffsetDateTime.ofInstant(startTime, java.time.ZoneOffset.UTC)));
+        if (endTime != null) {
+            condition = condition.and(WORKSHOPS.START_TIME.lessThan(OffsetDateTime.ofInstant(endTime, java.time.ZoneOffset.UTC)));
+        }
+        return dsl.select(
+                        WORKSHOPS.ID,
+                        WORKSHOPS.TITLE,
+                        WORKSHOPS.START_TIME,
+                        WORKSHOPS.END_TIME,
+                        WORKSHOPS.STATE)
+                .from(WORKSHOPS)
+                .where(condition)
+                .fetch()
+                .map(JooqWorkshopReadAdapter::toSummaryView);
+    }
+
     private static WorkshopDetailView toDetailView(Record record) {
         return new WorkshopDetailView(
                 record.get(WORKSHOPS.ID),

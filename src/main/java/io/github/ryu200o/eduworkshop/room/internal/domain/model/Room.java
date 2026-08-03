@@ -3,10 +3,12 @@ package io.github.ryu200o.eduworkshop.room.internal.domain.model;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomainEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomMaintenanceScheduled;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.InvalidMaintenanceScheduleException;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -237,6 +239,45 @@ public class Room {
         this.capacity = newCapacity;
         this.updatedAt = now;
         this.recordedEvents.add(new RoomCapacityChanged(id, previousCapacity, newCapacity, this.updatedAt));
+    }
+
+    /**
+     * Schedules a maintenance window for this room. Validates local invariants (reason length,
+     * time validity) and creates a {@link MaintenanceSchedule} entity. The overlap check with
+     * existing schedules is an Application-layer concern (ADR 0005) and must be performed by
+     * the handler before calling this method.
+     *
+     * <p>Records a {@link RoomMaintenanceScheduled} domain event. Does not change the room's
+     * physical {@link RoomState} — scheduling maintenance is a separate concept from the
+     * immediate state transition performed by {@link #placeUnderMaintenance(Instant)}.</p>
+     *
+     * @param id        the schedule identity
+     * @param startTime the maintenance window start
+     * @param endTime   the maintenance window end (null = indefinite)
+     * @param reason    the maintenance reason (must be at least 10 characters)
+     * @param operator  the operator who created this schedule
+     * @param now       the current instant
+     * @return the newly created MaintenanceSchedule entity
+     * @throws IllegalRoomStateException        if the room is {@link RoomState#DEACTIVATED}
+     * @throws InvalidMaintenanceScheduleException if reason is too short or time range is invalid
+     */
+    public MaintenanceSchedule scheduleMaintenance(MaintenanceId id, Instant startTime, Instant endTime,
+                                                    String reason, String operator, Instant now) {
+        requireNonNull(id, "MaintenanceId cannot be null");
+        requireNonNull(startTime, "startTime cannot be null");
+        requireNonNull(reason, "reason cannot be null");
+        requireNonNull(operator, "operator cannot be null");
+        requireNonNull(now, "now cannot be null");
+
+        if (state == RoomState.DEACTIVATED) {
+            throw new IllegalRoomStateException(this.id, state, null,
+                    "A deactivated room cannot have maintenance scheduled; the deactivation is permanent.");
+        }
+
+        MaintenanceSchedule schedule = MaintenanceSchedule.create(id, this.id, startTime, endTime, reason, operator, now);
+        this.recordedEvents.add(new RoomMaintenanceScheduled(
+                schedule.id(), this.id, startTime, endTime, reason, now));
+        return schedule;
     }
 
     private static <T> T requireNonNull(T obj, String message) {

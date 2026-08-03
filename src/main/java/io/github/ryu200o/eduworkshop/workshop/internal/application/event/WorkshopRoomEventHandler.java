@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.event;
 
 import io.github.ryu200o.eduworkshop.room.contract.RoomCapacityChangedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomIntegrationEvent;
+import io.github.ryu200o.eduworkshop.room.contract.RoomMaintenanceScheduledIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomRelocatedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomRenamedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateChangedIntegrationEvent;
@@ -43,6 +44,7 @@ public class WorkshopRoomEventHandler {
                 case RoomRelocatedIntegrationEvent e -> handleRelocated(e);
                 case RoomStateChangedIntegrationEvent e -> handleStateChanged(e);
                 case RoomCapacityChangedIntegrationEvent e -> handleCapacityChanged(e);
+                case RoomMaintenanceScheduledIntegrationEvent e -> log.debug("Maintenance scheduled for room {} — auto-flagging deferred to Titik 2", e.roomId());
             }
         } catch (Exception ex) {
             log.error("Failed to handle Room integration event: {}", event, ex);

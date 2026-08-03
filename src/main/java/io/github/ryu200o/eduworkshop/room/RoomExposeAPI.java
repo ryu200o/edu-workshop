@@ -8,4 +8,10 @@ import java.util.UUID;
 public interface RoomExposeAPI {
 
     Optional<RoomPlanningPermission> checkPlanningPermission(UUID roomId);
+
+    /**
+     * Whether a room with the given id exists. Used by upper-layer modules (e.g. FacilityOps) for
+     * fast existence checks before composing cross-module reads.
+     */
+    boolean existsById(UUID roomId);
 }

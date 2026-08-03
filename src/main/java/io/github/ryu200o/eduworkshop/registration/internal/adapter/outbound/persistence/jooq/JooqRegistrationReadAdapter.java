@@ -6,6 +6,7 @@ import io.github.ryu200o.eduworkshop.registration.jooq.tables.Registrations;
 import org.jooq.DSLContext;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,6 +32,17 @@ class JooqRegistrationReadAdapter implements RegistrationReader {
         return dsl.fetchCount(
                 dsl.selectFrom(REGISTRATIONS)
                         .where(REGISTRATIONS.WORKSHOP_ID.eq(workshopId))
+                        .and(REGISTRATIONS.STATUS.eq("REGISTERED")));
+    }
+
+    @Override
+    public int countActiveByWorkshopIds(List<UUID> workshopIds) {
+        if (workshopIds == null || workshopIds.isEmpty()) {
+            return 0;
+        }
+        return dsl.fetchCount(
+                dsl.selectFrom(REGISTRATIONS)
+                        .where(REGISTRATIONS.WORKSHOP_ID.in(workshopIds))
                         .and(REGISTRATIONS.STATUS.eq("REGISTERED")));
     }
 }

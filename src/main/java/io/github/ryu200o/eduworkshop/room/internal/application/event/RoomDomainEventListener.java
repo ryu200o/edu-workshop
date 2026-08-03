@@ -6,11 +6,13 @@ import io.github.ryu200o.eduworkshop.room.contract.RoomRelocatedIntegrationEvent
 import io.github.ryu200o.eduworkshop.room.contract.RoomRenamedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateChangedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.contract.RoomStateContract;
+import io.github.ryu200o.eduworkshop.room.contract.RoomMaintenanceScheduledIntegrationEvent;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.outbound.RoomIntegrationEventPublisher;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomDomainEvent;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomMaintenanceScheduled;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
@@ -41,6 +43,7 @@ class RoomDomainEventListener {
             case RoomRelocatedEvent e -> map(e);
             case RoomCapacityChanged e -> map(e);
             case RoomStateChanged e -> map(e);
+            case RoomMaintenanceScheduled e -> map(e);
             case RoomCreated e -> null;
         };
         if (integration == null) {
@@ -87,6 +90,17 @@ class RoomDomainEventListener {
                 e.roomId().value(),
                 toContract(e.previousState()),
                 toContract(e.newState()),
+                e.occurredAt()
+        );
+    }
+
+    private static RoomMaintenanceScheduledIntegrationEvent map(RoomMaintenanceScheduled e) {
+        return new RoomMaintenanceScheduledIntegrationEvent(
+                e.maintenanceId().value(),
+                e.roomId().value(),
+                e.startTime(),
+                e.endTime(),
+                e.reason(),
                 e.occurredAt()
         );
     }

@@ -1,8 +1,8 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.event;
 
-import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopCancelledIntegrationEvent;
-import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopIntegrationEvent;
-import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopRescheduledIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopCancelledIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRescheduledIntegrationEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopIntegrationEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;

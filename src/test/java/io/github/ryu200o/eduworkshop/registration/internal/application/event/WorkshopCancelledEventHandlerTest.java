@@ -6,7 +6,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registra
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationState;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.StudentId;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.WorkshopReference;
-import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopCancelledIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopCancelledIntegrationEvent;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomNot
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.RoomPersistenceException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomCodeException;
 import io.github.ryu200o.eduworkshop.room.internal.application.exception.DuplicateRoomNameException;
+import io.github.ryu200o.eduworkshop.room.internal.application.exception.MaintenanceScheduleOverlapException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,12 @@ class RoomExceptionAdvice {
     @ExceptionHandler(DuplicateRoomNameException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleDuplicateName(DuplicateRoomNameException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(MaintenanceScheduleOverlapException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleMaintenanceOverlap(MaintenanceScheduleOverlapException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
