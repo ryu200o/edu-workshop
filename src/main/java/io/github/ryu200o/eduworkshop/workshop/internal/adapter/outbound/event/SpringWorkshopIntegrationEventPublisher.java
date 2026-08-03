@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.event;
 
-import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopIntegrationEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopIntegrationEventPublisher;
 
 import org.springframework.context.ApplicationEventPublisher;

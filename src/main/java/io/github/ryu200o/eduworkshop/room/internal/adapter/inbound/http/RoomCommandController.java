@@ -9,6 +9,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.comm
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.ReactivateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.RenameRoomCommand;
+import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.ScheduleRoomMaintenanceCommand;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -91,6 +93,15 @@ class RoomCommandController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/{id}/maintenance-schedules")
+    ResponseEntity<ScheduleRoomMaintenanceCommand.Result> scheduleMaintenance(
+            @PathVariable UUID id, @RequestBody ScheduleMaintenanceRequest request) {
+        var command = new ScheduleRoomMaintenanceCommand(
+                id, request.startTime(), request.endTime(), request.reason(), request.operator());
+        ScheduleRoomMaintenanceCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
     record CreateRoomRequest(String building, int floor, int code, String name, int capacity) {
     }
 
@@ -104,5 +115,8 @@ class RoomCommandController {
     }
 
     record ChangeRoomCapacityRequest(int newCapacity) {
+    }
+
+    record ScheduleMaintenanceRequest(Instant startTime, Instant endTime, String reason, String operator) {
     }
 }

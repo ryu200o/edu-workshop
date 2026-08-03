@@ -23,6 +23,11 @@ class RoomExposeAPIImpl implements RoomExposeAPI {
     }
 
     @Override
+    public boolean existsById(UUID roomId) {
+        return roomReader.findById(RoomId.of(roomId)).isPresent();
+    }
+
+    @Override
     public Optional<RoomPlanningPermission> checkPlanningPermission(UUID roomId) {
         return roomReader.findById(RoomId.of(roomId))
                 .map(view -> {

@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -16,4 +17,14 @@ public interface RegistrationReader {
      * capacity, changing the room).
      */
     int countActiveByWorkshop(UUID workshopId);
+
+    /**
+     * Counts the total active ({@code REGISTERED}) seats across multiple workshops.
+     * Used by the Impact Preview query to determine how many students are affected
+     * by a maintenance window.
+     *
+     * @param workshopIds the workshop ids to count registrations for
+     * @return total number of active registrations across all specified workshops
+     */
+    int countActiveByWorkshopIds(List<UUID> workshopIds);
 }

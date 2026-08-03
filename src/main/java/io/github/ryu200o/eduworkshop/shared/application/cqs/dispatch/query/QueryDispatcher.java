@@ -15,7 +15,7 @@ public class QueryDispatcher {
         this.resolver = resolver;
     }
 
-    public Object dispatch(Query<?> query) {
-        return resolver.handle(query);
+    public Object dispatch(Object query) {
+        return resolver.handle((Query<?>) query);
     }
 }

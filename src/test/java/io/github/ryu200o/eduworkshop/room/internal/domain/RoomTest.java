@@ -9,10 +9,14 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCreated;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomCapacityChanged;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomMaintenanceScheduled;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRenamedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomRelocatedEvent;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.event.RoomStateChanged;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.IllegalRoomStateException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.InvalidMaintenanceScheduleException;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.MaintenanceId;
+import io.github.ryu200o.eduworkshop.room.internal.domain.model.MaintenanceSchedule;
 
 import org.junit.jupiter.api.Test;
 
@@ -463,5 +467,51 @@ class RoomTest {
         assertThatThrownBy(() -> room.changeCapacity(RoomCapacity.of(80), NOW))
                 .isInstanceOf(IllegalRoomStateException.class);
         assertThat(room.capacity()).isEqualTo(RoomCapacity.of(CAPACITY));
+    }
+
+    @Test
+    void scheduleMaintenance_validInput_createsScheduleAndEmitsEvent() {
+        Room room = newRoom();
+        Instant start = NOW.plusSeconds(3600);
+        Instant end = NOW.plusSeconds(7200);
+
+        MaintenanceSchedule schedule = room.scheduleMaintenance(
+                MaintenanceId.generate(), start, end,
+                "Quarterly HVAC filter replacement and duct cleaning", "operator-1", NOW);
+
+        assertThat(schedule).isNotNull();
+        assertThat(schedule.roomId()).isEqualTo(room.id());
+        assertThat(schedule.startTime()).isEqualTo(start);
+        assertThat(schedule.endTime()).isEqualTo(end);
+        assertThat(room.recordedEvents())
+                .filteredOn(RoomMaintenanceScheduled.class::isInstance)
+                .hasSize(1);
+    }
+
+    @Test
+    void scheduleMaintenance_deactivatedRoom_throws() {
+        Room room = newRoom();
+        room.deactivate(NOW);
+
+        assertThatThrownBy(() -> room.scheduleMaintenance(
+                MaintenanceId.generate(),
+                NOW.plusSeconds(3600),
+                NOW.plusSeconds(7200),
+                "Quarterly HVAC filter replacement and duct cleaning",
+                "operator-1", NOW))
+                .isInstanceOf(IllegalRoomStateException.class);
+    }
+
+    @Test
+    void scheduleMaintenance_reasonTooShort_throws() {
+        Room room = newRoom();
+
+        assertThatThrownBy(() -> room.scheduleMaintenance(
+                MaintenanceId.generate(),
+                NOW.plusSeconds(3600),
+                NOW.plusSeconds(7200),
+                "short",
+                "operator-1", NOW))
+                .isInstanceOf(InvalidMaintenanceScheduleException.class);
     }
 }

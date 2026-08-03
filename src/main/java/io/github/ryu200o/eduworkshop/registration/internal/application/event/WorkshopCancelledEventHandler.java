@@ -5,7 +5,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.application.port.outb
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationState;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationDomainEvent;
-import io.github.ryu200o.eduworkshop.workshop.contract.events.WorkshopCancelledIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopCancelledIntegrationEvent;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

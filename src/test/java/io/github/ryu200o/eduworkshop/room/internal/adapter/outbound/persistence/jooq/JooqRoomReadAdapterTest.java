@@ -44,7 +44,8 @@ class JooqRoomReadAdapterTest {
     @BeforeEach
     void cleanSchema() {
         // The shared in-memory DB is not rolled back (read test is non-transactional), so reset rows
-        // between tests to keep each scenario isolated.
+        // between tests to keep each scenario isolated. Child table first (FK backstop to rooms).
+        jdbcTemplate.update("DELETE FROM room_maintenance_schedules");
         jdbcTemplate.update("DELETE FROM rooms");
     }
 
