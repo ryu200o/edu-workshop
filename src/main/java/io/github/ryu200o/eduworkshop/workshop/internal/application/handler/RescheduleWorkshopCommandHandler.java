@@ -8,6 +8,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 
 import org.springframework.stereotype.Component;
@@ -23,10 +24,10 @@ import java.util.UUID;
  * Reschedules a PUBLISHED workshop to a new time window (ADR 0008: post-publish change, room and
  * registrations kept).
  *
- * <p>Orchestration (ADR 0005): load with lock → hard-block if another PUBLISHED workshop occupies
- * the new window in the same room → {@code Workshop.reschedule} (deadline 24h + window validity are
- * local invariants) → evict overlapping PLANNED workshops (now compared against the <em>new</em>
- * window) → save → publish all events via the outbox.</p>
+ * <p>Orchestration (ADR 0005 + ADR 0015 lock-set-first): discovery read → pessimistic-lock the
+ * whole overlapping set (PUBLISHED + PLANNED) in the new window → hard-block if another PUBLISHED
+ * workshop occupies the new window → {@code Workshop.reschedule} (deadline 24h + window validity are
+ * local invariants) → evict overlapping PLANNED workshops → save → publish all events via the outbox.</p>
  */
 @Component
 class RescheduleWorkshopCommandHandler
@@ -53,36 +54,52 @@ class RescheduleWorkshopCommandHandler
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
-        Workshop workshop = workshopRepository.loadByIdWithLock(workshopId)
+        // Discovery read (non-locking) to learn the target's room before locking.
+        Workshop workshop = workshopRepository.loadById(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
         UUID roomId = workshop.roomReference().roomId();
 
-        int overlappingPublished = workshopRepository.countOverlapping(
-                roomId, command.newStartTime(), command.newEndTime(), workshopId);
-        if (overlappingPublished > 0) {
+        // Lock-set-first (ADR 0015): pessimistic-lock ALL overlapping workshops (PUBLISHED +
+        // PLANNED) in the NEW window. The target overlaps its own new window only when the new
+        // window is not disjoint from its current one; otherwise it is resolved separately below.
+        List<Workshop> overlapping = workshopRepository.loadPublishedAndPlannedOverlappingWithLock(
+                roomId, command.newStartTime(), command.newEndTime());
+
+        Workshop target = overlapping.stream()
+                .filter(w -> w.id().equals(workshopId))
+                .findFirst()
+                .orElseGet(() -> workshopRepository.loadByIdWithLock(workshopId)
+                        .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId())));
+
+        boolean publishedConflict = overlapping.stream()
+                .anyMatch(w -> w.state() == WorkshopState.PUBLISHED && !w.id().equals(workshopId));
+        if (publishedConflict) {
             throw new RoomConflictException(roomId, command.workshopId());
         }
 
-        workshop.reschedule(command.newStartTime(), command.newEndTime(), now);
+        target.reschedule(command.newStartTime(), command.newEndTime(), now);
 
-        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(roomId, workshop, now);
+        List<Workshop> plannedToKick = overlapping.stream()
+                .filter(w -> w.state() == WorkshopState.PLANNED && !w.id().equals(workshopId))
+                .toList();
+        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(plannedToKick, now);
 
-        workshopRepository.save(workshop);
+        workshopRepository.save(target);
 
-        List<WorkshopDomainEvent> events = new ArrayList<>(workshop.recordedEvents());
+        List<WorkshopDomainEvent> events = new ArrayList<>(target.recordedEvents());
         for (Workshop other : kickedOut) {
             events.addAll(other.recordedEvents());
         }
 
         workshopDomainEventPublisher.publish(events);
-        workshop.clearDomainEvents();
+        target.clearDomainEvents();
         kickedOut.forEach(Workshop::clearDomainEvents);
 
         return new RescheduleWorkshopCommand.Result(
-                workshop.id().value(),
-                workshop.startTime(),
-                workshop.endTime(),
-                workshop.updatedAt());
+                target.id().value(),
+                target.startTime(),
+                target.endTime(),
+                target.updatedAt());
     }
 }

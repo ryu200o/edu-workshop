@@ -1,5 +1,5 @@
 -- Codegen-only DDL for JOOQ (DDLDatabase).
--- Mirrors the final registrations schema (V8). NOT a Flyway migration.
+-- Mirrors the final registrations schema (V8 + V14). NOT a Flyway migration.
 CREATE TABLE registrations (
     id                  UUID                     NOT NULL,
     workshop_id         UUID                     NOT NULL,
@@ -8,6 +8,7 @@ CREATE TABLE registrations (
     workshop_start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     registered_at       TIMESTAMP WITH TIME ZONE NOT NULL,
     cancelled_at        TIMESTAMP WITH TIME ZONE,
+    version             BIGINT                   NOT NULL DEFAULT 0,
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at          TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT pk_registrations PRIMARY KEY (id),

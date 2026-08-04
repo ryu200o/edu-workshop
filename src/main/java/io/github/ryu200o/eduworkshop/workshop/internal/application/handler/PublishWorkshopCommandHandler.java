@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 
 import org.springframework.stereotype.Component;
@@ -21,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 class PublishWorkshopCommandHandler
@@ -50,49 +52,60 @@ class PublishWorkshopCommandHandler
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
-        Workshop workshop = workshopRepository.loadByIdWithLock(workshopId)
+        // Discovery read (non-locking) to learn the target's room + time window before locking.
+        Workshop workshop = workshopRepository.loadById(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
-        RoomPlanningPermission permission = roomExposeApi.findPlanningPermission(workshop.roomReference().roomId())
-                .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", workshop.roomReference().roomId()));
+        UUID roomId = workshop.roomReference().roomId();
+
+        RoomPlanningPermission permission = roomExposeApi.findPlanningPermission(roomId)
+                .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", roomId));
 
         if (permission.status() != RoomPlanningPermission.PlanningStatus.ALLOWED) {
-            throw new RoomNotAvailableForPublishingException(
-                    workshop.roomReference().roomId(),
-                    permission.status(),
-                    permission.reason());
+            throw new RoomNotAvailableForPublishingException(roomId, permission.status(), permission.reason());
         }
 
-        if (workshop.hasRoomWarning()) {
-            workshop.clearMaintenanceWarning(now);
+        // Lock-set-first (ADR 0015): pessimistic-lock ALL overlapping workshops (PUBLISHED +
+        // PLANNED) in the target room/window before mutating any state. The target overlaps its
+        // own window, so it is covered by the same lock — resolving it from the list reuses that
+        // locked, fresh instance.
+        List<Workshop> overlapping = workshopRepository.loadPublishedAndPlannedOverlappingWithLock(
+                roomId, workshop.startTime(), workshop.endTime());
+
+        Workshop target = overlapping.stream()
+                .filter(w -> w.id().equals(workshopId))
+                .findFirst()
+                .orElseGet(() -> workshopRepository.loadByIdWithLock(workshopId)
+                        .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId())));
+
+        if (target.hasRoomWarning()) {
+            target.clearMaintenanceWarning(now);
         }
 
-        int overlapping = workshopRepository.countOverlapping(
-                workshop.roomReference().roomId(),
-                workshop.startTime(),
-                workshop.endTime(),
-                workshopId);
-
-        if (overlapping > 0) {
-            throw new RoomConflictException(workshop.roomReference().roomId(), command.workshopId());
+        boolean publishedConflict = overlapping.stream()
+                .anyMatch(w -> w.state() == WorkshopState.PUBLISHED && !w.id().equals(workshopId));
+        if (publishedConflict) {
+            throw new RoomConflictException(roomId, command.workshopId());
         }
 
-        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(
-                workshop.roomReference().roomId(), workshop, now);
+        List<Workshop> plannedToKick = overlapping.stream()
+                .filter(w -> w.state() == WorkshopState.PLANNED && !w.id().equals(workshopId))
+                .toList();
+        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(plannedToKick, now);
 
-        workshop.publish(now, permission.planning().capacity());
+        target.publish(now, permission.planning().capacity());
 
-        workshopRepository.save(workshop);
+        workshopRepository.save(target);
 
-        List<WorkshopDomainEvent> events = new ArrayList<>(workshop.recordedEvents());
+        List<WorkshopDomainEvent> events = new ArrayList<>(target.recordedEvents());
         for (Workshop other : kickedOut) {
             events.addAll(other.recordedEvents());
         }
 
         workshopDomainEventPublisher.publish(events);
-        workshop.clearDomainEvents();
+        target.clearDomainEvents();
         kickedOut.forEach(Workshop::clearDomainEvents);
 
-        return new PublishWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt());
+        return new PublishWorkshopCommand.Result(target.id().value(), target.updatedAt());
     }
 }

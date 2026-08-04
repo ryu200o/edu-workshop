@@ -27,6 +27,7 @@ Manages physical locations/venues where workshops are held.
 | `code` | `VARCHAR(10)` | `NOT NULL` | Alphanumeric room code (1–10 chars) within the floor. The floor portion of `name` is zero-padded to a minimum of 2 digits (e.g. `F.05LAB`, `F.1205`). |
 | `capacity` | `INTEGER` | `NOT NULL`, `CHECK (capacity > 0)` | Maximum physical capacity of the room. |
 | `state` | `VARCHAR(20)` | `NOT NULL` | Physical operational state: `ACTIVE`, `MAINTENANCE`, `DEACTIVATED`. |
+| `version` | `BIGINT` | `NOT NULL DEFAULT 0` | Optimistic-locking version (ADR 0015 Strategy B). Persistence concern only — incremented by Hibernate on each write and matched in the `WHERE` clause (`version = ?`); mapped to HTTP 409 on conflict. Never part of the domain aggregate. Added by V14. |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
 | `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
 
@@ -86,6 +87,7 @@ Manages the lifecycle of workshops — from draft through scheduling, publishing
 | `end_time` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Scheduled end time (UTC). Null until `plan()`. |
 | `capacity` | `INTEGER` | `NOT NULL`, `CHECK (capacity > 0)` | Business registration capacity limit (can differ from room capacity). |
 | `state` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'DRAFT'` | Workshop lifecycle state: `DRAFT`, `PLANNED`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. Width 50 leaves room for future reactive states (`ROOM_DEACTIVATED_PENDING`, `OVER_CAPACITY_PENDING`) without an `ALTER`. |
+| `version` | `BIGINT` | `NOT NULL DEFAULT 0` | Optimistic-locking version (ADR 0015 Strategy B). Persistence concern only — incremented by Hibernate on each write and matched in the `WHERE` clause (`version = ?`); mapped to HTTP 409 on conflict. Never part of the domain aggregate. Added by V14. |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
 | `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
 
@@ -165,6 +167,7 @@ Records user ticket bookings for workshops, including check-in tracking.
 | `workshop_id` | `UUID` | `NOT NULL` | Logical reference to the registered workshop (no physical FK). |
 | `user_id` | `UUID` | `NOT NULL` | Logical reference to the registering user (no physical FK). |
 | `status` | `VARCHAR(50)` | `NOT NULL` | Registration status: `CONFIRMED`, `CANCELLED`, `ATTENDED`, `NO_SHOW`. |
+| `version` | `BIGINT` | `NOT NULL DEFAULT 0` | Optimistic-locking version (ADR 0015 Strategy B). Persistence concern only — incremented by Hibernate on each write and matched in the `WHERE` clause (`version = ?`); mapped to HTTP 409 on conflict. Never part of the domain aggregate. Added by V14. |
 | `registration_time` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Timestamp when the booking was made. |
 | `checked_in` | `BOOLEAN` | `DEFAULT FALSE` | Whether the user has checked in to the workshop. |
 | `checked_in_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp when check-in occurred. |

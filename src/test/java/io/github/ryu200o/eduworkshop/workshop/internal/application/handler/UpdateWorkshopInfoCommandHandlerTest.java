@@ -88,7 +88,7 @@ class UpdateWorkshopInfoCommandHandlerTest {
     @Test
     void updateInfo_draft_updatesTitleAndDescription() {
         Workshop workshop = createDraftWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID)))
                 .willReturn(0);
@@ -109,7 +109,7 @@ class UpdateWorkshopInfoCommandHandlerTest {
     @Test
     void updateInfo_planned_updatesTitleAndDescription() {
         Workshop workshop = createPlannedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID)))
                 .willReturn(0);
@@ -123,7 +123,7 @@ class UpdateWorkshopInfoCommandHandlerTest {
     @Test
     void updateInfo_published_noRegistrations_updatesTitle() {
         Workshop workshop = createPublishedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID)))
                 .willReturn(0);
@@ -137,7 +137,7 @@ class UpdateWorkshopInfoCommandHandlerTest {
     @Test
     void updateInfo_published_withRegistrations_updatesDescriptionOnly() {
         Workshop workshop = createPublishedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID)))
                 .willReturn(5);
@@ -151,7 +151,7 @@ class UpdateWorkshopInfoCommandHandlerTest {
     @Test
     void updateInfo_published_withRegistrations_rejectsTitleChange() {
         Workshop workshop = createPublishedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID)))
                 .willReturn(3);
@@ -170,7 +170,7 @@ class UpdateWorkshopInfoCommandHandlerTest {
     void updateInfo_cancelled_isRejected() {
         Workshop workshop = createPublishedWorkshop();
         workshop.cancel(NOW.plusSeconds(1));
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID)))
                 .willReturn(0);
@@ -182,7 +182,7 @@ class UpdateWorkshopInfoCommandHandlerTest {
 
     @Test
     void updateInfo_throwsWorkshopNotFound() {
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() ->

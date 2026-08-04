@@ -10,6 +10,7 @@ import io.github.ryu200o.eduworkshop.shared.application.exception.ResourceNotFou
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -39,6 +40,13 @@ class RegistrationExceptionAdvice {
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleInvalidState(InvalidRegistrationStateException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Concurrent modification detected — the registration was changed by another request. Reload and retry.");
     }
 
     @ExceptionHandler(RegistrationNotOwnedByUserException.class)

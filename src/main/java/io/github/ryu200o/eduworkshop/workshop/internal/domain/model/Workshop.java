@@ -325,8 +325,9 @@ public class Workshop {
      * claims its time slot.
      *
      * <p>Deliberately <em>keeps</em> the room reference, the maintenance warning, and the time window
-     * (a {@code DRAFT} is not counted by {@code countOverlapping}, which filters {@code PUBLISHED}
-     * only) — the admin simply adjusts the time on the retained window and re-plans (UX upgrade).
+     * (a {@code DRAFT} is not picked up by the overlapping-set query, which filters {@code PUBLISHED}
+     * and {@code PLANNED} only) — the admin simply adjusts the time on the retained window and
+     * re-plans (UX upgrade).
      * This differs from {@link #returnToDraft} (used by {@code DELETE /plan} and room deactivation),
      * which releases the room and clears the warning. Does <em>not</em> emit a domain event: the
      * eviction is an internal side effect of a reschedule, not a user-facing transition.</p>

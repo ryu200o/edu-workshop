@@ -7,7 +7,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Application-layer helper (ADR 0005) that kicks {@code PLANNED} workshops back to
@@ -17,9 +16,10 @@ import java.util.UUID;
  * overlapping {@code PLANNED} workshops are planning-only (ADR 0008) and must not keep
  * believing they hold the room.
  *
- * <p>Optimized: uses {@link WorkshopRepository#loadOverlappingPlanned} to push the overlap
- * filter into SQL/JPQL (no full room scan, no in-memory overlap check), then batches the
- * state transitions and persists them in a single {@code saveAll} call.</p>
+ * <p>ADR 0015 (lock-set-first): the set of overlapping workshops is loaded <em>and pessimistic-
+ * locked</em> by the calling handler via {@code loadPublishedAndPlannedOverlappingWithLock} and
+ * passed in as {@code toKick}; this helper only performs the state transition and the batch save.
+ * </p>
  */
 @Component
 class PlannedWorkshopKicker {
@@ -31,20 +31,16 @@ class PlannedWorkshopKicker {
     }
 
     /**
-     * Loads only the {@code PLANNED} workshops that truly overlap the target's time window
-     * (pushed into SQL/JPQL), evicts them to {@code DRAFT}, and persists them in a single
-     * batch save.
+     * Evicts the already-locked {@code PLANNED} workshops back to {@code DRAFT} and persists them
+     * in a single batch save.
      *
-     * @param roomId the room id the target is establishing ownership over
-     * @param target the workshop that is being published / moved / rescheduled into the room
-     *               (never kicked)
+     * @param toKick the overlapping {@code PLANNED} workshops (already pessimistic-locked by the
+     *               caller via {@code loadPublishedAndPlannedOverlappingWithLock}), never including
+     *               the target itself
      * @param now    the current instant, forwarded to {@code evictPlanningOnConflict}
      * @return the list of workshops that were kicked back to {@code DRAFT}
      */
-    List<Workshop> kickOutOverlappingPlanned(UUID roomId, Workshop target, Instant now) {
-        List<Workshop> toKick = workshopRepository.loadOverlappingPlanned(
-                roomId, target.startTime(), target.endTime(), target.id());
-
+    List<Workshop> kickOutOverlappingPlanned(List<Workshop> toKick, Instant now) {
         if (toKick.isEmpty()) {
             return List.of();
         }

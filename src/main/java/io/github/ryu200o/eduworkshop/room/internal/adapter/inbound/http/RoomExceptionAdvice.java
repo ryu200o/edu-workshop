@@ -9,6 +9,7 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.Illega
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.exception.RoomDomainException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -53,6 +54,13 @@ class RoomExceptionAdvice {
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleIllegalState(IllegalRoomStateException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Concurrent modification detected — the room was changed by another request. Reload and retry.");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

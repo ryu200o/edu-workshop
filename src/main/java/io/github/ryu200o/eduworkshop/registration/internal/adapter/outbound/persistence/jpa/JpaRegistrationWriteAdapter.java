@@ -35,7 +35,14 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
     @Override
     public Registration save(Registration registration) {
         try {
-            repository.saveAndFlush(toEntity(registration));
+            // Managed-entity copy pattern (ADR 0015 Strategy B): reuse the persistence-context
+            // instance so the @Version column is preserved and checked on flush. saveAndFlush() is
+            // kept here (Rule 1) so the DataIntegrityViolationException of the unique-seat backstop
+            // (uk_registrations_workshop_user) surfaces inside this try-catch for translation.
+            RegistrationJpaEntity entity = repository.findById(registration.id().value())
+                    .map(existing -> copyTo(existing, registration))
+                    .orElseGet(() -> toEntity(registration));
+            repository.saveAndFlush(entity);
         } catch (DataIntegrityViolationException ex) {
             // Race-proof gate (rào lần 2): the DB unique index is the authoritative guard against
             // concurrent duplicate registrations. The handler's read is only fail-fast UX (rào lần 1).
@@ -66,34 +73,41 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
 
     @Override
     public void saveAll(List<Registration> registrations) {
-        try {
-            repository.saveAll(registrations.stream()
-                    .map(JpaRegistrationWriteAdapter::toEntity)
-                    .toList());
-        } catch (DataIntegrityViolationException ex) {
-            // Race-proof gate (rào lần 2): the DB unique index is the authoritative guard against
-            // concurrent duplicate registrations. The handler's read is only fail-fast UX (rào lần 1).
-            throw new DuplicateRegistrationException(
-                    registrations.getFirst().workshopReference().workshopId(),
-                    registrations.getFirst().studentId().value());
-        }
+        // Plain saveAll (Rule 2): the flush is deferred to commit so Hibernate batches all UPDATEs.
+        // This path is used only by event handlers flipping EXISTING rows (no unique-violation
+        // scenario), so no try-catch translation is required here.
+        List<RegistrationJpaEntity> entities = registrations.stream()
+                .map(registration -> repository.findById(registration.id().value())
+                        .map(existing -> copyTo(existing, registration))
+                        .orElseGet(() -> toEntity(registration)))
+                .toList();
+        repository.saveAll(entities);
     }
 
     // ====================== MAPPER ======================
 
     private static RegistrationJpaEntity toEntity(Registration registration) {
-        return new RegistrationJpaEntity(
-                registration.id().value(),
-                registration.workshopReference().workshopId(),
-                registration.studentId().value(),
-                registration.state().name(),
-                registration.workshopReference().startTime(),
-                registration.registeredAt(),
-                registration.cancelledAt(),
-                registration.gracePeriodUntil(),
-                registration.createdAt(),
-                registration.updatedAt()
-        );
+        RegistrationJpaEntity entity = new RegistrationJpaEntity();
+        entity.setId(registration.id().value());
+        return copyTo(entity, registration);
+    }
+
+    /**
+     * Copies the mutable business fields of the aggregate onto an existing (managed) entity, leaving
+     * {@code id} and {@code version} untouched so Hibernate increments/checks the optimistic-lock
+     * version on flush.
+     */
+    private static RegistrationJpaEntity copyTo(RegistrationJpaEntity entity, Registration registration) {
+        entity.setWorkshopId(registration.workshopReference().workshopId());
+        entity.setUserId(registration.studentId().value());
+        entity.setStatus(registration.state().name());
+        entity.setWorkshopStartTime(registration.workshopReference().startTime());
+        entity.setRegisteredAt(registration.registeredAt());
+        entity.setCancelledAt(registration.cancelledAt());
+        entity.setGracePeriodUntil(registration.gracePeriodUntil());
+        entity.setCreatedAt(registration.createdAt());
+        entity.setUpdatedAt(registration.updatedAt());
+        return entity;
     }
 
     private static Registration toRegistration(RegistrationJpaEntity entity) {

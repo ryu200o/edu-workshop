@@ -10,8 +10,7 @@ import java.util.UUID;
 
 /**
  * Outbound port (SPI) for persisting and loading Workshop aggregates on the write side.
- * Implemented by an outbound adapter ({@code JpaWorkshopWriteAdapter}). The save operation
- * wraps database constraint violations into {@code WorkshopPersistenceException}.
+ * Implemented by an outbound adapter ({@code JpaWorkshopWriteAdapter}).
  */
 public interface WorkshopRepository {
 
@@ -25,21 +24,26 @@ public interface WorkshopRepository {
 
     List<Workshop> loadByRoomId(UUID roomId);
 
-    int countOverlapping(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId);
-
     /**
-     * Loads only the PLANNED workshops in the given room whose time window overlaps
-     * the specified window (excluding the workshop with {@code excludeId}).
-     * Pushes the overlap filter into the SQL/JPQL layer so the Application layer
-     * never loads irrelevant rows.
+     * Loads every workshop in the given room whose time window overlaps the specified window —
+     * {@code PLANNED} AND {@code PUBLISHED} states — under a {@code SELECT ... FOR UPDATE}
+     * pessimistic write lock (ADR 0015 / ADR 0008). Locking the whole overlapping set up front
+     * (lock-set-first) closes the write-skew that a single-row target lock allows: two concurrent
+     * publishes in the same room/window now serialize on the shared rows instead of both seeing an
+     * empty {@code PUBLISHED} set.
+     *
+     * <p>The target workshop is deliberately <em>not</em> excluded: callers resolve it from the
+     * returned list (it overlaps its own window), so it is covered by the same lock. Used by
+     * {@code PublishWorkshopCommandHandler}, {@code RescheduleWorkshopCommandHandler} and
+     * {@code ChangeWorkshopRoomCommandHandler} (lock-set-first ordering).</p>
      */
-    List<Workshop> loadOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId);
+    List<Workshop> loadPublishedAndPlannedOverlappingWithLock(UUID roomId, Instant startTime, Instant endTime);
 
     /**
      * Loads only the PUBLISHED workshops in the given room whose time window overlaps the given
      * maintenance window. Overlap condition: {@code w.startTime < maintEnd && w.endTime > maintStart};
      * when {@code endTime} is null (indefinite maintenance), every workshop starting after
-     * {@code startTime} matches. Used by {@code RoomMaintenanceScheduledEventListener} (Titik 2) to
+     * {@code startTime} matches. Used by {@code WorkshopRoomEventHandler} (Titik 2) to
      * auto-flag affected workshops with an eviction notice without changing their state.
      */
     List<Workshop> loadPublishedOverlappingWithTimeWindow(UUID roomId, Instant startTime, Instant endTime);

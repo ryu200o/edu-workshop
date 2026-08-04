@@ -79,7 +79,7 @@ class CancelWorkshopCommandHandlerTest {
     @Test
     void cancel_movesWorkshopToCancelledAndPublishesEvents() {
         Workshop workshop = createPublishedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         CancelWorkshopCommand.Result result = handler.handle(new CancelWorkshopCommand(WORKSHOP_ID));
@@ -96,7 +96,7 @@ class CancelWorkshopCommandHandlerTest {
 
     @Test
     void cancel_throwsWhenWorkshopNotFound() {
-        given(workshopRepository.loadByIdWithLock(any())).willReturn(Optional.empty());
+        given(workshopRepository.loadById(any())).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler.handle(new CancelWorkshopCommand(WORKSHOP_ID)))
                 .isInstanceOf(WorkshopNotFoundException.class);
@@ -105,7 +105,7 @@ class CancelWorkshopCommandHandlerTest {
     @Test
     void cancel_throwsWhenWorkshopAlreadyStarted() {
         Workshop workshop = createPublishedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         handler = new CancelWorkshopCommandHandler(
