@@ -32,14 +32,14 @@ class JpaMaintenanceScheduleWriteAdapter implements MaintenanceScheduleRepositor
     }
 
     @Override
-    public List<MaintenanceSchedule> findByRoomId(UUID roomId) {
+    public List<MaintenanceSchedule> loadByRoomId(UUID roomId) {
         return repository.findByRoomId(roomId).stream()
                 .map(JpaMaintenanceScheduleWriteAdapter::toSchedule)
                 .toList();
     }
 
     @Override
-    public List<MaintenanceSchedule> findOverlapping(UUID roomId, Instant startTime, Instant endTime) {
+    public List<MaintenanceSchedule> loadOverlapping(UUID roomId, Instant startTime, Instant endTime) {
         return repository.findOverlapping(roomId, startTime, endTime).stream()
                 .map(JpaMaintenanceScheduleWriteAdapter::toSchedule)
                 .toList();

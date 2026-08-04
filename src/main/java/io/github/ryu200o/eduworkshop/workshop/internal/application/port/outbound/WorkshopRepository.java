@@ -33,7 +33,7 @@ public interface WorkshopRepository {
      * Pushes the overlap filter into the SQL/JPQL layer so the Application layer
      * never loads irrelevant rows.
      */
-    List<Workshop> findOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId);
+    List<Workshop> loadOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId);
 
     /**
      * Loads only the PUBLISHED workshops in the given room whose time window overlaps the given

@@ -82,7 +82,7 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
     void happyPath_schedules_and_persists() {
         Room room = existingRoom(RoomState.ACTIVE);
         when(roomRepository.loadByIdWithLock(room.id())).thenReturn(Optional.of(room));
-        when(maintenanceScheduleRepository.findOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
                 .thenReturn(Collections.emptyList());
         when(maintenanceScheduleRepository.save(any(MaintenanceSchedule.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -109,7 +109,7 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
     void roomDeactivated_throws() {
         Room room = existingRoom(RoomState.DEACTIVATED);
         when(roomRepository.loadByIdWithLock(room.id())).thenReturn(Optional.of(room));
-        when(maintenanceScheduleRepository.findOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
                 .thenReturn(Collections.emptyList());
 
         assertThatThrownBy(() -> handler().handle(validCommand(room.id().value())))
@@ -130,7 +130,7 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
                 "operator-2",
                 Instant.parse("2026-07-01T00:00:00Z"),
                 Instant.parse("2026-07-01T00:00:00Z"));
-        when(maintenanceScheduleRepository.findOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
                 .thenReturn(List.of(existing));
 
         assertThatThrownBy(() -> handler().handle(validCommand(room.id().value())))
@@ -142,7 +142,7 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
     void idempotent_noOverlap_succeeds() {
         Room room = existingRoom(RoomState.ACTIVE);
         when(roomRepository.loadByIdWithLock(room.id())).thenReturn(Optional.of(room));
-        when(maintenanceScheduleRepository.findOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
                 .thenReturn(Collections.emptyList());
         when(maintenanceScheduleRepository.save(any(MaintenanceSchedule.class))).thenAnswer(inv -> inv.getArgument(0));
 

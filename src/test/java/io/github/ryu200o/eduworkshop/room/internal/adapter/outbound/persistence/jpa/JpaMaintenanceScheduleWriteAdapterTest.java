@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -54,7 +53,7 @@ class JpaMaintenanceScheduleWriteAdapterTest {
 
         maintenanceScheduleRepository.save(schedule);
 
-        List<MaintenanceSchedule> found = maintenanceScheduleRepository.findByRoomId(roomId.value());
+        List<MaintenanceSchedule> found = maintenanceScheduleRepository.loadByRoomId(roomId.value());
         assertThat(found).hasSize(1);
         assertThat(found.get(0).id()).isEqualTo(schedule.id());
         assertThat(found.get(0).roomId()).isEqualTo(roomId);
@@ -70,14 +69,14 @@ class JpaMaintenanceScheduleWriteAdapterTest {
         maintenanceScheduleRepository.save(schedule);
 
         // Overlapping window
-        List<MaintenanceSchedule> overlapping = maintenanceScheduleRepository.findOverlapping(
+        List<MaintenanceSchedule> overlapping = maintenanceScheduleRepository.loadOverlapping(
                 roomId.value(),
                 Instant.parse("2026-08-01T10:00:00Z"),
                 Instant.parse("2026-08-01T14:00:00Z"));
         assertThat(overlapping).hasSize(1);
 
         // Non-overlapping window
-        List<MaintenanceSchedule> nonOverlapping = maintenanceScheduleRepository.findOverlapping(
+        List<MaintenanceSchedule> nonOverlapping = maintenanceScheduleRepository.loadOverlapping(
                 roomId.value(),
                 Instant.parse("2026-08-02T08:00:00Z"),
                 Instant.parse("2026-08-02T12:00:00Z"));
@@ -91,7 +90,7 @@ class JpaMaintenanceScheduleWriteAdapterTest {
                 "Indefinite maintenance for major renovation project", "operator-1", START);
         maintenanceScheduleRepository.save(indefinite);
 
-        List<MaintenanceSchedule> overlapping = maintenanceScheduleRepository.findOverlapping(
+        List<MaintenanceSchedule> overlapping = maintenanceScheduleRepository.loadOverlapping(
                 roomId.value(),
                 Instant.parse("2026-08-02T08:00:00Z"),
                 Instant.parse("2026-08-02T12:00:00Z"));
@@ -107,7 +106,7 @@ class JpaMaintenanceScheduleWriteAdapterTest {
 
         maintenanceScheduleRepository.deleteById(schedule.id());
 
-        List<MaintenanceSchedule> found = maintenanceScheduleRepository.findByRoomId(roomId.value());
+        List<MaintenanceSchedule> found = maintenanceScheduleRepository.loadByRoomId(roomId.value());
         assertThat(found).isEmpty();
     }
 }

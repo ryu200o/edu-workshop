@@ -17,7 +17,7 @@ import java.util.UUID;
  * overlapping {@code PLANNED} workshops are planning-only (ADR 0008) and must not keep
  * believing they hold the room.
  *
- * <p>Optimized: uses {@link WorkshopRepository#findOverlappingPlanned} to push the overlap
+ * <p>Optimized: uses {@link WorkshopRepository#loadOverlappingPlanned} to push the overlap
  * filter into SQL/JPQL (no full room scan, no in-memory overlap check), then batches the
  * state transitions and persists them in a single {@code saveAll} call.</p>
  */
@@ -42,7 +42,7 @@ class PlannedWorkshopKicker {
      * @return the list of workshops that were kicked back to {@code DRAFT}
      */
     List<Workshop> kickOutOverlappingPlanned(UUID roomId, Workshop target, Instant now) {
-        List<Workshop> toKick = workshopRepository.findOverlappingPlanned(
+        List<Workshop> toKick = workshopRepository.loadOverlappingPlanned(
                 roomId, target.startTime(), target.endTime(), target.id());
 
         if (toKick.isEmpty()) {

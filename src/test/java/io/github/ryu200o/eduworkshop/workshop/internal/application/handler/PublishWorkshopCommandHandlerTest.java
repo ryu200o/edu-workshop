@@ -186,7 +186,7 @@ class PublishWorkshopCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(List.of(planned));
 
             PublishWorkshopCommand.Result result = handler.handle(
@@ -217,7 +217,7 @@ class PublishWorkshopCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(List.of());
 
             handler.handle(new PublishWorkshopCommand(WORKSHOP_ID));

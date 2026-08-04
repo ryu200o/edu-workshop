@@ -53,7 +53,7 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
     }
 
     @Override
-    public List<Workshop> findOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId) {
+    public List<Workshop> loadOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId) {
         return repository.findOverlappingPlanned(roomId, startTime, endTime, excludeWorkshopId.value()).stream()
                 .map(this::toWorkshop)
                 .toList();

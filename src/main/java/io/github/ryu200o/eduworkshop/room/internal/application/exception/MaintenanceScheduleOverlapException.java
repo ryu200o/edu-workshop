@@ -8,7 +8,7 @@ import java.util.UUID;
 /**
  * Application-layer exception raised when a maintenance schedule overlaps an existing schedule
  * for the same room (ADR 0005 global/set-based invariant, ADR 0015 Technique 1). Deterministic
- * under a pessimistic write lock: the handler locks the room root row, re-runs {@code findOverlapping}
+ * under a pessimistic write lock: the handler locks the room root row, re-runs {@code loadOverlapping}
  * and throws this when a conflict with existing state is detected.
  */
 public final class MaintenanceScheduleOverlapException extends ApplicationException {

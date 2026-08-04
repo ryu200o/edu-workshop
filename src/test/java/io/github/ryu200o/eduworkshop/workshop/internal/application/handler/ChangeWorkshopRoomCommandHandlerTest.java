@@ -127,7 +127,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(List.of());
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
@@ -154,7 +154,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(List.of(planned));
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
@@ -184,7 +184,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(List.of());
 
             handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));

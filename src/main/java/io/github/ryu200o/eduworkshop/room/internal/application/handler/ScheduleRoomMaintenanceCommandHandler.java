@@ -56,7 +56,7 @@ class ScheduleRoomMaintenanceCommandHandler
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         // Global invariant (ADR 0005): check for overlapping maintenance schedules.
-        List<MaintenanceSchedule> overlapping = maintenanceScheduleRepository.findOverlapping(
+        List<MaintenanceSchedule> overlapping = maintenanceScheduleRepository.loadOverlapping(
                 command.roomId(), command.startTime(), command.endTime());
         if (!overlapping.isEmpty()) {
             throw new MaintenanceScheduleOverlapException(
