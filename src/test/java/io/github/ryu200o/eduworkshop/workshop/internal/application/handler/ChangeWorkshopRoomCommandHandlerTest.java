@@ -123,7 +123,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
@@ -150,7 +150,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
 
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
@@ -180,7 +180,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
 
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(0);
@@ -203,7 +203,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
@@ -216,7 +216,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(BLOCKED_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
@@ -229,7 +229,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID)).willReturn(Optional.empty());
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
                     .isInstanceOf(ReferencedRoomNotFoundException.class);
@@ -244,7 +244,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(1);

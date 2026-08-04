@@ -28,7 +28,7 @@ class RoomExposeAPIImpl implements RoomExposeAPI {
     }
 
     @Override
-    public Optional<RoomPlanningPermission> checkPlanningPermission(UUID roomId) {
+    public Optional<RoomPlanningPermission> findPlanningPermission(UUID roomId) {
         return roomReader.findById(RoomId.of(roomId))
                 .map(view -> {
                     PlanningStatus status = switch (view.state()) {

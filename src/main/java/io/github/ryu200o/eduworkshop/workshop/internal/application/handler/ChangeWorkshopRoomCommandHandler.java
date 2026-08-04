@@ -56,7 +56,7 @@ class ChangeWorkshopRoomCommandHandler
         Workshop workshop = workshopRepository.loadByIdWithLock(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
-        RoomPlanningPermission permission = roomExposeApi.checkPlanningPermission(newRoomId)
+        RoomPlanningPermission permission = roomExposeApi.findPlanningPermission(newRoomId)
                 .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", newRoomId));
 
         if (permission.status() != RoomPlanningPermission.PlanningStatus.ALLOWED) {
