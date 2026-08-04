@@ -102,6 +102,9 @@ public class WorkshopRoomEventHandler {
     private void handleRenamed(RoomRenamedIntegrationEvent event) {
         List<Workshop> workshops = workshopRepository.loadByRoomId(event.roomId());
         Instant now = Instant.now(clock);
+
+        // 1. Domain State Mutation & Collection (only workshops that actually changed)
+        List<Workshop> changed = new ArrayList<>();
         for (Workshop w : workshops) {
             RoomReference ref = w.roomReference();
             if (ref == null) continue;
@@ -111,13 +114,23 @@ public class WorkshopRoomEventHandler {
                     ref.roomLocationSnapshot(),
                     ref.roomCapacitySnapshot());
             w.updateRoomSnapshot(updated, now);
-            workshopRepository.save(w);
+            changed.add(w);
         }
+
+        if (changed.isEmpty()) {
+            return;
+        }
+
+        // 2. Batch Persistence (JDBC batching)
+        workshopRepository.saveAll(changed);
     }
 
     private void handleRelocated(RoomRelocatedIntegrationEvent event) {
         List<Workshop> workshops = workshopRepository.loadByRoomId(event.roomId());
         Instant now = Instant.now(clock);
+
+        // 1. Domain State Mutation & Collection (only workshops that actually changed)
+        List<Workshop> changed = new ArrayList<>();
         for (Workshop w : workshops) {
             RoomReference ref = w.roomReference();
             if (ref == null) continue;
@@ -127,13 +140,23 @@ public class WorkshopRoomEventHandler {
                     event.newLocation(),
                     ref.roomCapacitySnapshot());
             w.updateRoomSnapshot(updated, now);
-            workshopRepository.save(w);
+            changed.add(w);
         }
+
+        if (changed.isEmpty()) {
+            return;
+        }
+
+        // 2. Batch Persistence (JDBC batching)
+        workshopRepository.saveAll(changed);
     }
 
     private void handleCapacityChanged(RoomCapacityChangedIntegrationEvent event) {
         List<Workshop> workshops = workshopRepository.loadByRoomId(event.roomId());
         Instant now = Instant.now(clock);
+
+        // 1. Domain State Mutation & Collection (only workshops that actually changed)
+        List<Workshop> changed = new ArrayList<>();
         for (Workshop w : workshops) {
             RoomReference ref = w.roomReference();
             if (ref == null) continue;
@@ -143,13 +166,24 @@ public class WorkshopRoomEventHandler {
                     ref.roomLocationSnapshot(),
                     event.newCapacity());
             w.updateRoomSnapshot(updated, now);
-            workshopRepository.save(w);
+            changed.add(w);
         }
+
+        if (changed.isEmpty()) {
+            return;
+        }
+
+        // 2. Batch Persistence (JDBC batching)
+        workshopRepository.saveAll(changed);
     }
 
     private void handleStateChanged(RoomStateChangedIntegrationEvent event) {
         List<Workshop> workshops = workshopRepository.loadByRoomId(event.roomId());
         Instant now = Instant.now(clock);
+
+        // 1. Domain State Mutation & Event Collection (only workshops that actually changed)
+        List<Workshop> changed = new ArrayList<>();
+        List<WorkshopDomainEvent> allDomainEvents = new ArrayList<>();
         for (Workshop w : workshops) {
             if (w.roomReference() == null) continue;
             switch (event.newState()) {
@@ -161,7 +195,21 @@ public class WorkshopRoomEventHandler {
                 }
                 case DEACTIVATED -> w.returnToDraft(now);
             }
-            workshopRepository.save(w);
+            changed.add(w);
+            allDomainEvents.addAll(w.recordedEvents());
+            w.clearDomainEvents();
+        }
+
+        if (changed.isEmpty()) {
+            return;
+        }
+
+        // 2. Batch Persistence (JDBC batching)
+        workshopRepository.saveAll(changed);
+
+        // 3. Batch Event Publication
+        if (!allDomainEvents.isEmpty()) {
+            workshopDomainEventPublisher.publish(allDomainEvents);
         }
     }
 }
