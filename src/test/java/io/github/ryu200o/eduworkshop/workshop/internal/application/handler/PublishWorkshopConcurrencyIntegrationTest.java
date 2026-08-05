@@ -135,8 +135,9 @@ class PublishWorkshopConcurrencyIntegrationTest {
                 HttpStatus.OK.value(), HttpStatus.CONFLICT.value());
 
         Integer published = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM workshops WHERE state = 'PUBLISHED'", Integer.class);
-        assertThat(published).as("exactly one PUBLISHED").isEqualTo(1);
+                "SELECT COUNT(*) FROM workshops WHERE state = 'PUBLISHED' AND room_id = ?",
+                Integer.class, roomId);
+        assertThat(published).as("exactly one PUBLISHED for the contested room").isEqualTo(1);
     }
 
     private static String readField(HttpResponse<String> response, String field) {

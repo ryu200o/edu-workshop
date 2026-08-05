@@ -26,7 +26,7 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
     }
 
     @Override
-    public Optional<WorkshopDetailView> findById(UUID id) {
+    public Optional<WorkshopDetailView> getById(UUID id) {
         return dsl.select(
                         WORKSHOPS.ID,
                         WORKSHOPS.TITLE,
@@ -51,7 +51,7 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
     }
 
     @Override
-    public List<WorkshopSummaryView> findAll() {
+    public List<WorkshopSummaryView> getAll() {
         return dsl.select(
                         WORKSHOPS.ID,
                         WORKSHOPS.TITLE,
@@ -66,7 +66,7 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
     }
 
     @Override
-    public List<WorkshopSummaryView> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
+    public List<WorkshopSummaryView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
         var condition = WORKSHOPS.ROOM_ID.eq(roomId)
                 .and(WORKSHOPS.END_TIME.greaterThan(OffsetDateTime.ofInstant(startTime, java.time.ZoneOffset.UTC)))
                 .and(WORKSHOPS.STATE.in("PUBLISHED", "PLANNED"));

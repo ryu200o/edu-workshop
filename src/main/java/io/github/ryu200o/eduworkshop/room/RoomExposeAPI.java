@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public interface RoomExposeAPI {
 
-    Optional<RoomPlanningPermission> findPlanningPermission(UUID roomId);
+    Optional<RoomPlanningPermission> getPlanningPermission(UUID roomId);
 
     /**
      * Whether a room with the given id exists. Used by upper-layer modules (e.g. FacilityOps) for

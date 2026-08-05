@@ -6,7 +6,6 @@ import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomId;
 import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomName;
 
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Read-side outbound port (SPI) for the Room read side. Consumer-Driven: it declares only the lookups
@@ -18,7 +17,7 @@ public interface RoomReader {
     /**
      * Looks up a room's full detail by id. Returns {@link RoomDetailView} (full projection).
      */
-    Optional<RoomDetailView> findById(RoomId id);
+    Optional<RoomDetailView> getById(RoomId id);
 
     /**
      * Looks up a room by its canonical display name. The {@code RoomName} is an opaque, type-safe token
@@ -26,5 +25,5 @@ public interface RoomReader {
      * so this port takes the value object directly for RAM-side type safety. Returns {@link
      * RoomSummaryView} (flattened summary).
      */
-    Optional<RoomSummaryView> findByName(RoomName name);
+    Optional<RoomSummaryView> getByName(RoomName name);
 }

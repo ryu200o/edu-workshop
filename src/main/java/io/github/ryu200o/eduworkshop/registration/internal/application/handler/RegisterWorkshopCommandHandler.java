@@ -59,7 +59,7 @@ class RegisterWorkshopCommandHandler
     public RegisterWorkshopCommand.Result handle(RegisterWorkshopCommand command) {
         Instant now = Instant.now(clock);
 
-        WorkshopRegistrationContract workshop = workshopExposeApi.findForRegistration(command.workshopId())
+        WorkshopRegistrationContract workshop = workshopExposeApi.getForRegistration(command.workshopId())
                 .orElseThrow(() -> new ReferencedWorkshopNotFoundException(command.workshopId()));
 
         if (workshop.state() != WorkshopStateContract.PUBLISHED) {

@@ -61,7 +61,7 @@ class JooqRoomReadAdapterTest {
     void save_thenFindById_roundTripsThroughDatabase() {
         Room room = roomRepository.save(newRoom());
 
-        Optional<RoomDetailView> found = roomReader.findById(room.id());
+        Optional<RoomDetailView> found = roomReader.getById(room.id());
 
         assertThat(found).isPresent();
         RoomDetailView response = found.get();
@@ -77,7 +77,7 @@ class JooqRoomReadAdapterTest {
     void save_thenFindByName_returnsProjection() {
         Room room = roomRepository.save(newRoom());
 
-        Optional<RoomSummaryView> found = roomReader.findByName(RoomName.of("F-201"));
+        Optional<RoomSummaryView> found = roomReader.getByName(RoomName.of("F-201"));
 
         assertThat(found).isPresent();
         assertThat(found.get().id()).isEqualTo(room.id().value());
@@ -88,11 +88,11 @@ class JooqRoomReadAdapterTest {
 
     @Test
     void findById_whenAbsent_returnsEmpty() {
-        assertThat(roomReader.findById(RoomId.of(UUID.randomUUID()))).isEmpty();
+        assertThat(roomReader.getById(RoomId.of(UUID.randomUUID()))).isEmpty();
     }
 
     @Test
     void findByName_whenAbsent_returnsEmpty() {
-        assertThat(roomReader.findByName(RoomName.of("G-301"))).isEmpty();
+        assertThat(roomReader.getByName(RoomName.of("G-301"))).isEmpty();
     }
 }

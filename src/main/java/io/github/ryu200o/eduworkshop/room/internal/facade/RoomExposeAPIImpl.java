@@ -24,12 +24,12 @@ class RoomExposeAPIImpl implements RoomExposeAPI {
 
     @Override
     public boolean existsById(UUID roomId) {
-        return roomReader.findById(RoomId.of(roomId)).isPresent();
+        return roomReader.getById(RoomId.of(roomId)).isPresent();
     }
 
     @Override
-    public Optional<RoomPlanningPermission> findPlanningPermission(UUID roomId) {
-        return roomReader.findById(RoomId.of(roomId))
+    public Optional<RoomPlanningPermission> getPlanningPermission(UUID roomId) {
+        return roomReader.getById(RoomId.of(roomId))
                 .map(view -> {
                     PlanningStatus status = switch (view.state()) {
                         case "ACTIVE" -> PlanningStatus.ALLOWED;

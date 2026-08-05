@@ -33,7 +33,7 @@ class JooqRoomReadAdapter implements RoomReader {
     }
 
     @Override
-    public Optional<RoomDetailView> findById(RoomId id) {
+    public Optional<RoomDetailView> getById(RoomId id) {
         return dsl.select(
                         ROOMS.ID,
                         ROOMS.NAME,
@@ -48,7 +48,7 @@ class JooqRoomReadAdapter implements RoomReader {
     }
 
     @Override
-    public Optional<RoomSummaryView> findByName(RoomName name) {
+    public Optional<RoomSummaryView> getByName(RoomName name) {
         return dsl.select(
                         ROOMS.ID,
                         ROOMS.NAME,

@@ -98,7 +98,7 @@ class PlanWorkshopCommandHandlerTest {
             var workshop = createDraftWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
 
             var result = handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
@@ -124,7 +124,7 @@ class PlanWorkshopCommandHandlerTest {
             var workshop = createDraftWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
             var result = handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
@@ -143,7 +143,7 @@ class PlanWorkshopCommandHandlerTest {
             var workshop = createDraftWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(BLOCKED_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID)))
@@ -160,7 +160,7 @@ class PlanWorkshopCommandHandlerTest {
             var workshop = createDraftWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(ROOM_ID))
                     .willReturn(Optional.empty());
 
             assertThatThrownBy(() -> handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID)))

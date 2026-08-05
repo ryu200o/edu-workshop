@@ -24,7 +24,7 @@ class GetWorkshopByIdQueryHandler implements QueryHandler<GetWorkshopByIdQuery, 
     @Override
     @Transactional(readOnly = true)
     public WorkshopDetailView handle(GetWorkshopByIdQuery query) {
-        return workshopReader.findById(query.workshopId())
+        return workshopReader.getById(query.workshopId())
                 .orElseThrow(() -> new WorkshopNotFoundException("id", query.workshopId()));
     }
 }

@@ -28,14 +28,14 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
     }
 
     @Override
-    public Optional<WorkshopRegistrationContract> findForRegistration(UUID workshopId) {
-        return workshopReader.findById(workshopId)
+    public Optional<WorkshopRegistrationContract> getForRegistration(UUID workshopId) {
+        return workshopReader.getById(workshopId)
                 .map(view -> new WorkshopRegistrationContract(view.id(), mapState(view.state()), view.startTime()));
     }
 
     @Override
-    public List<WorkshopImpactContract> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
-        return workshopReader.findByRoomAndTimeOverlap(roomId, startTime, endTime).stream()
+    public List<WorkshopImpactContract> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
+        return workshopReader.getByRoomAndTimeOverlap(roomId, startTime, endTime).stream()
                 .map(view -> new WorkshopImpactContract(
                         view.id(),
                         mapState(view.state()),

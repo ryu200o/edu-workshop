@@ -127,8 +127,8 @@ Consult these before designing or coding. They are the source of truth:
 - `docs/architecture/adr/0016-port-and-exposeapi-method-naming-convention.md` — **Accepted**:
   Outbound ports & Module Facades must not mix Write/Read prefixes. Write ports (`*Repository`)
   use **`load*`** (e.g. `loadById`, `loadPublishedOverlappingWithLock`); Read ports (`*Reader`)
-  use **`find*`** (e.g. `findById`, `findByRoomAndTimeOverlap`); cross-module ExposeAPI read
-  lookups use **`find*`** (renamed from legacy `check*`, ADR 0010 §6). Adapter impl classes
+  use **`get*`** (e.g. `getById`, `getByRoomAndTimeOverlap`); cross-module ExposeAPI read
+  lookups use **`get*`** (renamed from legacy `find*`/`check*`, ADR 0010 §6). Adapter impl classes
   (`JpaXWriteAdapter`, `JooqXReadAdapter`) kept as-is.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
@@ -152,7 +152,7 @@ Consult these before designing or coding. They are the source of truth:
   looks at the whole set. Per **ADR 0005 (Revised)**, this arbiter is the **Application handler**, which checks
   the invariant before delegating to the aggregate. The aggregate enforces ONLY local invariants (state transition,
   value consistency, etc.) and never receives a policy or repository parameter.
-- **Mechanism:** handler queries the repository (`findByCoordinate`, `findByName`) → evaluates uniqueness →
+- **Mechanism:** handler queries the repository (`findByCoordinate`, `getByName`) → evaluates uniqueness →
   calls `Room.create(...)` with no policy argument. If the DB constraint catches a race, the adapter translates
   `DataIntegrityViolationException` → `DuplicateRoomCodeException` / `DuplicateRoomNameException`.
 - The **DB unique constraints** (`uk_rooms_building_floor_code`, `uk_rooms_building_floor_name`) remain the

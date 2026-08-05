@@ -43,7 +43,7 @@ class PlanWorkshopCommandHandler
         Workshop workshop = workshopRepository.loadById(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
-        RoomPlanningPermission permission = roomExposeApi.findPlanningPermission(command.roomId())
+        RoomPlanningPermission permission = roomExposeApi.getPlanningPermission(command.roomId())
                 .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", command.roomId()));
 
         if (permission.status() == RoomPlanningPermission.PlanningStatus.BLOCKED) {
