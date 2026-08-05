@@ -24,7 +24,7 @@ class RoomExposeAPIImpl implements RoomExposeAPI {
 
     @Override
     public boolean existsById(UUID roomId) {
-        return roomReader.getById(RoomId.of(roomId)).isPresent();
+        return roomReader.existsById(RoomId.of(roomId));
     }
 
     @Override

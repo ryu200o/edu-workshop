@@ -95,4 +95,16 @@ class JooqRoomReadAdapterTest {
     void findByName_whenAbsent_returnsEmpty() {
         assertThat(roomReader.getByName(RoomName.of("G-301"))).isEmpty();
     }
+
+    @Test
+    void existsById_whenPresent_returnsTrue() {
+        Room room = roomRepository.save(newRoom());
+
+        assertThat(roomReader.existsById(room.id())).isTrue();
+    }
+
+    @Test
+    void existsById_whenAbsent_returnsFalse() {
+        assertThat(roomReader.existsById(RoomId.of(UUID.randomUUID()))).isFalse();
+    }
 }

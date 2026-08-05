@@ -15,6 +15,12 @@ import java.util.Optional;
 public interface RoomReader {
 
     /**
+     * Returns whether a room with the given id exists. Pure existence predicate — pushed down to
+     * SQL ({@code SELECT EXISTS}) so no projection is materialized on the read side.
+     */
+    boolean existsById(RoomId id);
+
+    /**
      * Looks up a room's full detail by id. Returns {@link RoomDetailView} (full projection).
      */
     Optional<RoomDetailView> getById(RoomId id);

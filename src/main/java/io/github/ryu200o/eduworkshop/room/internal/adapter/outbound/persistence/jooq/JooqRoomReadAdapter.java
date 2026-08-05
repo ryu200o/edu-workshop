@@ -33,6 +33,14 @@ class JooqRoomReadAdapter implements RoomReader {
     }
 
     @Override
+    public boolean existsById(RoomId id) {
+        return dsl.fetchExists(
+                dsl.selectOne()
+                        .from(ROOMS)
+                        .where(ROOMS.ID.eq(id.value())));
+    }
+
+    @Override
     public Optional<RoomDetailView> getById(RoomId id) {
         return dsl.select(
                         ROOMS.ID,
