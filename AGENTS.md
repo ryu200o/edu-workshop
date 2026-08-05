@@ -109,6 +109,27 @@ Consult these before designing or coding. They are the source of truth:
   H2 lacks partial indexes). `workshop_start_time` selective snapshot (ADR 0007). Phase 1
   implements a subset (REGISTERED/CANCELLED, no check-in); `docs/db/database.md` §6 stays the
   target design and is synchronized only when the module is complete. No `registration_histories`.
+- `docs/architecture/adr/0014-registration-12h-grace-period.md` — **Accepted**: Registration grants
+  active seats a 12-hour urgent-cancellation grace window on workshop reschedule
+  (`Registration.grantGracePeriod(occurredAt, newStartTime, now)`, system-initiated refund
+  `refundBySystem(now)` bypasses the 24h deadline). `workshop_start_time` snapshot refreshed in the
+  same flip. Consumed via `WorkshopRescheduledIntegrationEvent`/`WorkshopCancelledIntegrationEvent`
+  (outbox, ADR 0011). Phase 1 subset only.
+- `docs/architecture/adr/0015-concurrency-control-and-race-condition-mitigation.md` — **Accepted**:
+  Standardized concurrency matrix. **Set-based (write-skew) invariants**: lock-set-first with
+  pessimistic `@Lock(PESSIMISTIC_WRITE)` aggregate loads (e.g.
+  `WorkshopRepository.loadPublishedAndPlannedOverlappingWithLock`,
+  `MaintenanceScheduleRepository.loadOverlapping`, room `loadByIdWithLock`). **Single-aggregate
+  mutations**: optimistic locking — nullable `@Version Long` columns (`V14`), `ObjectOptimisticLockingFailureException` →
+  **409**, no `isNew()` reliance on assigned-UUID entities. Write adapters follow the 3 Golden
+  Save/Flush rules: Room & Registration `saveAndFlush` + `DataIntegrityViolation` backstop;
+  Workshop & Registration.saveAll use plain `save()` (dirty-check).
+- `docs/architecture/adr/0016-port-and-exposeapi-method-naming-convention.md` — **Accepted**:
+  Outbound ports & Module Facades must not mix Write/Read prefixes. Write ports (`*Repository`)
+  use **`load*`** (e.g. `loadById`, `loadPublishedOverlappingWithLock`); Read ports (`*Reader`)
+  use **`find*`** (e.g. `findById`, `findByRoomAndTimeOverlap`); cross-module ExposeAPI read
+  lookups use **`find*`** (renamed from legacy `check*`, ADR 0010 §6). Adapter impl classes
+  (`JpaXWriteAdapter`, `JooqXReadAdapter`) kept as-is.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).
