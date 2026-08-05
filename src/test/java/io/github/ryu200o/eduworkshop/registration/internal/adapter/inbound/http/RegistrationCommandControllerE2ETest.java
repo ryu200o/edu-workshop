@@ -73,17 +73,25 @@ class RegistrationCommandControllerE2ETest {
     }
 
     private UUID createWorkshop(String title, Instant start, Instant end) throws Exception {
+        return createWorkshop(title, start, end, 30);
+    }
+
+    private UUID createWorkshop(String title, Instant start, Instant end, int capacity) throws Exception {
         HttpResponse<String> response = post("/api/v1/workshops",
                 """
-                {"title": "%s", "description": "E2E seeding workshop", "startTime": "%s", "endTime": "%s", "capacity": 30}
-                """.formatted(title, start, end), Map.of());
+                {"title": "%s", "description": "E2E seeding workshop", "startTime": "%s", "endTime": "%s", "capacity": %d}
+                """.formatted(title, start, end, capacity), Map.of());
         assertThat(response.statusCode()).as("create workshop: %s", response.body())
                 .isEqualTo(HttpStatus.CREATED.value());
         return UUID.fromString(readField(response, "id"));
     }
 
     private UUID publishWorkshop(UUID roomId) throws Exception {
-        UUID workshopId = createWorkshop("WS-" + UUID.randomUUID(), START, END);
+        return publishWorkshop(roomId, 30);
+    }
+
+    private UUID publishWorkshop(UUID roomId, int capacity) throws Exception {
+        UUID workshopId = createWorkshop("WS-" + UUID.randomUUID(), START, END, capacity);
         HttpResponse<String> planned = post("/api/v1/workshops/" + workshopId + "/plan",
                 """
                 {"roomId": "%s"}
@@ -150,6 +158,19 @@ class RegistrationCommandControllerE2ETest {
         HttpResponse<String> registered = register(workshopId, UUID.randomUUID());
         assertThat(registered.statusCode()).as("register draft: %s", registered.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void register_whenCapacityFull_returnsConflict() throws Exception {
+        UUID roomId = createRoom("FULL");
+        UUID workshopId = publishWorkshop(roomId, 1);
+
+        UUID firstUser = UUID.randomUUID();
+        assertThat(register(workshopId, firstUser).statusCode()).as("first seat: register").isEqualTo(HttpStatus.CREATED.value());
+
+        HttpResponse<String> second = register(workshopId, UUID.randomUUID());
+        assertThat(second.statusCode()).as("second seat beyond capacity").isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(second.body()).contains("capacity=1");
     }
 
     @Test

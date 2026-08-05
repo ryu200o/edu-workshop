@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.registration.internal.adapter.inbound.http
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.DuplicateRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotOwnedByUserException;
+import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopCapacityExceededException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotOpenForRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.CancellationDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.InvalidRegistrationStateException;
@@ -18,10 +19,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
  * Centralized error handling for the Registration module's HTTP inbound adapters. Scoped strictly to
- * {@link RegistrationCommandController} via {@code assignableTypes} so business-specific translations
- * never leak into the shared kernel — preserving module encapsulation per Spring Modulith.
+ * {@link RegistrationCommandController} and {@link RegistrationQueryController} via
+ * {@code assignableTypes} so business-specific translations never leak into the shared kernel —
+ * preserving module encapsulation per Spring Modulith.
  */
-@RestControllerAdvice(assignableTypes = {RegistrationCommandController.class})
+@RestControllerAdvice(assignableTypes = {RegistrationCommandController.class, RegistrationQueryController.class})
 class RegistrationExceptionAdvice {
 
     @ExceptionHandler(DuplicateRegistrationException.class)
@@ -33,6 +35,12 @@ class RegistrationExceptionAdvice {
     @ExceptionHandler(WorkshopNotOpenForRegistrationException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleWorkshopNotOpen(WorkshopNotOpenForRegistrationException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(WorkshopCapacityExceededException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleCapacityExceeded(WorkshopCapacityExceededException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 

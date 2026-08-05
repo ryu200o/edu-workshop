@@ -33,6 +33,15 @@ class RegistrationJpaEntity {
     @Column(name = "workshop_start_time", nullable = false)
     private Instant workshopStartTime;
 
+    @Column(name = "workshop_title_snapshot")
+    private String workshopTitleSnapshot;
+
+    @Column(name = "workshop_end_time_snapshot")
+    private Instant workshopEndTimeSnapshot;
+
+    @Column(name = "workshop_room_name_snapshot")
+    private String workshopRoomNameSnapshot;
+
     @Column(name = "registered_at", nullable = false)
     private Instant registeredAt;
 
@@ -62,12 +71,16 @@ class RegistrationJpaEntity {
     }
 
     RegistrationJpaEntity(UUID id, UUID workshopId, UUID userId, String status, Instant workshopStartTime,
+                          String workshopTitleSnapshot, Instant workshopEndTimeSnapshot, String workshopRoomNameSnapshot,
                           Instant registeredAt, Instant cancelledAt, Instant gracePeriodUntil, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.workshopId = workshopId;
         this.userId = userId;
         this.status = status;
         this.workshopStartTime = workshopStartTime;
+        this.workshopTitleSnapshot = workshopTitleSnapshot;
+        this.workshopEndTimeSnapshot = workshopEndTimeSnapshot;
+        this.workshopRoomNameSnapshot = workshopRoomNameSnapshot;
         this.registeredAt = registeredAt;
         this.cancelledAt = cancelledAt;
         this.gracePeriodUntil = gracePeriodUntil;
@@ -113,6 +126,30 @@ class RegistrationJpaEntity {
 
     void setWorkshopStartTime(Instant workshopStartTime) {
         this.workshopStartTime = workshopStartTime;
+    }
+
+    String getWorkshopTitleSnapshot() {
+        return workshopTitleSnapshot;
+    }
+
+    void setWorkshopTitleSnapshot(String workshopTitleSnapshot) {
+        this.workshopTitleSnapshot = workshopTitleSnapshot;
+    }
+
+    Instant getWorkshopEndTimeSnapshot() {
+        return workshopEndTimeSnapshot;
+    }
+
+    void setWorkshopEndTimeSnapshot(Instant workshopEndTimeSnapshot) {
+        this.workshopEndTimeSnapshot = workshopEndTimeSnapshot;
+    }
+
+    String getWorkshopRoomNameSnapshot() {
+        return workshopRoomNameSnapshot;
+    }
+
+    void setWorkshopRoomNameSnapshot(String workshopRoomNameSnapshot) {
+        this.workshopRoomNameSnapshot = workshopRoomNameSnapshot;
     }
 
     Instant getRegisteredAt() {

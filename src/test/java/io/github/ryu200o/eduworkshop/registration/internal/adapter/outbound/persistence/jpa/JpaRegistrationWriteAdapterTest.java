@@ -41,7 +41,8 @@ class JpaRegistrationWriteAdapterTest {
         Instant rescheduledAt = graceUntil.minus(Registration.GRACE_PERIOD);
         // Danger zone: new start 30h after reschedule (24h ≤ 30h < 36h) so the grace window is granted.
         registration.grantGracePeriod(rescheduledAt,
-                rescheduledAt.plus(java.time.Duration.ofHours(30)), graceUntil);
+                rescheduledAt.plus(java.time.Duration.ofHours(30)),
+                rescheduledAt.plus(java.time.Duration.ofHours(32)), graceUntil);
 
         Registration saved = adapter.save(registration);
 

@@ -26,6 +26,7 @@ class RegistrationTest {
     private static final Instant NOW = Instant.parse("2026-08-01T10:00:00Z");
     // Workshop starts 2026-09-01 09:00 UTC → cancellation deadline (start − 24h) = 2026-08-31 09:00 UTC.
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
+    private static final Instant END = START.plus(java.time.Duration.ofHours(2));
     private static final Instant DEADLINE = START.minus(Registration.CANCELLATION_DEADLINE);
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final StudentId STUDENT = StudentId.of(UUID.randomUUID());
@@ -134,7 +135,7 @@ class RegistrationTest {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
         // Danger zone: gap = 30h (24h ≤ 30h < 36h) → student has only 6h under standard 24h deadline → 12h grace granted.
         Instant rescheduledAt = START.minus(java.time.Duration.ofHours(30));
-        registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
+        registration.grantGracePeriod(rescheduledAt, START, END, rescheduledAt);
         // Cancel past the standard deadline but within the 12h grace window.
         Instant cancelAt = rescheduledAt.plusSeconds(60);
         assertThat(cancelAt).isBefore(START);
@@ -149,7 +150,7 @@ class RegistrationTest {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
         // No danger zone: gap = 48h (≥ 36h) → student already has 24h under standard deadline → NO grace.
         Instant rescheduledAt = START.minus(java.time.Duration.ofHours(48));
-        registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
+        registration.grantGracePeriod(rescheduledAt, START, END, rescheduledAt);
         Instant cancelAt = START.minus(java.time.Duration.ofHours(23));
         assertThat(registration.gracePeriodUntil()).isNull();
 
@@ -162,7 +163,7 @@ class RegistrationTest {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
         // Danger zone (30h gap) → grace window open, but workshop has already started.
         Instant rescheduledAt = START.minus(java.time.Duration.ofHours(30));
-        registration.grantGracePeriod(rescheduledAt, START, rescheduledAt);
+        registration.grantGracePeriod(rescheduledAt, START, END, rescheduledAt);
 
         assertThatThrownBy(() -> registration.cancel(START.plusSeconds(1)))
                 .isInstanceOf(CancellationDeadlineExceededException.class);
@@ -307,7 +308,7 @@ class RegistrationTest {
         Instant rescheduledAt = START.minus(java.time.Duration.ofHours(30));
         Instant newStart = START;
 
-        registration.grantGracePeriod(rescheduledAt, newStart, rescheduledAt.plusSeconds(1));
+        registration.grantGracePeriod(rescheduledAt, newStart, END, rescheduledAt.plusSeconds(1));
 
         assertThat(registration.state()).isEqualTo(RegistrationState.REGISTERED);
         assertThat(registration.workshopReference().startTime()).isEqualTo(newStart);
@@ -328,14 +329,14 @@ class RegistrationTest {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
         // First reschedule in danger zone → grants grace.
         Instant firstReschedule = START.minus(java.time.Duration.ofHours(30));
-        registration.grantGracePeriod(firstReschedule, START, firstReschedule);
+        registration.grantGracePeriod(firstReschedule, START, END, firstReschedule);
         assertThat(registration.gracePeriodUntil()).isNotNull();
         registration.clearDomainEvents();
 
         // Second reschedule outside danger zone (gap = 48h ≥ 36h) → clears the window.
         Instant secondReschedule = firstReschedule.plusSeconds(60);
         Instant newStart2 = secondReschedule.plus(java.time.Duration.ofHours(48));
-        registration.grantGracePeriod(secondReschedule, newStart2, secondReschedule);
+        registration.grantGracePeriod(secondReschedule, newStart2, newStart2.plus(java.time.Duration.ofHours(2)), secondReschedule);
 
         assertThat(registration.gracePeriodUntil()).isNull();
         assertThat(registration.workshopReference().startTime()).isEqualTo(newStart2);
@@ -346,27 +347,56 @@ class RegistrationTest {
     void grantGracePeriod_repeatedDangerZone_extendsWindow() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
         Instant firstReschedule = START.minus(java.time.Duration.ofHours(30));
-        registration.grantGracePeriod(firstReschedule, START, firstReschedule);
+        registration.grantGracePeriod(firstReschedule, START, END, firstReschedule);
         registration.clearDomainEvents();
 
         Instant secondReschedule = firstReschedule.plusSeconds(60);
         // Second reschedule also in danger zone (gap to new start = 30h - 60s ≈ 29.99h).
         Instant newStart2 = secondReschedule.plus(java.time.Duration.ofHours(30));
-        registration.grantGracePeriod(secondReschedule, newStart2, secondReschedule);
+        registration.grantGracePeriod(secondReschedule, newStart2, newStart2.plus(java.time.Duration.ofHours(2)), secondReschedule);
 
         assertThat(registration.gracePeriodUntil()).isEqualTo(secondReschedule.plus(Registration.GRACE_PERIOD));
         assertThat(registration.workshopReference().startTime()).isEqualTo(newStart2);
     }
 
     @Test
+    void create_withSnapshotFields_preservesWorkshopDisplaySnapshots() {
+        WorkshopReference ref = WorkshopReference.of(WORKSHOP_ID, START, "Docker Essentials", END, "A-101");
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, ref, NOW);
+
+        assertThat(registration.workshopReference().title()).isEqualTo("Docker Essentials");
+        assertThat(registration.workshopReference().endTime()).isEqualTo(END);
+        assertThat(registration.workshopReference().roomName()).isEqualTo("A-101");
+        assertThat(registration.workshopReference().startTime()).isEqualTo(START);
+    }
+
+    @Test
+    void grantGracePeriod_refreshesScheduleButPreservesDisplaySnapshots() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT,
+                WorkshopReference.of(WORKSHOP_ID, START, "Docker Essentials", END, "A-101"), NOW);
+
+        Instant rescheduledAt = START.minus(java.time.Duration.ofHours(30));
+        Instant newStart = START.plusSeconds(3600);
+        Instant newEnd = newStart.plus(java.time.Duration.ofHours(2));
+        registration.grantGracePeriod(rescheduledAt, newStart, newEnd, rescheduledAt.plusSeconds(1));
+
+        assertThat(registration.workshopReference().startTime()).isEqualTo(newStart);
+        assertThat(registration.workshopReference().endTime()).isEqualTo(newEnd);
+        assertThat(registration.workshopReference().title()).isEqualTo("Docker Essentials");
+        assertThat(registration.workshopReference().roomName()).isEqualTo("A-101");
+    }
+
+    @Test
     void grantGracePeriod_rejectsNull() {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
 
-        assertThatThrownBy(() -> registration.grantGracePeriod(null, START, NOW))
+        assertThatThrownBy(() -> registration.grantGracePeriod(null, START, END, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, null, NOW))
+        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, null, END, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, null))
+        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, null, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, END, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -375,7 +405,7 @@ class RegistrationTest {
         Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
         registration.cancel(DEADLINE.minusSeconds(1));
 
-        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, NOW))
+        assertThatThrownBy(() -> registration.grantGracePeriod(NOW, START, END, NOW))
                 .isInstanceOf(RegistrationDomainException.class);
     }
 

@@ -2,9 +2,11 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.DuplicateRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.ReferencedWorkshopNotFoundException;
+import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopCapacityExceededException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotOpenForRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.RegisterWorkshopCommand;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationReader;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.RegistrationId;
@@ -45,6 +47,9 @@ class RegisterWorkshopCommandHandlerTest {
     private WorkshopExposeAPI workshopExposeApi;
 
     @Mock
+    private RegistrationReader registrationReader;
+
+    @Mock
     private RegistrationRepository registrationRepository;
 
     @Mock
@@ -52,6 +57,8 @@ class RegisterWorkshopCommandHandlerTest {
 
     private static final Instant NOW = Instant.parse("2026-08-01T10:00:00Z");
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
+    private static final Instant END = START.plusSeconds(7200);
+    private static final int CAPACITY = 30;
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final UUID USER_ID = UUID.randomUUID();
 
@@ -63,17 +70,19 @@ class RegisterWorkshopCommandHandlerTest {
     }
 
     private RegisterWorkshopCommandHandler handler() {
-        return new RegisterWorkshopCommandHandler(workshopExposeApi, registrationRepository,
+        return new RegisterWorkshopCommandHandler(workshopExposeApi, registrationReader, registrationRepository,
                 registrationDomainEventPublisher, clock);
     }
 
     private WorkshopRegistrationContract publishedWorkshop() {
-        return new WorkshopRegistrationContract(WORKSHOP_ID, WorkshopStateContract.PUBLISHED, START);
+        return new WorkshopRegistrationContract(WORKSHOP_ID, WorkshopStateContract.PUBLISHED, START,
+                CAPACITY, "Docker Essentials", END, "A-101");
     }
 
     @Test
     void happyPath_createsAndPersistsNewRegistration() {
-        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(workshopExposeApi.lockForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(registrationReader.countActiveByWorkshop(WORKSHOP_ID)).thenReturn(CAPACITY - 1);
         when(registrationRepository.loadByWorkshopAndUser(WORKSHOP_ID, USER_ID)).thenReturn(Optional.empty());
         when(registrationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -82,10 +91,14 @@ class RegisterWorkshopCommandHandlerTest {
         assertThat(result.registrationId()).isNotNull();
         assertThat(result.registeredAt()).isEqualTo(NOW);
 
+        verify(registrationReader).countActiveByWorkshop(WORKSHOP_ID);
         verify(registrationRepository).save(argThat(r ->
                 r.state() == RegistrationState.REGISTERED
                         && r.studentId().value().equals(USER_ID)
-                        && r.workshopReference().startTime().equals(START)));
+                        && r.workshopReference().startTime().equals(START)
+                        && r.workshopReference().title().equals("Docker Essentials")
+                        && r.workshopReference().endTime().equals(END)
+                        && r.workshopReference().roomName().equals("A-101")));
         verify(registrationDomainEventPublisher).publish(argThat(events -> events.size() == 1
                 && events.getFirst() instanceof RegistrationCreated));
     }
@@ -96,7 +109,8 @@ class RegisterWorkshopCommandHandlerTest {
                 WorkshopReference.of(WORKSHOP_ID, START), NOW);
         existing.cancel(START.minus(Registration.CANCELLATION_DEADLINE).minusSeconds(1));
 
-        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(workshopExposeApi.lockForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(registrationReader.countActiveByWorkshop(WORKSHOP_ID)).thenReturn(CAPACITY - 1);
         when(registrationRepository.loadByWorkshopAndUser(WORKSHOP_ID, USER_ID)).thenReturn(Optional.of(existing));
         when(registrationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -112,7 +126,8 @@ class RegisterWorkshopCommandHandlerTest {
         Registration existing = Registration.create(RegistrationId.generate(), StudentId.of(USER_ID),
                 WorkshopReference.of(WORKSHOP_ID, START), NOW);
 
-        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(workshopExposeApi.lockForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(registrationReader.countActiveByWorkshop(WORKSHOP_ID)).thenReturn(CAPACITY - 1);
         when(registrationRepository.loadByWorkshopAndUser(WORKSHOP_ID, USER_ID)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
@@ -123,19 +138,32 @@ class RegisterWorkshopCommandHandlerTest {
     }
 
     @Test
+    void rejectsWhenCapacityFull() {
+        when(workshopExposeApi.lockForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(registrationReader.countActiveByWorkshop(WORKSHOP_ID)).thenReturn(CAPACITY);
+
+        assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
+                .isInstanceOf(WorkshopCapacityExceededException.class);
+
+        verify(registrationRepository, never()).save(any());
+        verifyNoInteractions(registrationDomainEventPublisher);
+    }
+
+    @Test
     void rejectsWhenWorkshopNotFound() {
-        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.empty());
+        when(workshopExposeApi.lockForRegistration(WORKSHOP_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
                 .isInstanceOf(ReferencedWorkshopNotFoundException.class);
 
-        verifyNoInteractions(registrationRepository, registrationDomainEventPublisher);
+        verifyNoInteractions(registrationReader, registrationRepository, registrationDomainEventPublisher);
     }
 
     @Test
     void rejectsWhenWorkshopNotPublished() {
-        when(workshopExposeApi.getForRegistration(WORKSHOP_ID))
-                .thenReturn(Optional.of(new WorkshopRegistrationContract(WORKSHOP_ID, WorkshopStateContract.DRAFT, START)));
+        when(workshopExposeApi.lockForRegistration(WORKSHOP_ID))
+                .thenReturn(Optional.of(new WorkshopRegistrationContract(WORKSHOP_ID, WorkshopStateContract.DRAFT,
+                        START, CAPACITY, "Draft WS", END, "A-101")));
 
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
                 .isInstanceOf(WorkshopNotOpenForRegistrationException.class);

@@ -22,6 +22,16 @@ public interface WorkshopExposeAPI {
     Optional<WorkshopRegistrationContract> getForRegistration(UUID workshopId);
 
     /**
+     * Acquires a pessimistic write lock on the workshop row (lock-anchor, ADR 0015) and returns the
+     * same registration snapshot as {@link #getForRegistration}. Used by the Registration module's
+     * capacity gate: all concurrent registrations for the same workshop serialize on this single
+     * row-lock (the {@code workshops} row always exists, unlike a possibly-empty {@code registrations}
+     * set), so the subsequent {@code countActiveByWorkshop} read is stable and no seat is
+     * over-booked. Empty when the workshop does not exist.
+     */
+    Optional<WorkshopRegistrationContract> lockForRegistration(UUID workshopId);
+
+    /**
      * Returns the workshops assigned to a given room whose time window overlaps the specified range,
      * as consumer-driven DTOs (id + state). Empty when no workshop overlaps.
      *
