@@ -73,7 +73,7 @@ class RegisterWorkshopCommandHandlerTest {
 
     @Test
     void happyPath_createsAndPersistsNewRegistration() {
-        when(workshopExposeApi.findForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
         when(registrationRepository.loadByWorkshopAndUser(WORKSHOP_ID, USER_ID)).thenReturn(Optional.empty());
         when(registrationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -96,7 +96,7 @@ class RegisterWorkshopCommandHandlerTest {
                 WorkshopReference.of(WORKSHOP_ID, START), NOW);
         existing.cancel(START.minus(Registration.CANCELLATION_DEADLINE).minusSeconds(1));
 
-        when(workshopExposeApi.findForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
         when(registrationRepository.loadByWorkshopAndUser(WORKSHOP_ID, USER_ID)).thenReturn(Optional.of(existing));
         when(registrationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -112,7 +112,7 @@ class RegisterWorkshopCommandHandlerTest {
         Registration existing = Registration.create(RegistrationId.generate(), StudentId.of(USER_ID),
                 WorkshopReference.of(WORKSHOP_ID, START), NOW);
 
-        when(workshopExposeApi.findForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
+        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.of(publishedWorkshop()));
         when(registrationRepository.loadByWorkshopAndUser(WORKSHOP_ID, USER_ID)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
@@ -124,7 +124,7 @@ class RegisterWorkshopCommandHandlerTest {
 
     @Test
     void rejectsWhenWorkshopNotFound() {
-        when(workshopExposeApi.findForRegistration(WORKSHOP_ID)).thenReturn(Optional.empty());
+        when(workshopExposeApi.getForRegistration(WORKSHOP_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))
                 .isInstanceOf(ReferencedWorkshopNotFoundException.class);
@@ -134,7 +134,7 @@ class RegisterWorkshopCommandHandlerTest {
 
     @Test
     void rejectsWhenWorkshopNotPublished() {
-        when(workshopExposeApi.findForRegistration(WORKSHOP_ID))
+        when(workshopExposeApi.getForRegistration(WORKSHOP_ID))
                 .thenReturn(Optional.of(new WorkshopRegistrationContract(WORKSHOP_ID, WorkshopStateContract.DRAFT, START)));
 
         assertThatThrownBy(() -> handler().handle(new RegisterWorkshopCommand(WORKSHOP_ID, USER_ID)))

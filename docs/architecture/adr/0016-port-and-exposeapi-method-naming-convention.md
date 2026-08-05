@@ -42,8 +42,8 @@ Over time, method prefixes drifted (`find*` appearing in write repositories, `ch
 | Layer / Interface | Prefix (Mandatory) | Purpose | Examples |
 |---|---|---|---|
 | **Write port** (`*Repository`) | `load*` | Load an Aggregate Root / Entity into RAM for business mutation | `loadById`, `loadByIdWithLock`, `loadByRoomId`, `loadOverlappingPlanned`, `loadPublishedOverlappingWithTimeWindow`, `loadByWorkshopAndUser` |
-| **Read port** (`*Reader`) | `find*` | Query read-only data for Views / DTOs / Projections | `findById`, `findByName`, `findAll`, `findByRoomAndTimeOverlap` |
-| **Module Facade** (`*ExposeAPI`) — read lookups | `find*` | Return a Contract / DTO / `Optional` to a caller module | `findForRegistration`, `findByRoomAndTimeOverlap`, `findPlanningPermission` |
+| **Read port** (`*Reader`) | `get*` | Query read-only data for Views / DTOs / Projections | `getById`, `getByName`, `getAll`, `getByRoomAndTimeOverlap` |
+| **Module Facade** (`*ExposeAPI`) — read lookups | `get*` | Return a Contract / DTO / `Optional` to a caller module | `getForRegistration`, `getByRoomAndTimeOverlap`, `getPlanningPermission` |
 | **Aggregation lookups** (both sides) | `count*` | Return a scalar count (neither mutating nor projecting a single row) | `countOverlapping`, `countActiveByWorkshopIds` |
 | **Existence predicate** (Facade) | `exists*` | Return a boolean existence check | `existsById` |
 
@@ -51,11 +51,11 @@ Over time, method prefixes drifted (`find*` appearing in write repositories, `ch
 
 1. **Write-side outbound ports (`*Repository`) MUST use `load*`** for any method that materializes an aggregate/entity.
    - **Violation**: a `*Repository` method named `find*` or `get*`.
-2. **Read-side outbound ports (`*Reader`) MUST use `find*`** for any lookup returning a projection / DTO / `Optional`.
-   - **Violation**: a `*Reader` (or Query Port) method named `load*`.
-3. **Module Facade (`*ExposeAPI`) read lookups MUST use `find*`** when they pull a data/permission contract back to the caller.
-   - **Violation**: a read lookup named `check*`, `get*`, or `load*`.
-4. **`count*` and `exists*` are reserved, explicitly-allowed prefixes** for aggregation and existence checks on either side; they are NOT `find*`/`load*` violations.
+2. **Read-side outbound ports (`*Reader`) MUST use `get*`** for any lookup returning a projection / DTO / `Optional`.
+   - **Violation**: a `*Reader` (or Query Port) method named `load*` or `find*`.
+3. **Module Facade (`*ExposeAPI`) read lookups MUST use `get*`** when they pull a data/permission contract back to the caller.
+   - **Violation**: a read lookup named `check*`, `find*`, or `load*`.
+4. **`count*` and `exists*` are reserved, explicitly-allowed prefixes** for aggregation and existence checks on either side; they are NOT `get*`/`load*` violations.
 
 ### 3.3 Scope & Non-Scope
 
@@ -70,12 +70,12 @@ Over time, method prefixes drifted (`find*` appearing in write repositories, `ch
 ### Positive
 
 - **Read vs Write is decidable from the method name** everywhere it matters (ports and cross-module facades).
-- **Cross-module callers** can rely on `find*` being side-effect free and `count*`/`exists*` being cheap aggregation/predicate reads.
-- **Code review** becomes a mechanical scan: any `find*` in a `*Repository` or `load*` in a `*Reader`/`*ExposeAPI` is flagged automatically.
+- **Cross-module callers** can rely on `get*` being side-effect free and `count*`/`exists*` being cheap aggregation/predicate reads.
+- **Code review** becomes a mechanical scan: any `find*` in a `*Repository` or `load*`/`find*` in a `*Reader`/`*ExposeAPI` is flagged automatically.
 
 ### Trade-offs / Costs
 
-- **Churn**: existing methods had to be renamed (ports: `findByRoomId`→`loadByRoomId`, `findOverlapping`→`loadOverlapping`, `findOverlappingPlanned`→`loadOverlappingPlanned`; ExposeAPI: `checkPlanningPermission`→`findPlanningPermission`). One-time cost, now done.
+- **Churn**: existing methods had to be renamed (ports: `findByRoomId`→`loadByRoomId`, `findOverlapping`→`loadOverlapping`, `findOverlappingPlanned`→`loadOverlappingPlanned`; ExposeAPI: `checkPlanningPermission`→`getPlanningPermission`). One-time cost, now done.
 - **Infraternal naming** in adapters: adapter implementations carry the port prefix while their underlying `*JpaRepository` keeps Spring Data prefixes — a deliberate asymmetry, documented above, not a bug.
 
 ---
@@ -83,8 +83,8 @@ Over time, method prefixes drifted (`find*` appearing in write repositories, `ch
 ## 5. Compliance Checklist
 
 1. All outbound write ports (`*Repository`) expose only `load*`/`save*`/`saveAll`/`delete*`/`count*` method names.
-2. All outbound read ports (`*Reader`) expose only `find*`/`count*` method names.
-3. All `*ExposeAPI` interfaces expose only `find*`/`count*`/`exists*` for read lookups (no `check*`, `get*`, `load*`).
+2. All outbound read ports (`*Reader`) expose only `get*`/`count*` method names.
+3. All `*ExposeAPI` interfaces expose only `get*`/`count*`/`exists*` for read lookups (no `check*`, `find*`, `load*`).
 4. Spring Data `*JpaRepository` infrastructure interfaces are explicitly exempt and keep `find*` derived-query prefixes.
 5. New features follow §3.1 — enforced during review.
 
@@ -92,10 +92,11 @@ Over time, method prefixes drifted (`find*` appearing in write repositories, `ch
 
 ## 6. Implementation Checklist
 
-1. **This ADR** documents the matrix and the two decision batches below.
+1. **This ADR** documents the matrix and the three decision batches below.
 2. **Batch 1 — Outbound Ports** (commit `757feb9`): renamed `MaintenanceScheduleRepository.findByRoomId`→`loadByRoomId`, `MaintenanceScheduleRepository.findOverlapping`→`loadOverlapping`, `WorkshopRepository.findOverlappingPlanned`→`loadOverlappingPlanned`; ripple through `JpaMaintenanceScheduleWriteAdapter`, `JpaWorkshopWriteAdapter`, `ScheduleRoomMaintenanceCommandHandler`, `PlannedWorkshopKicker`, tests, and javadoc/ADR 0015 references.
 3. **Batch 2 — Module Facade** (commit `986f2b6`): renamed `RoomExposeAPI.checkPlanningPermission`→`findPlanningPermission`; ripple through `RoomExposeAPIImpl`, `PlanWorkshopCommandHandler`, `PublishWorkshopCommandHandler`, `ChangeWorkshopRoomCommandHandler`, and their tests.
-4. **Tests**: full suite green after both batches (366/366).
+4. **Batch 3 — Read Ports & Expose APIs: `find*` → `get*`** (commit `...`): renamed `WorkshopReader.find*`→`get*` (`getById`, `getAll`, `getByRoomAndTimeOverlap`), `RoomReader.find*`→`get*` (`getById`, `getByName`), `WorkshopExposeAPI.findForRegistration`→`getForRegistration`, `WorkshopExposeAPI.findByRoomAndTimeOverlap`→`getByRoomAndTimeOverlap`, `RoomExposeAPI.findPlanningPermission`→`getPlanningPermission`; ripple through `JooqWorkshopReadAdapter`, `JooqRoomReadAdapter`, `WorkshopExposeAPIImpl`, `RoomExposeAPIImpl`, and their callers (Query/Command handlers, cross-module handlers, tests). `RegistrationReader` already complied (only `count*` methods — no rename needed). Spring Data `*JpaRepository` derived queries kept as `find*` (exempt, §3.3).
+5. **Tests**: full suite green after all three batches (383/383).
 
 ---
 

@@ -35,7 +35,7 @@ class GetWorkshopByIdQueryHandlerTest {
                 id, "Test Title", "A description",
                 UUID.randomUUID(), "F-201", "F/2", 50, false, false, null,
                 now, now.plusSeconds(7200), 25, "PLANNED", now, now);
-        when(workshopReader.findById(id)).thenReturn(Optional.of(expected));
+        when(workshopReader.getById(id)).thenReturn(Optional.of(expected));
 
         WorkshopDetailView result = handler().handle(new GetWorkshopByIdQuery(id));
 
@@ -45,7 +45,7 @@ class GetWorkshopByIdQueryHandlerTest {
     @Test
     void notFound_throwsWorkshopNotFoundException() {
         UUID id = UUID.randomUUID();
-        when(workshopReader.findById(id)).thenReturn(Optional.empty());
+        when(workshopReader.getById(id)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(new GetWorkshopByIdQuery(id)))
                 .isInstanceOf(WorkshopNotFoundException.class);

@@ -30,7 +30,7 @@ class GetWorkshopsQueryHandlerTest {
         Instant now = Instant.now();
         WorkshopSummaryView one = new WorkshopSummaryView(UUID.randomUUID(), "Workshop A", now, now.plusSeconds(3600), false, null, "DRAFT");
         WorkshopSummaryView two = new WorkshopSummaryView(UUID.randomUUID(), "Workshop B", now, now.plusSeconds(7200), false, null, "PLANNED");
-        when(workshopReader.findAll()).thenReturn(List.of(one, two));
+        when(workshopReader.getAll()).thenReturn(List.of(one, two));
 
         List<WorkshopSummaryView> result = handler().handle(new GetWorkshopsQuery());
 
@@ -39,7 +39,7 @@ class GetWorkshopsQueryHandlerTest {
 
     @Test
     void returnsEmptyListWhenNoWorkshops() {
-        when(workshopReader.findAll()).thenReturn(List.of());
+        when(workshopReader.getAll()).thenReturn(List.of());
 
         assertThat(handler().handle(new GetWorkshopsQuery())).isEmpty();
     }

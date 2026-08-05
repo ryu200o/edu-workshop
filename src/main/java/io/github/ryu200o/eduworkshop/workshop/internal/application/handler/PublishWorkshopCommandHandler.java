@@ -58,7 +58,7 @@ class PublishWorkshopCommandHandler
 
         UUID roomId = workshop.roomReference().roomId();
 
-        RoomPlanningPermission permission = roomExposeApi.findPlanningPermission(roomId)
+        RoomPlanningPermission permission = roomExposeApi.getPlanningPermission(roomId)
                 .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", roomId));
 
         if (permission.status() != RoomPlanningPermission.PlanningStatus.ALLOWED) {

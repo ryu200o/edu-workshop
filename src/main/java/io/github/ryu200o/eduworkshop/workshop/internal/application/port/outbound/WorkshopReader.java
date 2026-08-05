@@ -18,15 +18,15 @@ public interface WorkshopReader {
     /**
      * Looks up a workshop's full detail by id. Returns {@link WorkshopDetailView} (full projection).
      */
-    Optional<WorkshopDetailView> findById(UUID id);
+    Optional<WorkshopDetailView> getById(UUID id);
 
     /**
      * Lists all workshops as lightweight summaries. Returns an empty list when no workshops exist.
      */
-    List<WorkshopSummaryView> findAll();
+    List<WorkshopSummaryView> getAll();
 
     /**
-     * Finds workshops assigned to a given room whose time window overlaps the specified range.
+     * Gets workshops assigned to a given room whose time window overlaps the specified range.
      * Only planning-relevant states ({@code PUBLISHED}, {@code PLANNED}) are returned — the state
      * predicate is pushed down to SQL (DB Query Pushdown), never filtered in memory. Overlap
      * condition: {@code wsStart < maintEnd && wsEnd > maintStart}. If {@code maintEnd} is null
@@ -37,5 +37,5 @@ public interface WorkshopReader {
      * @param endTime   the maintenance window end (null = indefinite)
      * @return list of matching workshops as lightweight summaries
      */
-    List<WorkshopSummaryView> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
+    List<WorkshopSummaryView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
 }

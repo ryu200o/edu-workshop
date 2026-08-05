@@ -123,7 +123,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             // Target lives in the OLD room, so the new-room locked set is empty; the target is
             // resolved via the lock-by-id fallback.
@@ -152,7 +152,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
 
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
                     .willReturn(List.of(planned));
@@ -182,7 +182,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
 
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             // The non-overlapping workshop is not part of the locked overlapping set.
             given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
@@ -206,7 +206,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
@@ -219,7 +219,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(BLOCKED_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
@@ -232,7 +232,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop workshop = createPublishedWorkshop();
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID)).willReturn(Optional.empty());
+            given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
                     .isInstanceOf(ReferencedRoomNotFoundException.class);
@@ -251,7 +251,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
 
             given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
                     .willReturn(List.of(otherPublished));

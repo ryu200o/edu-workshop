@@ -19,7 +19,7 @@ public interface WorkshopExposeAPI {
      * for booking only when {@code PUBLISHED}) and its start time (used by Registration to enforce
      * its own cancellation-deadline invariant). Empty when the workshop does not exist.
      */
-    Optional<WorkshopRegistrationContract> findForRegistration(UUID workshopId);
+    Optional<WorkshopRegistrationContract> getForRegistration(UUID workshopId);
 
     /**
      * Returns the workshops assigned to a given room whose time window overlaps the specified range,
@@ -29,5 +29,5 @@ public interface WorkshopExposeAPI {
      * @param startTime the maintenance window start (inclusive lower bound)
      * @param endTime   the maintenance window end (null = indefinite)
      */
-    List<WorkshopImpactContract> findByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
+    List<WorkshopImpactContract> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
 }

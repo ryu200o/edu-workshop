@@ -31,7 +31,7 @@ class GetRoomByIdQueryHandlerTest {
     void happyPath_returnsProjectionFromPort() {
         UUID id = UUID.randomUUID();
         RoomDetailView expected = new RoomDetailView(id, "F.0201", "F", 2, 50, "ACTIVE");
-        when(roomReader.findById(RoomId.of(id))).thenReturn(Optional.of(expected));
+        when(roomReader.getById(RoomId.of(id))).thenReturn(Optional.of(expected));
 
         RoomDetailView result = handler().handle(new GetRoomByIdQuery(id));
 
@@ -41,7 +41,7 @@ class GetRoomByIdQueryHandlerTest {
     @Test
     void notFound_throwsRoomNotFoundException() {
         UUID id = UUID.randomUUID();
-        when(roomReader.findById(RoomId.of(id))).thenReturn(Optional.empty());
+        when(roomReader.getById(RoomId.of(id))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(new GetRoomByIdQuery(id)))
                 .isInstanceOf(RoomNotFoundException.class);

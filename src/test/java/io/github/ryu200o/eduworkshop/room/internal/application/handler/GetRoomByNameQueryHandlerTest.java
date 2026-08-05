@@ -34,7 +34,7 @@ class GetRoomByNameQueryHandlerTest {
     @Test
     void happyPath_returnsProjection() {
         RoomSummaryView expected = new RoomSummaryView(UUID.randomUUID(), "F-201", "F", 2);
-        when(roomReader.findByName(RoomName.of("F-201"))).thenReturn(Optional.of(expected));
+        when(roomReader.getByName(RoomName.of("F-201"))).thenReturn(Optional.of(expected));
 
         RoomSummaryView result = handler().handle(new GetRoomByNameQuery("F-201"));
 
@@ -51,12 +51,12 @@ class GetRoomByNameQueryHandlerTest {
 
     @Test
     void notFound_throwsRoomNotFoundException() {
-        when(roomReader.findByName(any())).thenReturn(Optional.empty());
+        when(roomReader.getByName(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("F-201")))
                 .isInstanceOf(RoomNotFoundException.class);
 
-        verify(roomReader).findByName(RoomName.of("F-201"));
+        verify(roomReader).getByName(RoomName.of("F-201"));
     }
 
     @Test
@@ -64,6 +64,6 @@ class GetRoomByNameQueryHandlerTest {
         assertThatThrownBy(() -> handler().handle(new GetRoomByNameQuery("")))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(roomReader, never()).findByName(any());
+        verify(roomReader, never()).getByName(any());
     }
 }

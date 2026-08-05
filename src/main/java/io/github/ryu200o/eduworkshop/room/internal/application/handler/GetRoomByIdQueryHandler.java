@@ -25,7 +25,7 @@ class GetRoomByIdQueryHandler implements QueryHandler<GetRoomByIdQuery, RoomDeta
     @Override
     @Transactional(readOnly = true)
     public RoomDetailView handle(GetRoomByIdQuery query) {
-        return roomReader.findById(RoomId.of(query.roomId()))
+        return roomReader.getById(RoomId.of(query.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", query.roomId()));
     }
 }

@@ -62,7 +62,7 @@ class JooqWorkshopReadAdapterTest {
     void save_thenFindById_roundTripsThroughDatabase() {
         Workshop workshop = workshopRepository.save(newWorkshop());
 
-        Optional<WorkshopDetailView> found = workshopReader.findById(workshop.id().value());
+        Optional<WorkshopDetailView> found = workshopReader.getById(workshop.id().value());
 
         assertThat(found).isPresent();
         WorkshopDetailView view = found.get();
@@ -91,7 +91,7 @@ class JooqWorkshopReadAdapterTest {
         workshop.markRoomEvicted(Instant.parse("2026-09-15T00:00:03Z"));
         workshopRepository.save(workshop);
 
-        Optional<WorkshopDetailView> found = workshopReader.findById(workshop.id().value());
+        Optional<WorkshopDetailView> found = workshopReader.getById(workshop.id().value());
 
         assertThat(found).isPresent();
         assertThat(found.get().isRoomEvicted()).isTrue();
@@ -103,7 +103,7 @@ class JooqWorkshopReadAdapterTest {
         Workshop a = workshopRepository.save(newWorkshop());
         Workshop b = workshopRepository.save(newWorkshop());
 
-        List<WorkshopSummaryView> views = workshopReader.findAll();
+        List<WorkshopSummaryView> views = workshopReader.getAll();
 
         assertThat(views).hasSize(2);
         assertThat(views).anyMatch(v -> v.id().equals(a.id().value()));
@@ -111,7 +111,7 @@ class JooqWorkshopReadAdapterTest {
     }
 
     @Test
-    void findByRoomAndTimeOverlap_returnsOnlyPublishedAndPlanned() {
+    void getByRoomAndTimeOverlap_returnsOnlyPublishedAndPlanned() {
         UUID roomId = UUID.randomUUID();
 
         Workshop planned = newWorkshop();
@@ -134,7 +134,7 @@ class JooqWorkshopReadAdapterTest {
         Instant overlapStart = Instant.parse("2026-10-01T09:30:00Z");
         Instant overlapEnd = Instant.parse("2026-10-01T10:30:00Z");
 
-        List<WorkshopSummaryView> views = workshopReader.findByRoomAndTimeOverlap(roomId, overlapStart, overlapEnd);
+        List<WorkshopSummaryView> views = workshopReader.getByRoomAndTimeOverlap(roomId, overlapStart, overlapEnd);
 
         assertThat(views).hasSize(2);
         assertThat(views).extracting(WorkshopSummaryView::state)
@@ -145,11 +145,11 @@ class JooqWorkshopReadAdapterTest {
 
     @Test
     void findById_whenAbsent_returnsEmpty() {
-        assertThat(workshopReader.findById(UUID.randomUUID())).isEmpty();
+        assertThat(workshopReader.getById(UUID.randomUUID())).isEmpty();
     }
 
     @Test
     void findAll_whenEmpty_returnsEmptyList() {
-        assertThat(workshopReader.findAll()).isEmpty();
+        assertThat(workshopReader.getAll()).isEmpty();
     }
 }

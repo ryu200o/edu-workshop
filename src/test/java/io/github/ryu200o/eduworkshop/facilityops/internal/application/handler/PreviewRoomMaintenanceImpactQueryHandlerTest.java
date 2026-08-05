@@ -62,14 +62,14 @@ class PreviewRoomMaintenanceImpactQueryHandlerTest {
 
         assertThatThrownBy(() -> handler().handle(query(roomId)))
                 .isInstanceOf(FacilityRoomNotFoundException.class);
-        verify(workshopExposeAPI, never()).findByRoomAndTimeOverlap(any(), any(), any());
+        verify(workshopExposeAPI, never()).getByRoomAndTimeOverlap(any(), any(), any());
     }
 
     @Test
     void noWorkshops_returnsZeroCounts() {
         UUID roomId = UUID.randomUUID();
         when(roomExposeAPI.existsById(roomId)).thenReturn(true);
-        when(workshopExposeAPI.findByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
+        when(workshopExposeAPI.getByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
                 .thenReturn(Collections.emptyList());
 
         RoomMaintenanceImpactView view = handler().handle(query(roomId));
@@ -87,7 +87,7 @@ class PreviewRoomMaintenanceImpactQueryHandlerTest {
         UUID ws1 = UUID.randomUUID();
         UUID ws2 = UUID.randomUUID();
         when(roomExposeAPI.existsById(roomId)).thenReturn(true);
-        when(workshopExposeAPI.findByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
+        when(workshopExposeAPI.getByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
                 .thenReturn(List.of(
                         workshop(ws1, WorkshopStateContract.PUBLISHED),
                         workshop(ws2, WorkshopStateContract.PUBLISHED)));
@@ -105,7 +105,7 @@ class PreviewRoomMaintenanceImpactQueryHandlerTest {
     void plannedWorkshopsOverlap_returnsCorrectCount() {
         UUID roomId = UUID.randomUUID();
         when(roomExposeAPI.existsById(roomId)).thenReturn(true);
-        when(workshopExposeAPI.findByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
+        when(workshopExposeAPI.getByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
                 .thenReturn(List.of(
                         workshop(UUID.randomUUID(), WorkshopStateContract.PLANNED),
                         workshop(UUID.randomUUID(), WorkshopStateContract.PLANNED)));
@@ -122,7 +122,7 @@ class PreviewRoomMaintenanceImpactQueryHandlerTest {
     void mixedWorkshops_returnsCorrectCounts() {
         UUID roomId = UUID.randomUUID();
         when(roomExposeAPI.existsById(roomId)).thenReturn(true);
-        when(workshopExposeAPI.findByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
+        when(workshopExposeAPI.getByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
                 .thenReturn(List.of(
                         workshop(UUID.randomUUID(), WorkshopStateContract.PUBLISHED),
                         workshop(UUID.randomUUID(), WorkshopStateContract.PLANNED),
@@ -140,7 +140,7 @@ class PreviewRoomMaintenanceImpactQueryHandlerTest {
     void noOverlap_returnsZeroCounts() {
         UUID roomId = UUID.randomUUID();
         when(roomExposeAPI.existsById(roomId)).thenReturn(true);
-        when(workshopExposeAPI.findByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
+        when(workshopExposeAPI.getByRoomAndTimeOverlap(eq(roomId), any(Instant.class), any(Instant.class)))
                 .thenReturn(Collections.emptyList());
 
         RoomMaintenanceImpactView view = handler().handle(query(roomId));

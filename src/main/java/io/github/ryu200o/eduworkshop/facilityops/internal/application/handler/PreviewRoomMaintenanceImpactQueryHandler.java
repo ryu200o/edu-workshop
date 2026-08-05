@@ -43,7 +43,7 @@ class PreviewRoomMaintenanceImpactQueryHandler
             throw new FacilityRoomNotFoundException(query.roomId());
         }
 
-        List<WorkshopImpactContract> workshops = workshopExposeAPI.findByRoomAndTimeOverlap(
+        List<WorkshopImpactContract> workshops = workshopExposeAPI.getByRoomAndTimeOverlap(
                 query.roomId(), query.startTime(), query.endTime());
 
         int publishedCount = 0;

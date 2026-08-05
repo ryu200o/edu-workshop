@@ -256,8 +256,8 @@ public record RoomSummaryView(UUID id, String name, String building, int floor) 
 > Read-side giữ nguyên là `RoomReader` (CQRS bypass), trả View trực tiếp, không reconstruct domain.
 ```java
 public interface RoomReader {
-    Optional<RoomDetailView> findById(UUID id);          // CQRS bypass: trả View trực tiếp
-    Optional<RoomSummaryView> findByName(RoomName name); // RoomName là opaque VO, không reverse-parse
+    Optional<RoomDetailView> getById(UUID id);          // CQRS bypass: trả View trực tiếp
+    Optional<RoomSummaryView> getByName(RoomName name); // RoomName là opaque VO, không reverse-parse
 }
 ```
 
@@ -268,7 +268,7 @@ public interface RoomReader {
 class GetRoomByIdQueryHandler implements QueryHandler<GetRoomByIdQuery, RoomDetailView> {
     private final RoomReader roomReader;
     @Override public RoomDetailView handle(GetRoomByIdQuery q) {
-        return roomReader.findById(q.roomId()).orElseThrow(() -> new RoomNotFoundException("id=" + q.roomId()));
+        return roomReader.getById(q.roomId()).orElseThrow(() -> new RoomNotFoundException("id=" + q.roomId()));
     }
 }
 
@@ -278,7 +278,7 @@ class GetRoomByNameQueryHandler implements QueryHandler<GetRoomByNameQuery, Room
     private final RoomReader roomReader;
     @Override public RoomSummaryView handle(GetRoomByNameQuery q) {
         RoomName name = RoomName.of(q.roomName());  // RAM self-defense; free-form, không parse ngược
-        return roomReader.findByName(name).orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));
+        return roomReader.getByName(name).orElseThrow(() -> new RoomNotFoundException("name=" + name.asString()));
     }
 }
 ```
@@ -350,7 +350,7 @@ shared/application/cqs/
 > Write và read **cùng 1 datasource** (logical split, không tách DB vật lý). Mỗi bên có adapter + mapping riêng.
 - **Command side (`persistence/jpa/`):** `JpaRoomWriteAdapter` impl `RoomRepository` (save / loadById /
   existsByCoordinate). Mapping domain ↔ JPA entity nằm ở đây. Flyway là **schema owner duy nhất**.
-- **Query side (`persistence/jooq/`):** `JooqRoomReadAdapter` impl `RoomReader` (findById / findByName).
+- **Query side (`persistence/jooq/`):** `JooqRoomReadAdapter` impl `RoomReader` (getById / getByName).
   Dùng `DSLContext` (cùng DataSource) + generated `io.github.ryu200o.eduworkshop.room.jooq.tables.Rooms`
   để query cột phẳng → map trực tiếp vào `Room*View`. **KHÔNG** qua JPA entity, **KHÔNG** reconstruct domain.
 - JOOQ table class sinh tự động từ `src/main/resources/db/codegen/rooms_schema.sql` (codegen-only DDL, mirror
@@ -377,7 +377,7 @@ Example — RoomExposeAPI providing snapshot data:
 ```java
 // room/RoomExposeAPI.java (public interface, module root)
 public interface RoomExposeAPI {
-    Optional<RoomSnapshot> findRoomSnapshot(UUID roomId);
+    Optional<RoomSnapshot> getRoomSnapshot(UUID roomId);
 }
 
 // room/contract/RoomSnapshot.java (public DTO, module root/contract/)
@@ -391,8 +391,8 @@ class RoomExposeAPIImpl implements RoomExposeAPI {
     private final RoomReader roomReader;
 
     @Override
-    public Optional<RoomSnapshot> findRoomSnapshot(UUID roomId) {
-        return roomReader.findById(RoomId.of(roomId))
+    public Optional<RoomSnapshot> getRoomSnapshot(UUID roomId) {
+        return roomReader.getById(RoomId.of(roomId))
                 .map(view -> new RoomSnapshot(view.id(), view.name(),
                         new RoomSnapshot.Location(view.building(), view.floor())));
     }

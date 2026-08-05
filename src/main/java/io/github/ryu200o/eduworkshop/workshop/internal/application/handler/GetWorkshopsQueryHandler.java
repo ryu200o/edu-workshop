@@ -25,6 +25,6 @@ class GetWorkshopsQueryHandler implements QueryHandler<GetWorkshopsQuery, List<W
     @Override
     @Transactional(readOnly = true)
     public List<WorkshopSummaryView> handle(GetWorkshopsQuery query) {
-        return workshopReader.findAll();
+        return workshopReader.getAll();
     }
 }
