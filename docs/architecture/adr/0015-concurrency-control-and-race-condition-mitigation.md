@@ -11,7 +11,7 @@
 
 During the technical review of the **Time-Windowed Room Maintenance** feature, the team identified a latent **Race Condition (Phantom Read / Write Skew)** risk: two (or more) concurrent requests within the same millisecond could schedule **overlapping maintenance windows** for the same room.
 
-Because transactions run at the default **`READ COMMITTED`** isolation level, the naive pattern of "plain `loadById` + `findOverlapping` in the Application Handler" cannot prevent two threads from:
+Because transactions run at the default **`READ COMMITTED`** isolation level, the naive pattern of "plain `loadById` + `loadOverlapping` in the Application Handler" cannot prevent two threads from:
 
 1. Reading the same stale, non-overlapping state (Phantom Read),
 2. Both passing the overlap check,

@@ -1,5 +1,5 @@
 -- Codegen-only DDL for JOOQ (DDLDatabase).
--- Mirrors the final workshop schema (post V13) so code generation does not depend on
+-- Mirrors the final workshop schema (post V13 + V14) so code generation does not depend on
 -- H2-incompatible ALTER statements. NOT a Flyway migration.
 CREATE TABLE workshops (
     id UUID NOT NULL,
@@ -16,6 +16,7 @@ CREATE TABLE workshops (
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     capacity INTEGER NOT NULL,
     state VARCHAR(50) NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT pk_workshops PRIMARY KEY (id),

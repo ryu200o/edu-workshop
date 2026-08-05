@@ -55,7 +55,14 @@ class JpaRoomWriteAdapter implements RoomRepository {
     @Override
     public Room save(Room room) {
         try {
-            repository.saveAndFlush(toEntity(room));
+            // Managed-entity copy pattern (ADR 0015 Strategy B): reuse the persistence-context
+            // instance so the @Version column is preserved and checked on flush. saveAndFlush() is
+            // kept here (Rule 1) so the DataIntegrityViolationException of the unique-coordinate/
+            // unique-name backstop surfaces inside this try-catch for translation.
+            RoomJpaEntity entity = repository.findById(room.id().value())
+                    .map(existing -> copyTo(existing, room))
+                    .orElseGet(() -> toEntity(room));
+            repository.saveAndFlush(entity);
         } catch (DataIntegrityViolationException ex) {
             // Race-proof gate (rào lần 2): the DB unique constraints are the authoritative guard against
             // concurrent duplicate coordinates/names. The aggregate's policy check is only fail-fast UX
@@ -80,6 +87,23 @@ class JpaRoomWriteAdapter implements RoomRepository {
                 room.createdAt(),
                 room.updatedAt()
         );
+    }
+
+    /**
+     * Copies the mutable business fields of the aggregate onto an existing (managed) entity, leaving
+     * {@code id} and {@code version} untouched so Hibernate increments/checks the optimistic-lock
+     * version on flush.
+     */
+    private static RoomJpaEntity copyTo(RoomJpaEntity entity, Room room) {
+        entity.setName(room.name().value());
+        entity.setBuilding(room.location().building());
+        entity.setFloor(room.location().floor());
+        entity.setCode(room.code().value());
+        entity.setCapacity(room.capacity().value());
+        entity.setState(room.state().name());
+        entity.setCreatedAt(room.createdAt());
+        entity.setUpdatedAt(room.updatedAt());
+        return entity;
     }
 
     private static Room toRoom(RoomJpaEntity entity) {

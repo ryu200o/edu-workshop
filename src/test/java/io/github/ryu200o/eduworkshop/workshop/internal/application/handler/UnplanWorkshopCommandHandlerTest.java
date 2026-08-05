@@ -72,7 +72,7 @@ class UnplanWorkshopCommandHandlerTest {
     @Test
     void unplan_okReturnsToDraftAndReleasesRoom() {
         Workshop workshop = createPlannedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         UnplanWorkshopCommand.Result result = handler.handle(new UnplanWorkshopCommand(WORKSHOP_ID));
@@ -97,7 +97,7 @@ class UnplanWorkshopCommandHandlerTest {
                 WorkshopCapacity.of(30),
                 NOW
         );
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         assertThatThrownBy(() -> handler.handle(new UnplanWorkshopCommand(WORKSHOP_ID)))
@@ -106,7 +106,7 @@ class UnplanWorkshopCommandHandlerTest {
 
     @Test
     void unplan_throwsWorkshopNotFound() {
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler.handle(new UnplanWorkshopCommand(WORKSHOP_ID)))

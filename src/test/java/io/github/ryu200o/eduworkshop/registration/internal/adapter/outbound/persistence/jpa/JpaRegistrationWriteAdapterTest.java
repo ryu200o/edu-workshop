@@ -26,6 +26,9 @@ class JpaRegistrationWriteAdapterTest {
     @Autowired
     private JpaRegistrationWriteAdapter adapter;
 
+    @Autowired
+    private RegistrationJpaRepository registrationJpaRepository;
+
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final UUID USER_ID = UUID.randomUUID();
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
@@ -139,5 +142,21 @@ class JpaRegistrationWriteAdapterTest {
         // duplicate insert is translated into the business exception.
         assertThatThrownBy(() -> adapter.save(second))
                 .isInstanceOf(DuplicateRegistrationException.class);
+    }
+
+    @Test
+    void save_thenUpdate_keepsAndIncrementsOptimisticVersion() {
+        Registration registration = Registration.create(RegistrationId.generate(), StudentId.of(USER_ID),
+                WorkshopReference.of(WORKSHOP_ID, START), Instant.parse("2026-08-01T10:00:00Z"));
+        adapter.save(registration);
+        Long versionAfterInsert = registrationJpaRepository.findById(registration.id().value())
+                .orElseThrow().getVersion();
+
+        registration.cancel(Instant.parse("2026-08-31T08:00:00Z"));
+        adapter.save(registration);
+
+        assertThat(registrationJpaRepository.findById(registration.id().value())
+                .orElseThrow().getVersion())
+                .isEqualTo(versionAfterInsert + 1L);
     }
 }

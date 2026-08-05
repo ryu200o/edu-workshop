@@ -13,6 +13,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 
 import org.springframework.stereotype.Component;
@@ -53,23 +54,37 @@ class ChangeWorkshopRoomCommandHandler
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
         UUID newRoomId = command.newRoomId();
 
-        Workshop workshop = workshopRepository.loadByIdWithLock(workshopId)
+        // Discovery read (non-locking) to learn the target's time window before locking.
+        Workshop workshop = workshopRepository.loadById(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
-        RoomPlanningPermission permission = roomExposeApi.checkPlanningPermission(newRoomId)
+        RoomPlanningPermission permission = roomExposeApi.findPlanningPermission(newRoomId)
                 .orElseThrow(() -> new ReferencedRoomNotFoundException("roomId", newRoomId));
 
         if (permission.status() != RoomPlanningPermission.PlanningStatus.ALLOWED) {
             throw new RoomNotAvailableForPublishingException(newRoomId, permission.status(), permission.reason());
         }
 
-        int overlappingPublished = workshopRepository.countOverlapping(
-                newRoomId, workshop.startTime(), workshop.endTime(), workshopId);
-        if (overlappingPublished > 0) {
+        // Lock-set-first (ADR 0015): pessimistic-lock ALL overlapping workshops (PUBLISHED +
+        // PLANNED) in the NEW room/time window before mutating any state.
+        List<Workshop> overlapping = workshopRepository.loadPublishedAndPlannedOverlappingWithLock(
+                newRoomId, workshop.startTime(), workshop.endTime());
+
+        // The target lives in the OLD room, so it is never part of the new-room set — lock it
+        // separately (after the set, preserving the consistent set-first lock order).
+        Workshop target = workshopRepository.loadByIdWithLock(workshopId)
+                .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
+
+        boolean publishedConflict = overlapping.stream()
+                .anyMatch(w -> w.state() == WorkshopState.PUBLISHED);
+        if (publishedConflict) {
             throw new RoomConflictException(newRoomId, command.workshopId());
         }
 
-        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(newRoomId, workshop, now);
+        List<Workshop> plannedToKick = overlapping.stream()
+                .filter(w -> w.state() == WorkshopState.PLANNED)
+                .toList();
+        List<Workshop> kickedOut = plannedWorkshopKicker.kickOutOverlappingPlanned(plannedToKick, now);
 
         RoomReference newRoomRef = RoomReference.of(
                 permission.planning().roomId(),
@@ -77,18 +92,18 @@ class ChangeWorkshopRoomCommandHandler
                 permission.planning().location().building() + "/" + permission.planning().location().floor(),
                 permission.planning().capacity());
 
-        workshop.changeRoom(newRoomRef, now);
-        workshopRepository.save(workshop);
+        target.changeRoom(newRoomRef, now);
+        workshopRepository.save(target);
 
-        List<WorkshopDomainEvent> events = new ArrayList<>(workshop.recordedEvents());
+        List<WorkshopDomainEvent> events = new ArrayList<>(target.recordedEvents());
         for (Workshop other : kickedOut) {
             events.addAll(other.recordedEvents());
         }
 
         workshopDomainEventPublisher.publish(events);
-        workshop.clearDomainEvents();
+        target.clearDomainEvents();
         kickedOut.forEach(Workshop::clearDomainEvents);
 
-        return new ChangeWorkshopRoomCommand.Result(workshop.id().value(), newRoomRef.roomId(), workshop.updatedAt());
+        return new ChangeWorkshopRoomCommand.Result(target.id().value(), newRoomRef.roomId(), target.updatedAt());
     }
 }

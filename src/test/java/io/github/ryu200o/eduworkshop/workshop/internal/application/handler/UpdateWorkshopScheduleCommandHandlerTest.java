@@ -90,7 +90,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     @Test
     void updateSchedule_draft_validRange_updatesTimes() {
         Workshop workshop = createDraftWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         Instant newStart = START.plus(Duration.ofDays(7));
@@ -112,7 +112,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     @Test
     void updateSchedule_planned_validRange_updatesTimes_keepsRoom() {
         Workshop workshop = createPlannedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         Instant newStart = START.plus(Duration.ofDays(7));
@@ -128,7 +128,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     @Test
     void updateSchedule_published_isRejected() {
         Workshop workshop = createPublishedWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         Instant newStart = START.plus(Duration.ofDays(7));
@@ -146,7 +146,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     @Test
     void updateSchedule_cancelled_isRejected() {
         Workshop workshop = createCancelledWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         Instant newStart = START.plus(Duration.ofDays(7));
@@ -160,7 +160,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     @Test
     void updateSchedule_rejectsEndNotAfterStart() {
         Workshop workshop = createDraftWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         Instant newStart = START.plus(Duration.ofDays(7));
@@ -175,7 +175,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     @Test
     void updateSchedule_rejectsStartNotInFuture() {
         Workshop workshop = createDraftWorkshop();
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
         Instant newStart = NOW.minusSeconds(1);
@@ -189,7 +189,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
 
     @Test
     void updateSchedule_throwsWorkshopNotFound() {
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.empty());
 
         Instant newStart = START.plus(Duration.ofDays(7));

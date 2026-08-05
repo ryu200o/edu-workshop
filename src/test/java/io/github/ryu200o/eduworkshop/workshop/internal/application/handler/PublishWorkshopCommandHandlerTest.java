@@ -124,12 +124,12 @@ class PublishWorkshopCommandHandlerTest {
         @Test
         void publishesSuccessfully() {
             Workshop workshop = createPlannedWorkshop(30);
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(0);
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, START, END))
+                    .willReturn(List.of(workshop));
 
             PublishWorkshopCommand.Result result = handler.handle(
                     new PublishWorkshopCommand(WORKSHOP_ID));
@@ -148,12 +148,12 @@ class PublishWorkshopCommandHandlerTest {
             workshop.markMaintenanceWarning(NOW);
             assertThat(workshop.hasRoomWarning()).isTrue();
 
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(0);
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, START, END))
+                    .willReturn(List.of(workshop));
 
             handler.handle(new PublishWorkshopCommand(WORKSHOP_ID));
 
@@ -163,10 +163,12 @@ class PublishWorkshopCommandHandlerTest {
         @Test
         void rejectsWhenCapacityExceedsRoom() {
             Workshop workshop = createPlannedWorkshop(60);
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, START, END))
+                    .willReturn(List.of(workshop));
 
             assertThatThrownBy(() -> handler.handle(new PublishWorkshopCommand(WORKSHOP_ID)))
                     .isInstanceOf(WorkshopCapacityExceedsRoomException.class);
@@ -180,14 +182,12 @@ class PublishWorkshopCommandHandlerTest {
         void publish_kicksOutOverlappingPlannedWorkshops() {
             Workshop workshop = createPlannedWorkshop(30);
             Workshop planned = createPlannedWorkshop(20, UUID.randomUUID());
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(List.of(planned));
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, START, END))
+                    .willReturn(List.of(workshop, planned));
 
             PublishWorkshopCommand.Result result = handler.handle(
                     new PublishWorkshopCommand(WORKSHOP_ID));
@@ -211,14 +211,13 @@ class PublishWorkshopCommandHandlerTest {
                     20, UUID.randomUUID(),
                     Instant.parse("2026-09-01T12:00:00Z"),
                     Instant.parse("2026-09-01T14:00:00Z"));
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(List.of());
+            // The non-overlapping workshop is not part of the locked overlapping set.
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, START, END))
+                    .willReturn(List.of(workshop));
 
             handler.handle(new PublishWorkshopCommand(WORKSHOP_ID));
 
@@ -234,9 +233,9 @@ class PublishWorkshopCommandHandlerTest {
         @Test
         void throwsException_whenRoomIsBlocked() {
             Workshop workshop = createPlannedWorkshop(30);
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(BLOCKED_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new PublishWorkshopCommand(WORKSHOP_ID)))
@@ -251,9 +250,9 @@ class PublishWorkshopCommandHandlerTest {
         @Test
         void throwsException_whenRoomIsUnderMaintenance() {
             Workshop workshop = createPlannedWorkshop(30);
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new PublishWorkshopCommand(WORKSHOP_ID)))
@@ -268,12 +267,19 @@ class PublishWorkshopCommandHandlerTest {
         @Test
         void throwsException_whenOverlappingPublishedWorkshopExists() {
             Workshop workshop = createPlannedWorkshop(30);
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            Workshop otherPublished = createPlannedWorkshop(20, UUID.randomUUID());
+            otherPublished.plan(
+                    RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50),
+                    false,
+                    NOW
+            );
+            otherPublished.publish(NOW, 50);
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(1);
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, START, END))
+                    .willReturn(List.of(workshop, otherPublished));
 
             assertThatThrownBy(() -> handler.handle(new PublishWorkshopCommand(WORKSHOP_ID)))
                     .isInstanceOf(RoomConflictException.class);
@@ -286,9 +292,9 @@ class PublishWorkshopCommandHandlerTest {
         @Test
         void throwsReferencedRoomNotFoundException() {
             Workshop workshop = createPlannedWorkshop(30);
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(ROOM_ID))
                     .willReturn(Optional.empty());
 
             assertThatThrownBy(() -> handler.handle(new PublishWorkshopCommand(WORKSHOP_ID)))
@@ -301,7 +307,7 @@ class PublishWorkshopCommandHandlerTest {
 
         @Test
         void throwsWorkshopNotFoundException() {
-            given(workshopRepository.loadByIdWithLock(any()))
+            given(workshopRepository.loadById(any()))
                     .willReturn(Optional.empty());
 
             assertThatThrownBy(() -> handler.handle(new PublishWorkshopCommand(WORKSHOP_ID)))

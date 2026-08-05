@@ -82,4 +82,40 @@ class JpaWorkshopWriteAdapterTest {
     void loadById_absent_returnsEmpty() {
         assertThat(adapter.loadById(WorkshopId.generate())).isEmpty();
     }
+
+    @Test
+    void loadPublishedAndPlannedOverlappingWithLock_returnsOnlyOverlappingRows() {
+        Instant now = Instant.now();
+        UUID roomId = UUID.randomUUID();
+        Instant windowStart = Instant.parse("2026-09-01T09:00:00Z");
+        Instant windowEnd = Instant.parse("2026-09-01T11:00:00Z");
+
+        Workshop overlappingPlanned = Workshop.create(
+                WorkshopId.generate(),
+                WorkshopTitle.of("Overlap Planned"),
+                WorkshopDescription.of("d"),
+                Instant.parse("2026-09-01T10:00:00Z"),
+                Instant.parse("2026-09-01T12:00:00Z"),
+                WorkshopCapacity.of(20),
+                now);
+        overlappingPlanned.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false, now);
+        adapter.save(overlappingPlanned);
+
+        Workshop nonOverlapping = Workshop.create(
+                WorkshopId.generate(),
+                WorkshopTitle.of("Non Overlap"),
+                WorkshopDescription.of("d"),
+                Instant.parse("2026-09-02T09:00:00Z"),
+                Instant.parse("2026-09-02T11:00:00Z"),
+                WorkshopCapacity.of(20),
+                now);
+        nonOverlapping.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false, now);
+        adapter.save(nonOverlapping);
+
+        var overlapping = adapter.loadPublishedAndPlannedOverlappingWithLock(
+                roomId, windowStart, windowEnd);
+
+        assertThat(overlapping).extracting(Workshop::id)
+                .containsExactly(overlappingPlanned.id());
+    }
 }

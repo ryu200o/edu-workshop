@@ -7,6 +7,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -57,6 +58,15 @@ class WorkshopJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private WorkshopState state;
+
+    /**
+     * Optimistic-locking version (ADR 0015 Strategy B). Persistence concern only — the domain
+     * {@code Workshop} never carries it. Null on the create path so Spring Data's {@code isNew()}
+     * resolves to {@code true} (persist); set by Hibernate on insert and checked/incremented on
+     * each update.
+     */
+    @Version
+    private Long version;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -177,6 +187,14 @@ class WorkshopJpaEntity {
 
     void setState(WorkshopState state) {
         this.state = state;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    void setVersion(Long version) {
+        this.version = version;
     }
 
     public Instant getCreatedAt() {

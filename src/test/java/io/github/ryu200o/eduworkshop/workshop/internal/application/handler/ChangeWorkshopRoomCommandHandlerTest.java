@@ -121,14 +121,16 @@ class ChangeWorkshopRoomCommandHandlerTest {
         @Test
         void changeRoom_movesWorkshopToNewRoomWhenAllowed() {
             Workshop workshop = createPublishedWorkshop();
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(Optional.of(workshop));
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+                    .willReturn(Optional.of(ALLOWED_PERMISSION));
+            // Target lives in the OLD room, so the new-room locked set is empty; the target is
+            // resolved via the lock-by-id fallback.
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+                    .willReturn(List.of());
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
-                    .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(List.of());
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
                     new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
@@ -148,14 +150,14 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop planned = createPlannedWorkshop(
                     UUID.randomUUID(), NEW_ROOM_ID, 60, START, END);
 
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(Optional.of(workshop));
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+                    .willReturn(Optional.of(ALLOWED_PERMISSION));
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+                    .willReturn(List.of(planned));
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
-                    .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(List.of(planned));
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
                     new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
@@ -178,14 +180,15 @@ class ChangeWorkshopRoomCommandHandlerTest {
             Workshop planned = createPlannedWorkshop(
                     UUID.randomUUID(), NEW_ROOM_ID, 60, LATER, LATER.plusSeconds(7200));
 
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(Optional.of(workshop));
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+                    .willReturn(Optional.of(ALLOWED_PERMISSION));
+            // The non-overlapping workshop is not part of the locked overlapping set.
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+                    .willReturn(List.of());
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
-                    .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(0);
-            given(workshopRepository.findOverlappingPlanned(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(List.of());
 
             handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
 
@@ -201,9 +204,9 @@ class ChangeWorkshopRoomCommandHandlerTest {
         @Test
         void changeRoom_throwsWhenNewRoomIsUnderMaintenance() {
             Workshop workshop = createPublishedWorkshop();
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
@@ -214,9 +217,9 @@ class ChangeWorkshopRoomCommandHandlerTest {
         @Test
         void changeRoom_throwsWhenNewRoomIsBlocked() {
             Workshop workshop = createPublishedWorkshop();
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(BLOCKED_PERMISSION));
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
@@ -227,9 +230,9 @@ class ChangeWorkshopRoomCommandHandlerTest {
         @Test
         void changeRoom_throwsWhenNewRoomNotFound() {
             Workshop workshop = createPublishedWorkshop();
-            given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID)).willReturn(Optional.empty());
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
                     .isInstanceOf(ReferencedRoomNotFoundException.class);
@@ -242,12 +245,18 @@ class ChangeWorkshopRoomCommandHandlerTest {
         @Test
         void changeRoom_throwsWhenOverlappingPublishedInNewRoom() {
             Workshop workshop = createPublishedWorkshop();
+            Workshop otherPublished = createPlannedWorkshop(
+                    UUID.randomUUID(), NEW_ROOM_ID, 60, START, END);
+            otherPublished.publish(NOW, 60);
+
+            given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
+                    .willReturn(Optional.of(workshop));
+            given(roomExposeApi.findPlanningPermission(NEW_ROOM_ID))
+                    .willReturn(Optional.of(ALLOWED_PERMISSION));
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+                    .willReturn(List.of(otherPublished));
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
-            given(roomExposeApi.checkPlanningPermission(NEW_ROOM_ID))
-                    .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.countOverlapping(NEW_ROOM_ID, START, END, WorkshopId.of(WORKSHOP_ID)))
-                    .willReturn(1);
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
                     .isInstanceOf(RoomConflictException.class);
@@ -255,7 +264,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
 
         @Test
         void changeRoom_throwsWhenWorkshopNotFound() {
-            given(workshopRepository.loadByIdWithLock(any())).willReturn(Optional.empty());
+            given(workshopRepository.loadById(any())).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
                     .isInstanceOf(WorkshopNotFoundException.class);

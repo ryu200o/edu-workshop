@@ -78,7 +78,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
     @Test
     void adjustCapacity_raisesCapacityWhenValid() {
         Workshop workshop = createPublishedWorkshop(30);
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(20);
 
@@ -97,7 +97,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
     @Test
     void adjustCapacity_throwsWhenNewCapacityBelowActiveRegistrations() {
         Workshop workshop = createPublishedWorkshop(30);
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(25);
 
@@ -108,7 +108,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
     @Test
     void adjustCapacity_throwsWhenNewCapacityExceedsRoomCapacity() {
         Workshop workshop = createPublishedWorkshop(30);
-        given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
+        given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(10);
 
@@ -118,7 +118,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
 
     @Test
     void adjustCapacity_throwsWhenWorkshopNotFound() {
-        given(workshopRepository.loadByIdWithLock(any())).willReturn(Optional.empty());
+        given(workshopRepository.loadById(any())).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 40)))
                 .isInstanceOf(WorkshopNotFoundException.class);

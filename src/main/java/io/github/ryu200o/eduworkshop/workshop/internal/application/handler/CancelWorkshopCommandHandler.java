@@ -36,7 +36,7 @@ class CancelWorkshopCommandHandler
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
-        Workshop workshop = workshopRepository.loadByIdWithLock(workshopId)
+        Workshop workshop = workshopRepository.loadById(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));
 
         workshop.cancel(now);

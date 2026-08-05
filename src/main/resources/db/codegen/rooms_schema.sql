@@ -1,5 +1,5 @@
 -- Codegen-only DDL for JOOQ (DDLDatabase).
--- Mirrors the final rooms schema (post V1 + V2 + V12) so code generation does not depend on
+-- Mirrors the final rooms schema (post V1 + V2 + V12 + V14) so code generation does not depend on
 -- H2-incompatible ALTER statements. NOT a Flyway migration.
 CREATE TABLE rooms (
     id         UUID                     NOT NULL,
@@ -9,6 +9,7 @@ CREATE TABLE rooms (
     code       VARCHAR(10)              NOT NULL,
     capacity   INTEGER                  NOT NULL,
     state      VARCHAR(20)              NOT NULL,
+    version    BIGINT                   NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT pk_rooms PRIMARY KEY (id),

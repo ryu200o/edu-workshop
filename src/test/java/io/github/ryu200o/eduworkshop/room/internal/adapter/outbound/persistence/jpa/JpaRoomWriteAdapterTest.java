@@ -28,6 +28,9 @@ class JpaRoomWriteAdapterTest {
     @Autowired
     private RoomRepository roomRepository;
 
+    @Autowired
+    private RoomJpaRepository roomJpaRepository;
+
     private static Room newRoom() {
         RoomLocation location = RoomLocation.of("F", 2);
         RoomName name = RoomName.of("F-201");
@@ -91,6 +94,22 @@ class JpaRoomWriteAdapterTest {
         assertThat(renamed).isPresent();
         assertThat(renamed.get().code()).isEqualTo(RoomCode.of(99));
         assertThat(renamed.get().name()).isEqualTo(RoomName.of("F-201"));
+    }
+
+    @Test
+    void save_thenUpdate_keepsAndIncrementsOptimisticVersion() {
+        // ADR 0015 Strategy B: the managed-copy save path must preserve the row's version so the
+        // optimistic-lock check fires and increments it on each update.
+        Room saved = roomRepository.save(newRoom());
+        RoomJpaEntity inserted = roomJpaRepository.findById(saved.id().value()).orElseThrow();
+        Long versionAfterInsert = inserted.getVersion();
+
+        Room loaded = roomRepository.loadById(saved.id()).orElseThrow();
+        loaded.changeCode(RoomCode.of(77), Instant.now());
+        roomRepository.save(loaded);
+
+        RoomJpaEntity updated = roomJpaRepository.findById(saved.id().value()).orElseThrow();
+        assertThat(updated.getVersion()).isEqualTo(versionAfterInsert + 1L);
     }
 
     @Test

@@ -9,7 +9,7 @@ import java.util.UUID;
 
 /**
  * Outbound port (SPI) for persisting and querying {@link MaintenanceSchedule} entities.
- * The overlap check (global invariant, ADR 0005) is performed via {@link #findOverlapping}.
+ * The overlap check (global invariant, ADR 0005) is performed via {@link #loadOverlapping}.
  */
 public interface MaintenanceScheduleRepository {
 
@@ -21,7 +21,7 @@ public interface MaintenanceScheduleRepository {
     /**
      * Loads all maintenance schedules for a given room.
      */
-    List<MaintenanceSchedule> findByRoomId(UUID roomId);
+    List<MaintenanceSchedule> loadByRoomId(UUID roomId);
 
     /**
      * Finds maintenance schedules for a given room that overlap the specified time window.
@@ -33,7 +33,20 @@ public interface MaintenanceScheduleRepository {
      * @param endTime   the new maintenance window end (null = indefinite)
      * @return list of overlapping schedules (empty if none)
      */
-    List<MaintenanceSchedule> findOverlapping(UUID roomId, Instant startTime, Instant endTime);
+    List<MaintenanceSchedule> loadOverlapping(UUID roomId, Instant startTime, Instant endTime);
+
+    /**
+     * Checks whether any maintenance schedule for a given room overlaps the specified time window,
+     * evaluated as a SQL {@code EXISTS} (no aggregates materialized).
+     * Overlap condition: {@code existingStart < newEnd && existingEnd > newStart}.
+     * If {@code endTime} is null (indefinite), all schedules starting before {@code startTime} match.
+     *
+     * @param roomId    the room to check
+     * @param startTime the new maintenance window start
+     * @param endTime   the new maintenance window end (null = indefinite)
+     * @return {@code true} if at least one schedule overlaps
+     */
+    boolean existsOverlapping(UUID roomId, Instant startTime, Instant endTime);
 
     /**
      * Deletes a maintenance schedule by id.

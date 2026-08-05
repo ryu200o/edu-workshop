@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.persistence.jpa;
 
-import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopPersistenceException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
@@ -9,7 +8,6 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDesc
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -28,33 +26,33 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
 
     @Override
     public Workshop save(Workshop workshop) {
-        try {
-            repository.saveAndFlush(toEntity(workshop));
-            return workshop;
-        } catch (DataIntegrityViolationException ex) {
-            throw new WorkshopPersistenceException(
-                    "Failed to persist workshop.",
-                    ex
-            );
-        }
+        // Managed-entity copy pattern (ADR 0015 Strategy B): reuse the persistence-context instance
+        // so the @Version column is preserved and checked on flush. Plain save() (Rule 2): the flush
+        // is deferred to commit, enabling JDBC batching; the workshops table has no unique constraint,
+        // so no synchronous constraint-translation is needed here.
+        WorkshopJpaEntity entity = repository.findById(workshop.id().value())
+                .map(existing -> copyTo(existing, workshop))
+                .orElseGet(() -> toEntity(workshop));
+        repository.save(entity);
+        return workshop;
     }
 
     @Override
     public List<Workshop> saveAll(List<Workshop> workshops) {
-        try {
-            repository.saveAllAndFlush(workshops.stream().map(this::toEntity).toList());
-            return workshops;
-        } catch (DataIntegrityViolationException ex) {
-            throw new WorkshopPersistenceException(
-                    "Failed to persist workshops.",
-                    ex
-            );
-        }
+        // Per-item findById hits the 1st-level cache (entities loaded earlier in the same TX stay
+        // managed), then plain saveAll defers the flush so Hibernate batches all UPDATEs.
+        List<WorkshopJpaEntity> entities = workshops.stream()
+                .map(workshop -> repository.findById(workshop.id().value())
+                        .map(existing -> copyTo(existing, workshop))
+                        .orElseGet(() -> toEntity(workshop)))
+                .toList();
+        repository.saveAll(entities);
+        return workshops;
     }
 
     @Override
-    public List<Workshop> findOverlappingPlanned(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId) {
-        return repository.findOverlappingPlanned(roomId, startTime, endTime, excludeWorkshopId.value()).stream()
+    public List<Workshop> loadPublishedAndPlannedOverlappingWithLock(UUID roomId, Instant startTime, Instant endTime) {
+        return repository.findPublishedAndPlannedOverlappingWithLock(roomId, startTime, endTime).stream()
                 .map(this::toWorkshop)
                 .toList();
     }
@@ -83,14 +81,18 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
                 .toList();
     }
 
-    @Override
-    public int countOverlapping(UUID roomId, Instant startTime, Instant endTime, WorkshopId excludeWorkshopId) {
-        return repository.countOverlapping(roomId, startTime, endTime, excludeWorkshopId.value());
-    }
-
     private WorkshopJpaEntity toEntity(Workshop workshop) {
         WorkshopJpaEntity entity = new WorkshopJpaEntity();
         entity.setId(workshop.id().value());
+        return copyTo(entity, workshop);
+    }
+
+    /**
+     * Copies the mutable business fields of the aggregate onto an existing (managed) entity, leaving
+     * {@code id} and {@code version} untouched so Hibernate increments/checks the optimistic-lock
+     * version on flush.
+     */
+    private WorkshopJpaEntity copyTo(WorkshopJpaEntity entity, Workshop workshop) {
         entity.setTitle(workshop.title().value());
         entity.setDescription(workshop.description() != null ? workshop.description().value() : null);
         entity.setRoomId(workshop.roomReference() != null ? workshop.roomReference().roomId() : null);
