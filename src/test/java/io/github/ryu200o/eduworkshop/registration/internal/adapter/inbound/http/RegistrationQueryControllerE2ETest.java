@@ -140,11 +140,21 @@ class RegistrationQueryControllerE2ETest {
                 Map.of("X-User-Id", userId.toString()));
         assertThat(registeredOnly.statusCode()).isEqualTo(HttpStatus.OK.value());
         assertThat(registeredOnly.body()).contains("REGISTERED");
+        assertThat(registeredOnly.body()).doesNotContain("REFUNDED");
 
-        // REFUNDED is system-initiated and NOT a user-selectable filter → 400.
+        // REFUNDED is a learner-selectable filter: cancel the workshop to flip the seat to REFUNDED,
+        // then the status=REFUNDED query must return that row (e-commerce style refunded-order view).
+        assertThat(post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of()).statusCode())
+                .isEqualTo(HttpStatus.OK.value());
+
         HttpResponse<String> refunded = get("/api/v1/registrations?status=REFUNDED",
                 Map.of("X-User-Id", userId.toString()));
-        assertThat(refunded.statusCode()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(refunded.statusCode()).isEqualTo(HttpStatus.OK.value());
+        assertThat(refunded.body()).contains("REFUNDED");
+
+        HttpResponse<String> registeredAfter = get("/api/v1/registrations?status=REGISTERED",
+                Map.of("X-User-Id", userId.toString()));
+        assertThat(registeredAfter.body()).doesNotContain("REFUNDED");
     }
 
     @Test

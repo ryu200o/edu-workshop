@@ -44,12 +44,6 @@ class RegistrationExceptionAdvice {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
-    @ExceptionHandler(InvalidRegistrationStatusException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    ProblemDetail handleInvalidStatus(InvalidRegistrationStatusException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-    }
-
     @ExceptionHandler(InvalidRegistrationStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleInvalidState(InvalidRegistrationStateException ex) {

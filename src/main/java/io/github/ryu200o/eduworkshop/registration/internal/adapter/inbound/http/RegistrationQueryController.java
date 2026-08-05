@@ -20,10 +20,10 @@ import java.util.UUID;
  * {@link QueryBus}. The acting user is a logical reference (no User module — SA+PO decision) and
  * arrives via the {@code X-User-Id} header in Dev/Test.
  *
- * <p>The optional {@code status} filter is restricted to the learner-selectable states
- * {@code REGISTERED} / {@code CANCELLED}: {@code REFUNDED} is a system outcome and is rejected with
- * HTTP 400. When omitted the full booking history is returned (Epic 2 sign-off Q4). Error handling is
- * centralized in {@link RegistrationExceptionAdvice}.</p>
+ * <p>The optional {@code status} filter accepts {@code REGISTERED}, {@code CANCELLED} and
+ * {@code REFUNDED} (each learner sees only their own rows, so a refunded order is a normal,
+ * learner-selectable booking state). When omitted the full booking history is returned.
+ * Error handling is centralized in {@link RegistrationExceptionAdvice}.</p>
  */
 @RestController
 @RequestMapping("/api/v1/registrations")
@@ -38,9 +38,6 @@ class RegistrationQueryController {
     @GetMapping
     ResponseEntity<List<MyRegistrationView>> myBookings(@RequestHeader("X-User-Id") UUID userId,
                                                         @RequestParam(value = "status", required = false) MyRegistrationStatus status) {
-        if (status == MyRegistrationStatus.REFUNDED) {
-            throw new InvalidRegistrationStatusException(status);
-        }
         List<MyRegistrationView> result = queryBus.execute(new GetMyRegistrationsQuery(userId, status));
         return ResponseEntity.ok(result);
     }
