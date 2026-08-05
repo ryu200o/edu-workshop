@@ -46,6 +46,11 @@ class JpaMaintenanceScheduleWriteAdapter implements MaintenanceScheduleRepositor
     }
 
     @Override
+    public boolean existsOverlapping(UUID roomId, Instant startTime, Instant endTime) {
+        return repository.existsOverlapping(roomId, startTime, endTime);
+    }
+
+    @Override
     public void deleteById(MaintenanceId id) {
         repository.deleteById(id.value());
     }

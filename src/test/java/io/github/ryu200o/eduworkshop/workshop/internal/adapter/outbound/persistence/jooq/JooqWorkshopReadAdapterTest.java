@@ -111,6 +111,39 @@ class JooqWorkshopReadAdapterTest {
     }
 
     @Test
+    void findByRoomAndTimeOverlap_returnsOnlyPublishedAndPlanned() {
+        UUID roomId = UUID.randomUUID();
+
+        Workshop planned = newWorkshop();
+        planned.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+
+        Workshop published = newWorkshop();
+        published.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        published.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+
+        Workshop cancelled = newWorkshop();
+        cancelled.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        cancelled.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        cancelled.cancel(Instant.parse("2026-09-15T00:00:03Z"));
+
+        workshopRepository.saveAll(List.of(planned, published, cancelled));
+
+        Instant overlapStart = Instant.parse("2026-10-01T09:30:00Z");
+        Instant overlapEnd = Instant.parse("2026-10-01T10:30:00Z");
+
+        List<WorkshopSummaryView> views = workshopReader.findByRoomAndTimeOverlap(roomId, overlapStart, overlapEnd);
+
+        assertThat(views).hasSize(2);
+        assertThat(views).extracting(WorkshopSummaryView::state)
+                .containsExactlyInAnyOrder(WorkshopState.PLANNED.name(), WorkshopState.PUBLISHED.name());
+        assertThat(views).extracting(WorkshopSummaryView::id)
+                .containsExactlyInAnyOrder(planned.id().value(), published.id().value());
+    }
+
+    @Test
     void findById_whenAbsent_returnsEmpty() {
         assertThat(workshopReader.findById(UUID.randomUUID())).isEmpty();
     }

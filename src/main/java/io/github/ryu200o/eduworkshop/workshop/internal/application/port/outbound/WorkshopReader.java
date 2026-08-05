@@ -27,8 +27,10 @@ public interface WorkshopReader {
 
     /**
      * Finds workshops assigned to a given room whose time window overlaps the specified range.
-     * Overlap condition: {@code wsStart < maintEnd && wsEnd > maintStart}.
-     * If {@code maintEnd} is null (indefinite maintenance), all workshops starting after {@code maintStart} match.
+     * Only planning-relevant states ({@code PUBLISHED}, {@code PLANNED}) are returned — the state
+     * predicate is pushed down to SQL (DB Query Pushdown), never filtered in memory. Overlap
+     * condition: {@code wsStart < maintEnd && wsEnd > maintStart}. If {@code maintEnd} is null
+     * (indefinite maintenance), all workshops starting after {@code maintStart} match.
      *
      * @param roomId    the room to filter by
      * @param startTime the maintenance window start (inclusive lower bound)

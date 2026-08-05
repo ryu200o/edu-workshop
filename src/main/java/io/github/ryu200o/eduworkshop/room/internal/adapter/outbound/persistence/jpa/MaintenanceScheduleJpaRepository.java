@@ -36,4 +36,23 @@ interface MaintenanceScheduleJpaRepository extends JpaRepository<MaintenanceSche
             @Param("roomId") UUID roomId,
             @Param("startTime") Instant startTime,
             @Param("endTime") Instant endTime);
+
+    /**
+     * Returns whether any maintenance schedule overlaps a given time window, using a SQL {@code EXISTS}
+     * (derived from {@link #findOverlapping} collapsed to a boolean) so the DB short-circuits on the
+     * first matching row and no aggregates are materialized on the JVM.
+     *
+     * Overlap condition: {@code existingStart < newEnd && existingEnd > newStart}.
+     * When {@code endTime} is null (indefinite), all schedules starting before the new start match.
+     */
+    @Query("""
+            SELECT COUNT(m) > 0 FROM MaintenanceScheduleJpaEntity m
+            WHERE m.roomId = :roomId
+              AND (:endTime IS NULL OR m.startTime < :endTime)
+              AND (m.endTime IS NULL OR m.endTime > :startTime)
+            """)
+    boolean existsOverlapping(
+            @Param("roomId") UUID roomId,
+            @Param("startTime") Instant startTime,
+            @Param("endTime") Instant endTime);
 }

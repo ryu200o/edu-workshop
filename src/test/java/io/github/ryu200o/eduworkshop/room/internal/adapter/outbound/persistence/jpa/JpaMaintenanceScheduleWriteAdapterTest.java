@@ -98,6 +98,32 @@ class JpaMaintenanceScheduleWriteAdapterTest {
     }
 
     @Test
+    void existsOverlapping_returnsTrueForOverlappingWindow() {
+        MaintenanceSchedule schedule = MaintenanceSchedule.create(
+                MaintenanceId.generate(), roomId, START, END,
+                "Quarterly HVAC filter replacement and duct cleaning", "operator-1", START);
+        maintenanceScheduleRepository.save(schedule);
+
+        assertThat(maintenanceScheduleRepository.existsOverlapping(
+                roomId.value(),
+                Instant.parse("2026-08-01T10:00:00Z"),
+                Instant.parse("2026-08-01T14:00:00Z"))).isTrue();
+    }
+
+    @Test
+    void existsOverlapping_returnsFalseForNonOverlappingWindow() {
+        MaintenanceSchedule schedule = MaintenanceSchedule.create(
+                MaintenanceId.generate(), roomId, START, END,
+                "Quarterly HVAC filter replacement and duct cleaning", "operator-1", START);
+        maintenanceScheduleRepository.save(schedule);
+
+        assertThat(maintenanceScheduleRepository.existsOverlapping(
+                roomId.value(),
+                Instant.parse("2026-08-02T08:00:00Z"),
+                Instant.parse("2026-08-02T12:00:00Z"))).isFalse();
+    }
+
+    @Test
     void deleteById_removesSchedule() {
         MaintenanceSchedule schedule = MaintenanceSchedule.create(
                 MaintenanceId.generate(), roomId, START, END,

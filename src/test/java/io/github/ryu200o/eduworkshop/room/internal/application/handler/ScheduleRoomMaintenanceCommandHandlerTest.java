@@ -26,8 +26,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -82,8 +80,8 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
     void happyPath_schedules_and_persists() {
         Room room = existingRoom(RoomState.ACTIVE);
         when(roomRepository.loadByIdWithLock(room.id())).thenReturn(Optional.of(room));
-        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
-                .thenReturn(Collections.emptyList());
+        when(maintenanceScheduleRepository.existsOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+                .thenReturn(false);
         when(maintenanceScheduleRepository.save(any(MaintenanceSchedule.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ScheduleRoomMaintenanceCommand.Result result = handler().handle(validCommand(room.id().value()));
@@ -109,8 +107,8 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
     void roomDeactivated_throws() {
         Room room = existingRoom(RoomState.DEACTIVATED);
         when(roomRepository.loadByIdWithLock(room.id())).thenReturn(Optional.of(room));
-        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
-                .thenReturn(Collections.emptyList());
+        when(maintenanceScheduleRepository.existsOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> handler().handle(validCommand(room.id().value())))
                 .isInstanceOf(IllegalRoomStateException.class);
@@ -121,17 +119,8 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
     void overlapDetected_throws() {
         Room room = existingRoom(RoomState.ACTIVE);
         when(roomRepository.loadByIdWithLock(room.id())).thenReturn(Optional.of(room));
-        MaintenanceSchedule existing = MaintenanceSchedule.reconstruct(
-                io.github.ryu200o.eduworkshop.room.internal.domain.model.MaintenanceId.generate(),
-                room.id(),
-                Instant.parse("2026-08-01T10:00:00Z"),
-                Instant.parse("2026-08-01T14:00:00Z"),
-                "Existing maintenance schedule for testing overlap detection",
-                "operator-2",
-                Instant.parse("2026-07-01T00:00:00Z"),
-                Instant.parse("2026-07-01T00:00:00Z"));
-        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
-                .thenReturn(List.of(existing));
+        when(maintenanceScheduleRepository.existsOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+                .thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(validCommand(room.id().value())))
                 .isInstanceOf(MaintenanceScheduleOverlapException.class);
@@ -142,8 +131,8 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
     void idempotent_noOverlap_succeeds() {
         Room room = existingRoom(RoomState.ACTIVE);
         when(roomRepository.loadByIdWithLock(room.id())).thenReturn(Optional.of(room));
-        when(maintenanceScheduleRepository.loadOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
-                .thenReturn(Collections.emptyList());
+        when(maintenanceScheduleRepository.existsOverlapping(eq(room.id().value()), any(Instant.class), any(Instant.class)))
+                .thenReturn(false);
         when(maintenanceScheduleRepository.save(any(MaintenanceSchedule.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ScheduleRoomMaintenanceCommand.Result result = handler().handle(validCommand(room.id().value()));

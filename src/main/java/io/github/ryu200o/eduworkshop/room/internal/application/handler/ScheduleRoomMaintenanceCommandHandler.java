@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.List;
 
 /**
  * Handler for {@link ScheduleRoomMaintenanceCommand}. Follows the standard Application-layer
@@ -56,9 +55,9 @@ class ScheduleRoomMaintenanceCommandHandler
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         // Global invariant (ADR 0005): check for overlapping maintenance schedules.
-        List<MaintenanceSchedule> overlapping = maintenanceScheduleRepository.loadOverlapping(
+        boolean overlapping = maintenanceScheduleRepository.existsOverlapping(
                 command.roomId(), command.startTime(), command.endTime());
-        if (!overlapping.isEmpty()) {
+        if (overlapping) {
             throw new MaintenanceScheduleOverlapException(
                     command.roomId(), command.startTime(), command.endTime());
         }
