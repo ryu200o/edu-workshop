@@ -102,6 +102,9 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
         entity.setUserId(registration.studentId().value());
         entity.setStatus(registration.state().name());
         entity.setWorkshopStartTime(registration.workshopReference().startTime());
+        entity.setWorkshopTitleSnapshot(registration.workshopReference().title());
+        entity.setWorkshopEndTimeSnapshot(registration.workshopReference().endTime());
+        entity.setWorkshopRoomNameSnapshot(registration.workshopReference().roomName());
         entity.setRegisteredAt(registration.registeredAt());
         entity.setCancelledAt(registration.cancelledAt());
         entity.setGracePeriodUntil(registration.gracePeriodUntil());
@@ -114,7 +117,12 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
         return Registration.reconstruct(
                 RegistrationId.of(entity.getId()),
                 StudentId.of(entity.getUserId()),
-                WorkshopReference.of(entity.getWorkshopId(), entity.getWorkshopStartTime()),
+                WorkshopReference.of(
+                        entity.getWorkshopId(),
+                        entity.getWorkshopStartTime(),
+                        entity.getWorkshopTitleSnapshot(),
+                        entity.getWorkshopEndTimeSnapshot(),
+                        entity.getWorkshopRoomNameSnapshot()),
                 RegistrationState.valueOf(entity.getStatus()),
                 entity.getRegisteredAt(),
                 entity.getCancelledAt(),

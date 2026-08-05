@@ -1,5 +1,7 @@
 package io.github.ryu200o.eduworkshop.registration.internal.adapter.outbound.persistence.jooq;
 
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.query.MyRegistrationStatus;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.query.view.MyRegistrationView;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationReader;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationRepository;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.Registration;
@@ -14,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +39,10 @@ class JooqRegistrationReadAdapterTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
+    private static final Instant END = START.plusSeconds(7200);
+    private static final Instant REGISTERED_AT = Instant.parse("2026-08-01T10:00:00Z");
+
     @BeforeEach
     void cleanSchema() {
         jdbcTemplate.update("DELETE FROM registrations");
@@ -43,8 +50,12 @@ class JooqRegistrationReadAdapterTest {
 
     private Registration newRegistration(UUID workshopId, UUID userId) {
         return Registration.create(RegistrationId.generate(), StudentId.of(userId),
-                WorkshopReference.of(workshopId, Instant.parse("2026-09-01T09:00:00Z")),
-                Instant.parse("2026-08-01T10:00:00Z"));
+                WorkshopReference.of(workshopId, START), REGISTERED_AT);
+    }
+
+    private Registration newRegistrationWithSnapshots(UUID workshopId, UUID userId, String title) {
+        return Registration.create(RegistrationId.generate(), StudentId.of(userId),
+                WorkshopReference.of(workshopId, START, title, END, "A-101"), REGISTERED_AT);
     }
 
     @Test
@@ -69,5 +80,57 @@ class JooqRegistrationReadAdapterTest {
     @Test
     void countActiveByWorkshop_whenEmpty_returnsZero() {
         assertThat(registrationReader.countActiveByWorkshop(UUID.randomUUID())).isZero();
+    }
+
+    @Test
+    void getByUserId_noFilter_returnsAllRowsForThatUserOnly() {
+        UUID workshop1 = UUID.randomUUID();
+        UUID workshop2 = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID otherUser = UUID.randomUUID();
+
+        registrationRepository.save(newRegistrationWithSnapshots(workshop1, userId, "Docker Essentials"));
+        Registration cancelled = newRegistrationWithSnapshots(workshop2, userId, "K8s Deep Dive");
+        cancelled.cancel(START.minus(Registration.CANCELLATION_DEADLINE).minusSeconds(1));
+        registrationRepository.save(cancelled);
+        registrationRepository.save(newRegistrationWithSnapshots(workshop1, otherUser, "Not mine"));
+
+        List<MyRegistrationView> result = registrationReader.getByUserId(userId, null);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).allMatch(v -> v.userId().equals(userId));
+        assertThat(result).extracting(MyRegistrationView::workshopTitle)
+                .containsExactlyInAnyOrder("Docker Essentials", "K8s Deep Dive");
+        assertThat(result).extracting(MyRegistrationView::workshopStartTime).containsOnly(START);
+        assertThat(result).extracting(MyRegistrationView::workshopEndTime).containsOnly(END);
+        assertThat(result).extracting(MyRegistrationView::workshopRoomName).containsOnly("A-101");
+    }
+
+    @Test
+    void getByUserId_withStatusFilter_returnsOnlyMatchingRows() {
+        UUID workshop1 = UUID.randomUUID();
+        UUID workshop2 = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        registrationRepository.save(newRegistrationWithSnapshots(workshop1, userId, "Docker Essentials"));
+        Registration cancelled = newRegistrationWithSnapshots(workshop2, userId, "K8s Deep Dive");
+        cancelled.cancel(START.minus(Registration.CANCELLATION_DEADLINE).minusSeconds(1));
+        registrationRepository.save(cancelled);
+
+        List<MyRegistrationView> result =
+                registrationReader.getByUserId(userId, MyRegistrationStatus.REGISTERED);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().workshopTitle()).isEqualTo("Docker Essentials");
+        assertThat(result.getFirst().status()).isEqualTo(MyRegistrationStatus.REGISTERED);
+        assertThat(result.getFirst().cancelledAt()).isNull();
+    }
+
+    @Test
+    void getByUserId_learnerWithNoBookings_returnsEmptyList() {
+        UUID userId = UUID.randomUUID();
+        registrationRepository.save(newRegistrationWithSnapshots(UUID.randomUUID(), UUID.randomUUID(), "Other"));
+
+        assertThat(registrationReader.getByUserId(userId, null)).isEmpty();
     }
 }

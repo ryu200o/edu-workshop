@@ -153,9 +153,9 @@ public class Registration {
     }
 
 /**
-     * Synchronizes the {@code startTime} snapshot after a reschedule, and grants the 12-hour urgent
-     * cancellation grace window <em>only when the reschedule lands in the danger zone</em>: the new
-     * start time is between 24 h and 36 h away from the reschedule moment
+     * Synchronizes the {@code startTime} / {@code endTime} snapshots after a reschedule, and grants
+     * the 12-hour urgent cancellation grace window <em>only when the reschedule lands in the danger
+     * zone</em>: the new start time is between 24 h and 36 h away from the reschedule moment
      * ({@code 24h ≤ newStartTime − rescheduledAt < 36h}).
      *
      * <p>Why this range: the workshop module enforces {@code rescheduledAt ≤ newStartTime − 24h}
@@ -167,20 +167,23 @@ public class Registration {
      * cancel under the standard deadline, so no bonus is needed and any previously granted
      * {@code gracePeriodUntil} is cleared back to {@code null}.
      *
-     * <p>The {@code startTime} snapshot is refreshed to {@code newStartTime} in both branches. Only
-     * a granted grace window records a domain event.</p>
+     * <p>The {@code startTime} / {@code endTime} snapshots are refreshed to the new schedule in both
+     * branches; the display snapshots ({@code title}, {@code roomName}) are preserved. Only a
+     * granted grace window records a domain event.</p>
      *
      * @param rescheduledAt the moment the reschedule occurred ({@code event.occurredAt()})
      * @param newStartTime  the rescheduled workshop start time
+     * @param newEndTime    the rescheduled workshop end time
      * @param now           the current instant, used for {@code updatedAt}
      */
-    public void grantGracePeriod(Instant rescheduledAt, Instant newStartTime, Instant now) {
+    public void grantGracePeriod(Instant rescheduledAt, Instant newStartTime, Instant newEndTime, Instant now) {
         requireNonNull(rescheduledAt, "rescheduledAt cannot be null");
         requireNonNull(newStartTime, "newStartTime cannot be null");
+        requireNonNull(newEndTime, "newEndTime cannot be null");
         requireNonNull(now, "now cannot be null");
         requireState(RegistrationState.REGISTERED, "grantGracePeriod");
 
-        this.workshopReference = WorkshopReference.of(workshopReference.workshopId(), newStartTime);
+        this.workshopReference = workshopReference.withSchedule(newStartTime, newEndTime);
 
         // Danger zone: 24h ≤ gap < 36h — student has <12h to cancel under the normal deadline.
         Instant earliestPossibleStart = rescheduledAt.plus(CANCELLATION_DEADLINE);       // +24h

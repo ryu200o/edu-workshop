@@ -22,7 +22,8 @@ import java.util.List;
 /**
  * Consumes {@link WorkshopRescheduledIntegrationEvent} (delivered via the transactional outbox) and
  * grants every active ({@code REGISTERED}) seat a 12-hour urgent cancellation grace window
- * (Titik 1), refreshing the {@code workshop_start_time} snapshot at the same time.
+ * (Titik 1), refreshing the {@code workshop_start_time} / {@code workshop_end_time} snapshots at the
+ * same time.
  *
  * <p>Cross-module collaboration per ADR 0010 / ADR 0011: the Registration module reacts to the
  * Workshop module's integration event — never a direct call and never a cross-module JOIN. Per ADR
@@ -69,7 +70,7 @@ public class WorkshopRescheduledEventHandler {
         // 1. Domain State Mutation & Event Collection
         List<RegistrationDomainEvent> allDomainEvents = new ArrayList<>();
         for (Registration registration : active) {
-            registration.grantGracePeriod(event.occurredAt(), event.newStartTime(), now);
+            registration.grantGracePeriod(event.occurredAt(), event.newStartTime(), event.newEndTime(), now);
             allDomainEvents.addAll(registration.recordedEvents());
             registration.clearDomainEvents();
         }
