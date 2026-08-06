@@ -8,7 +8,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.GetWorkshopsDueToStartQuery;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.GetWorkshopsInProgressDueToCompleteQuery;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.GetWorkshopsOverdueQuery;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,8 +21,10 @@ import java.util.List;
 
 /**
  * Driving (inbound) scheduling adapter for the Workshop module — the Clock/Timer is a Driving Actor
- * on the same "north side" as an HTTP client. Runs periodically (fixed delay) and performs three
- * time-based transitions (Epic 1, D4 — Hybrid Model):
+ * on the same "north side" as an HTTP adapter. Runs periodically (fixed delay) as a full scheduled
+ * job: it queries due/overdue workshops, dispatches state transitions, advances the lifecycle and
+ * logs the outcome of each step — not merely a read-only "scan". Performs three time-based
+ * transitions (Epic 1, D4 — Hybrid Model):
  *
  * <ol>
  *   <li>{@link #autoStartDue(Instant)} — auto-starts {@code PUBLISHED} workshops whose start time
@@ -44,15 +46,15 @@ import java.util.List;
  * advisory lock) is out of scope for Epic 1 — single-instance assumption only.</p>
  */
 @Component
-class WorkshopLifecycleScanner {
+class WorkshopLifecycleJob {
 
-    private static final Logger log = LoggerFactory.getLogger(WorkshopLifecycleScanner.class);
+    private static final Logger log = LoggerFactory.getLogger(WorkshopLifecycleJob.class);
 
     private final QueryBus queryBus;
     private final CommandBus commandBus;
     private final Clock clock;
 
-    WorkshopLifecycleScanner(QueryBus queryBus, CommandBus commandBus, Clock clock) {
+    WorkshopLifecycleJob(QueryBus queryBus, CommandBus commandBus, Clock clock) {
         this.queryBus = queryBus;
         this.commandBus = commandBus;
         this.clock = clock;
@@ -67,8 +69,8 @@ class WorkshopLifecycleScanner {
     }
 
     private void autoStartDue(Instant now) {
-        List<WorkshopSummaryView> due = queryBus.execute(new GetWorkshopsDueToStartQuery(now));
-        for (WorkshopSummaryView view : due) {
+        List<WorkshopIdView> due = queryBus.execute(new GetWorkshopsDueToStartQuery(now));
+        for (WorkshopIdView view : due) {
             try {
                 commandBus.execute(new StartWorkshopCommand(view.id()));
                 log.info("Auto-started workshop {}", view.id());
@@ -79,8 +81,8 @@ class WorkshopLifecycleScanner {
     }
 
     private void autoCompleteDue(Instant now) {
-        List<WorkshopSummaryView> due = queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(now));
-        for (WorkshopSummaryView view : due) {
+        List<WorkshopIdView> due = queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(now));
+        for (WorkshopIdView view : due) {
             try {
                 commandBus.execute(new CompleteWorkshopCommand(view.id()));
                 log.info("Auto-completed workshop {}", view.id());
@@ -91,8 +93,8 @@ class WorkshopLifecycleScanner {
     }
 
     private void catchUpOverdue(Instant now) {
-        List<WorkshopSummaryView> overdue = queryBus.execute(new GetWorkshopsOverdueQuery(now));
-        for (WorkshopSummaryView view : overdue) {
+        List<WorkshopIdView> overdue = queryBus.execute(new GetWorkshopsOverdueQuery(now));
+        for (WorkshopIdView view : overdue) {
             try {
                 commandBus.execute(new CatchUpWorkshopCommand(view.id()));
                 log.info("Caught up overdue workshop {} (started + completed)", view.id());
