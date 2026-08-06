@@ -1,12 +1,15 @@
-package io.github.ryu200o.eduworkshop.workshop.internal.application.scheduler;
+package io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.scheduling;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CatchUpWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CompleteWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.StartWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.GetWorkshopsDueToStartQuery;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.GetWorkshopsInProgressDueToCompleteQuery;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.GetWorkshopsOverdueQuery;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
-import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,8 +29,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
- * Unit test for the scheduler orchestration (D4 — Hybrid Model). The scanner reads due/overdue
- * workshops through the {@link WorkshopReader}, dispatches auto-transitions through the shared
+ * Unit test for the scheduler driving adapter (D4 — Hybrid Model). The scanner reads due/overdue
+ * workshops through the {@link QueryBus}, dispatches auto-transitions through the shared
  * {@link CommandBus} (reusing the Batch 1 handlers), and dispatches the stale catch-up as a single
  * {@link CatchUpWorkshopCommand} — per-row failures never abort the whole scan.
  */
@@ -39,7 +42,7 @@ class WorkshopLifecycleScannerTest {
     private static final UUID WORKSHOP_B = UUID.randomUUID();
 
     @Mock
-    private WorkshopReader workshopReader;
+    private QueryBus queryBus;
 
     @Mock
     private CommandBus commandBus;
@@ -49,7 +52,7 @@ class WorkshopLifecycleScannerTest {
     @BeforeEach
     void setUp() {
         Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
-        scanner = new WorkshopLifecycleScanner(workshopReader, commandBus, fixedClock);
+        scanner = new WorkshopLifecycleScanner(queryBus, commandBus, fixedClock);
     }
 
     private static WorkshopSummaryView view(UUID id, String state) {
@@ -59,11 +62,11 @@ class WorkshopLifecycleScannerTest {
     }
 
     @Test
-    void autoStartDue_dispatchesStartCommandForEachDue() {
-        given(workshopReader.getPublishedDueToStart(NOW))
+    void autoStartDue_queriesAndDispatchesStartCommandForEachDue() {
+        given(queryBus.execute(new GetWorkshopsDueToStartQuery(NOW)))
                 .willReturn(List.of(view(WORKSHOP_A, "PUBLISHED"), view(WORKSHOP_B, "PUBLISHED")));
-        given(workshopReader.getInProgressDueToComplete(NOW)).willReturn(List.of());
-        given(workshopReader.getPublishedOverdueByEndTime(NOW)).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsOverdueQuery(NOW))).willReturn(List.of());
 
         scanner.scan();
 
@@ -73,9 +76,9 @@ class WorkshopLifecycleScannerTest {
 
     @Test
     void autoStartDue_skipsWorkshopsWithNoDue() {
-        given(workshopReader.getPublishedDueToStart(NOW)).willReturn(List.of());
-        given(workshopReader.getInProgressDueToComplete(NOW)).willReturn(List.of());
-        given(workshopReader.getPublishedOverdueByEndTime(NOW)).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsDueToStartQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsOverdueQuery(NOW))).willReturn(List.of());
 
         scanner.scan();
 
@@ -84,10 +87,10 @@ class WorkshopLifecycleScannerTest {
 
     @Test
     void autoCompleteDue_dispatchesCompleteCommandForEachDue() {
-        given(workshopReader.getPublishedDueToStart(NOW)).willReturn(List.of());
-        given(workshopReader.getInProgressDueToComplete(NOW))
+        given(queryBus.execute(new GetWorkshopsDueToStartQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(NOW)))
                 .willReturn(List.of(view(WORKSHOP_A, "IN_PROGRESS"), view(WORKSHOP_B, "IN_PROGRESS")));
-        given(workshopReader.getPublishedOverdueByEndTime(NOW)).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsOverdueQuery(NOW))).willReturn(List.of());
 
         scanner.scan();
 
@@ -97,9 +100,9 @@ class WorkshopLifecycleScannerTest {
 
     @Test
     void catchUpOverdue_dispatchesSingleCatchUpCommandForEachOverdue() {
-        given(workshopReader.getPublishedDueToStart(NOW)).willReturn(List.of());
-        given(workshopReader.getInProgressDueToComplete(NOW)).willReturn(List.of());
-        given(workshopReader.getPublishedOverdueByEndTime(NOW))
+        given(queryBus.execute(new GetWorkshopsDueToStartQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsOverdueQuery(NOW)))
                 .willReturn(List.of(view(WORKSHOP_A, "PUBLISHED"), view(WORKSHOP_B, "PUBLISHED")));
 
         scanner.scan();
@@ -110,10 +113,10 @@ class WorkshopLifecycleScannerTest {
 
     @Test
     void singleRowFailure_doesNotAbortRemainingRows() {
-        given(workshopReader.getPublishedDueToStart(NOW))
+        given(queryBus.execute(new GetWorkshopsDueToStartQuery(NOW)))
                 .willReturn(List.of(view(WORKSHOP_A, "PUBLISHED"), view(WORKSHOP_B, "PUBLISHED")));
-        given(workshopReader.getInProgressDueToComplete(NOW)).willReturn(List.of());
-        given(workshopReader.getPublishedOverdueByEndTime(NOW)).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsOverdueQuery(NOW))).willReturn(List.of());
         doThrow(new WorkshopNotFoundException("id", WORKSHOP_A))
                 .when(commandBus).execute(new StartWorkshopCommand(WORKSHOP_A));
 
@@ -125,9 +128,9 @@ class WorkshopLifecycleScannerTest {
 
     @Test
     void catchUpSingleRowFailure_doesNotAbortRemainingRows() {
-        given(workshopReader.getPublishedDueToStart(NOW)).willReturn(List.of());
-        given(workshopReader.getInProgressDueToComplete(NOW)).willReturn(List.of());
-        given(workshopReader.getPublishedOverdueByEndTime(NOW))
+        given(queryBus.execute(new GetWorkshopsDueToStartQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsInProgressDueToCompleteQuery(NOW))).willReturn(List.of());
+        given(queryBus.execute(new GetWorkshopsOverdueQuery(NOW)))
                 .willReturn(List.of(view(WORKSHOP_A, "PUBLISHED"), view(WORKSHOP_B, "PUBLISHED")));
         doThrow(new RuntimeException("db down"))
                 .when(commandBus).execute(new CatchUpWorkshopCommand(WORKSHOP_A));

@@ -1,4 +1,4 @@
-package io.github.ryu200o.eduworkshop.workshop.internal.application.scheduler;
+package io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.scheduling;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
