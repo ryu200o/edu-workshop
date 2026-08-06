@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.scheduler;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CatchUpWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CompleteWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.StartWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
@@ -26,10 +27,8 @@ import java.time.Instant;
  *       time has passed (D2), dispatching {@link CompleteWorkshopCommand}.</li>
  *   <li>{@link #catchUpOverdue(Instant)} — stale catch-up (D3): a workshop still {@code PUBLISHED}
  *       after its end time is rushed through {@code start()} then {@code complete()} within a
- *       SINGLE transaction, delegated to {@link WorkshopCatchUpService}. It must NOT dispatch two
- *       separate commands through the bus: that would split the transition across two transactions
- *       and could leave a workshop stuck in {@code IN_PROGRESS} past its end time if the second
- *       commit fails.</li>
+ *       SINGLE transaction, dispatched as one {@link CatchUpWorkshopCommand} (handled atomically by
+ *       {@code CatchUpWorkshopCommandHandler}).</li>
  * </ol>
  *
  * <p>Every per-workshop failure is caught and logged so a single bad row never interrupts the
@@ -42,16 +41,13 @@ class WorkshopLifecycleScanner {
     private static final Logger log = LoggerFactory.getLogger(WorkshopLifecycleScanner.class);
 
     private final WorkshopReader workshopReader;
-    private final WorkshopCatchUpService workshopCatchUpService;
     private final CommandBus commandBus;
     private final Clock clock;
 
     WorkshopLifecycleScanner(WorkshopReader workshopReader,
-                             WorkshopCatchUpService workshopCatchUpService,
                              CommandBus commandBus,
                              Clock clock) {
         this.workshopReader = workshopReader;
-        this.workshopCatchUpService = workshopCatchUpService;
         this.commandBus = commandBus;
         this.clock = clock;
     }
@@ -89,7 +85,7 @@ class WorkshopLifecycleScanner {
     private void catchUpOverdue(Instant now) {
         for (WorkshopSummaryView view : workshopReader.getPublishedOverdueByEndTime(now)) {
             try {
-                workshopCatchUpService.catchUp(view.id(), now);
+                commandBus.execute(new CatchUpWorkshopCommand(view.id()));
                 log.info("Caught up overdue workshop {} (started + completed)", view.id());
             } catch (Exception e) {
                 log.warn("Catch-up skipped for workshop {}: {}", view.id(), e.getMessage());

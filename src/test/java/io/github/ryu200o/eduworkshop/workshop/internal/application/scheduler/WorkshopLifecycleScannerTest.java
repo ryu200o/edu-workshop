@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.scheduler;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CatchUpWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CompleteWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.StartWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
@@ -21,15 +22,14 @@ import java.util.UUID;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Unit test for the scheduler orchestration (D4 — Hybrid Model). The scanner reads due/overdue
  * workshops through the {@link WorkshopReader}, dispatches auto-transitions through the shared
- * {@link CommandBus} (reusing the Batch 1 handlers), and delegates the stale catch-up to
- * {@link WorkshopCatchUpService} — per-row failures never abort the whole scan.
+ * {@link CommandBus} (reusing the Batch 1 handlers), and dispatches the stale catch-up as a single
+ * {@link CatchUpWorkshopCommand} — per-row failures never abort the whole scan.
  */
 @ExtendWith(MockitoExtension.class)
 class WorkshopLifecycleScannerTest {
@@ -42,9 +42,6 @@ class WorkshopLifecycleScannerTest {
     private WorkshopReader workshopReader;
 
     @Mock
-    private WorkshopCatchUpService workshopCatchUpService;
-
-    @Mock
     private CommandBus commandBus;
 
     private WorkshopLifecycleScanner scanner;
@@ -52,7 +49,7 @@ class WorkshopLifecycleScannerTest {
     @BeforeEach
     void setUp() {
         Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
-        scanner = new WorkshopLifecycleScanner(workshopReader, workshopCatchUpService, commandBus, fixedClock);
+        scanner = new WorkshopLifecycleScanner(workshopReader, commandBus, fixedClock);
     }
 
     private static WorkshopSummaryView view(UUID id, String state) {
@@ -72,7 +69,6 @@ class WorkshopLifecycleScannerTest {
 
         verify(commandBus).execute(new StartWorkshopCommand(WORKSHOP_A));
         verify(commandBus).execute(new StartWorkshopCommand(WORKSHOP_B));
-        verifyNoInteractions(workshopCatchUpService);
     }
 
     @Test
@@ -97,11 +93,10 @@ class WorkshopLifecycleScannerTest {
 
         verify(commandBus).execute(new CompleteWorkshopCommand(WORKSHOP_A));
         verify(commandBus).execute(new CompleteWorkshopCommand(WORKSHOP_B));
-        verifyNoInteractions(workshopCatchUpService);
     }
 
     @Test
-    void catchUpOverdue_delegatesToCatchUpServiceWithoutDispatchingCommands() {
+    void catchUpOverdue_dispatchesSingleCatchUpCommandForEachOverdue() {
         given(workshopReader.getPublishedDueToStart(NOW)).willReturn(List.of());
         given(workshopReader.getInProgressDueToComplete(NOW)).willReturn(List.of());
         given(workshopReader.getPublishedOverdueByEndTime(NOW))
@@ -109,9 +104,8 @@ class WorkshopLifecycleScannerTest {
 
         scanner.scan();
 
-        verify(workshopCatchUpService).catchUp(WORKSHOP_A, NOW);
-        verify(workshopCatchUpService).catchUp(WORKSHOP_B, NOW);
-        verifyNoInteractions(commandBus);
+        verify(commandBus).execute(new CatchUpWorkshopCommand(WORKSHOP_A));
+        verify(commandBus).execute(new CatchUpWorkshopCommand(WORKSHOP_B));
     }
 
     @Test
@@ -136,11 +130,11 @@ class WorkshopLifecycleScannerTest {
         given(workshopReader.getPublishedOverdueByEndTime(NOW))
                 .willReturn(List.of(view(WORKSHOP_A, "PUBLISHED"), view(WORKSHOP_B, "PUBLISHED")));
         doThrow(new RuntimeException("db down"))
-                .when(workshopCatchUpService).catchUp(WORKSHOP_A, NOW);
+                .when(commandBus).execute(new CatchUpWorkshopCommand(WORKSHOP_A));
 
         scanner.scan();
 
-        verify(workshopCatchUpService, times(1)).catchUp(WORKSHOP_A, NOW);
-        verify(workshopCatchUpService, times(1)).catchUp(WORKSHOP_B, NOW);
+        verify(commandBus).execute(new CatchUpWorkshopCommand(WORKSHOP_A));
+        verify(commandBus).execute(new CatchUpWorkshopCommand(WORKSHOP_B));
     }
 }
