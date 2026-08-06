@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.persist
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopOverlapView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
@@ -137,12 +138,12 @@ class JooqWorkshopReadAdapterTest {
         Instant overlapStart = Instant.parse("2026-10-01T09:30:00Z");
         Instant overlapEnd = Instant.parse("2026-10-01T10:30:00Z");
 
-        List<WorkshopSummaryView> views = workshopReader.getByRoomAndTimeOverlap(roomId, overlapStart, overlapEnd);
+        List<WorkshopOverlapView> views = workshopReader.getByRoomAndTimeOverlap(roomId, overlapStart, overlapEnd);
 
         assertThat(views).hasSize(2);
-        assertThat(views).extracting(WorkshopSummaryView::state)
+        assertThat(views).extracting(WorkshopOverlapView::state)
                 .containsExactlyInAnyOrder(WorkshopState.PLANNED.name(), WorkshopState.PUBLISHED.name());
-        assertThat(views).extracting(WorkshopSummaryView::id)
+        assertThat(views).extracting(WorkshopOverlapView::id)
                 .containsExactlyInAnyOrder(planned.id().value(), published.id().value());
     }
 

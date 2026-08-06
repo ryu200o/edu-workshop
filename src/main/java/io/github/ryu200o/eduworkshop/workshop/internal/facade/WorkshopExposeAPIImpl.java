@@ -34,19 +34,6 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
     }
 
     @Override
-    public Optional<WorkshopRegistrationContract> getForRegistration(UUID workshopId) {
-        return workshopReader.getById(workshopId)
-                .map(view -> new WorkshopRegistrationContract(
-                        view.id(),
-                        mapState(view.state()),
-                        view.startTime(),
-                        view.capacity(),
-                        view.title(),
-                        view.endTime(),
-                        view.roomNameSnapshot()));
-    }
-
-    @Override
     public Optional<WorkshopRegistrationContract> lockForRegistration(UUID workshopId) {
         return workshopRepository.loadByIdWithLock(WorkshopId.of(workshopId))
                 .map(this::toRegistrationContract);
@@ -68,9 +55,7 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
         return workshopReader.getByRoomAndTimeOverlap(roomId, startTime, endTime).stream()
                 .map(view -> new WorkshopImpactContract(
                         view.id(),
-                        mapState(view.state()),
-                        view.isRoomEvicted(),
-                        view.roomEvictedAt()))
+                        mapState(view.state())))
                 .toList();
     }
 
