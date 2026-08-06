@@ -10,7 +10,9 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.In
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCompletionNotDueException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopStartNotDueException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopTitleLockedException;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -38,6 +40,18 @@ class WorkshopExceptionAdvice {
     @ExceptionHandler(WorkshopAlreadyStartedException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleAlreadyStarted(WorkshopAlreadyStartedException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(WorkshopStartNotDueException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleStartNotDue(WorkshopStartNotDueException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(WorkshopCompletionNotDueException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleCompletionNotDue(WorkshopCompletionNotDueException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 

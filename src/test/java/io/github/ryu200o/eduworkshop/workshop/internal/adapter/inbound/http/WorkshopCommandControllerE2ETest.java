@@ -336,6 +336,83 @@ class WorkshopCommandControllerE2ETest {
     }
 
     // ----------------------------------------------------------------
+    // start / complete (Epic 1 — lifecycle completion)
+    // ----------------------------------------------------------------
+
+    @Test
+    void start_published_returnsOk() throws Exception {
+        UUID roomId = createRoom("L1", 100);
+        Instant start = Instant.now().minus(Duration.ofHours(2));  // already due
+        Instant end = start.plus(Duration.ofHours(2));
+        UUID workshopId = publish(plan(createWorkshop("WS", start, end, 30), roomId));
+
+        HttpResponse<String> started = post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+
+        assertThat(started.statusCode()).as("start: %s", started.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(started.body()).contains("\"state\":\"IN_PROGRESS\"");
+        assertThat(workshopState(workshopId)).isEqualTo("IN_PROGRESS");
+    }
+
+    @Test
+    void start_beforeStartTime_returnsConflict() throws Exception {
+        UUID roomId = createRoom("L2", 100);
+        Instant start = Instant.now().plus(Duration.ofHours(24));  // not reached yet
+        Instant end = start.plus(Duration.ofHours(2));
+        UUID workshopId = publish(plan(createWorkshop("WS", start, end, 30), roomId));
+
+        HttpResponse<String> started = post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+
+        assertThat(started.statusCode()).as("start too early: %s", started.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void start_alreadyInProgress_returnsConflict() throws Exception {
+        UUID roomId = createRoom("L3", 100);
+        Instant start = Instant.now().minus(Duration.ofHours(1));  // already due
+        Instant end = start.plus(Duration.ofHours(2));
+        UUID workshopId = publish(plan(createWorkshop("WS", start, end, 30), roomId));
+
+        post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+
+        HttpResponse<String> second = post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+
+        assertThat(second.statusCode()).as("second start: %s", second.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void complete_inProgress_returnsOk() throws Exception {
+        UUID roomId = createRoom("L4", 100);
+        Instant start = Instant.now().minus(Duration.ofHours(3));
+        Instant end = Instant.now().minus(Duration.ofHours(1));   // already finished
+        UUID workshopId = publish(plan(createWorkshop("WS", start, end, 30), roomId));
+
+        post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+
+        HttpResponse<String> completed = post("/api/v1/workshops/" + workshopId + "/complete", null, Map.of());
+
+        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(completed.body()).contains("\"state\":\"COMPLETED\"");
+        assertThat(workshopState(workshopId)).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void complete_beforeEndTime_returnsConflict() throws Exception {
+        UUID roomId = createRoom("L5", 100);
+        Instant start = Instant.now().minus(Duration.ofHours(1));
+        Instant end = Instant.now().plus(Duration.ofHours(2));  // not reached yet
+        UUID workshopId = publish(plan(createWorkshop("WS", start, end, 30), roomId));
+
+        post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+
+        HttpResponse<String> completed = post("/api/v1/workshops/" + workshopId + "/complete", null, Map.of());
+
+        assertThat(completed.statusCode()).as("complete too early: %s", completed.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    // ----------------------------------------------------------------
     // unplan (DELETE /plan)
     // ----------------------------------------------------------------
 

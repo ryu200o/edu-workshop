@@ -17,13 +17,17 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomEvicted;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopStarted;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCompleted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCompletionNotDueException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopStartNotDueException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopTitleLockedException;
 
 import org.junit.jupiter.api.Test;
@@ -859,6 +863,208 @@ class WorkshopTest {
         assertThat(workshop.isRoomEvicted()).isFalse();
         assertThat(workshop.roomEvictedAt()).isNull();
         assertThat(workshop.startTime()).isEqualTo(newStart);
+    }
+
+    // ----------------------------------------------------------------
+    // start / complete (Epic 1 — workshop lifecycle completion)
+    // ----------------------------------------------------------------
+
+    @Test
+    void start_published_becomesInProgressAndEmitsStarted() {
+        Workshop workshop = createPublished();
+        Instant startedAt = START;
+
+        workshop.start(startedAt);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.IN_PROGRESS);
+        assertThat(workshop.updatedAt()).isEqualTo(startedAt);
+        // room present at PUBLISHED (invariant); event carries roomId
+        assertThat(workshop.recordedEvents())
+                .hasSize(4)
+                .hasExactlyElementsOfTypes(WorkshopCreated.class, WorkshopPlanned.class,
+                        WorkshopPublished.class, WorkshopStarted.class);
+
+        WorkshopStarted event = (WorkshopStarted) workshop.recordedEvents().get(3);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.roomId()).isEqualTo(ROOM.roomId());
+        assertThat(event.occurredAt()).isEqualTo(startedAt);
+    }
+
+    @Test
+    void start_atExactStartTime_isAllowed() {
+        Workshop workshop = createPublished();
+
+        workshop.start(START);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.IN_PROGRESS);
+    }
+
+    @Test
+    void start_beforeStartTime_throwsStartNotDue() {
+        Workshop workshop = createPublished();
+
+        assertThatThrownBy(() -> workshop.start(START.minusSeconds(1)))
+                .isInstanceOf(WorkshopStartNotDueException.class)
+                .satisfies(e -> {
+                    WorkshopStartNotDueException ex = (WorkshopStartNotDueException) e;
+                    assertThat(ex.workshopId()).isEqualTo(workshop.id());
+                    assertThat(ex.startTime()).isEqualTo(START);
+                });
+    }
+
+    @Test
+    void start_fromNonPublished_throwsInvalidState() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);  // PLANNED
+
+        assertThatThrownBy(() -> workshop.start(START))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PLANNED);
+                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.PUBLISHED);
+                });
+    }
+
+    @Test
+    void start_rejectsNullNow() {
+        Workshop workshop = createPublished();
+
+        assertThatThrownBy(() -> workshop.start(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void complete_inProgress_becomesCompletedAndEmitsCompleted() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+        workshop.clearDomainEvents();
+        Instant completedAt = END;
+
+        workshop.complete(completedAt);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.COMPLETED);
+        assertThat(workshop.updatedAt()).isEqualTo(completedAt);
+        assertThat(workshop.recordedEvents())
+                .hasSize(1)
+                .hasOnlyElementsOfType(WorkshopCompleted.class);
+
+        WorkshopCompleted event = (WorkshopCompleted) workshop.recordedEvents().get(0);
+        assertThat(event.workshopId()).isEqualTo(workshop.id());
+        assertThat(event.occurredAt()).isEqualTo(completedAt);
+    }
+
+    @Test
+    void complete_atExactEndTime_isAllowed() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+        workshop.clearDomainEvents();
+
+        workshop.complete(END);
+
+        assertThat(workshop.state()).isEqualTo(WorkshopState.COMPLETED);
+    }
+
+    @Test
+    void complete_beforeEndTime_throwsCompletionNotDue() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+        workshop.clearDomainEvents();
+
+        assertThatThrownBy(() -> workshop.complete(END.minusSeconds(1)))
+                .isInstanceOf(WorkshopCompletionNotDueException.class)
+                .satisfies(e -> {
+                    WorkshopCompletionNotDueException ex = (WorkshopCompletionNotDueException) e;
+                    assertThat(ex.workshopId()).isEqualTo(workshop.id());
+                    assertThat(ex.endTime()).isEqualTo(END);
+                });
+    }
+
+    @Test
+    void complete_fromNonInProgress_throwsInvalidState() {
+        Workshop workshop = createPublished();  // still PUBLISHED
+
+        assertThatThrownBy(() -> workshop.complete(END))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.PUBLISHED);
+                    assertThat(ex.getAttemptedState()).isEqualTo(WorkshopState.IN_PROGRESS);
+                });
+    }
+
+    @Test
+    void complete_rejectsNullNow() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+        workshop.clearDomainEvents();
+
+        assertThatThrownBy(() -> workshop.complete(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void start_twice_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+
+        assertThatThrownBy(() -> workshop.start(START))  // second start
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    // Frozen matrix: post-start/post-complete all mutations are locked.
+    @Test
+    void updateInformation_afterStart_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+
+        assertThatThrownBy(() -> workshop.updateInformation(title(), description(), 0, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.IN_PROGRESS);
+                });
+    }
+
+    @Test
+    void updateInformation_afterComplete_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+        workshop.complete(END);
+
+        assertThatThrownBy(() -> workshop.updateInformation(title(), description(), 0, NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class)
+                .satisfies(e -> {
+                    InvalidWorkshopStateException ex = (InvalidWorkshopStateException) e;
+                    assertThat(ex.getCurrentState()).isEqualTo(WorkshopState.COMPLETED);
+                });
+    }
+
+    @Test
+    void frozenMatrix_publishedMutations_rejectedAfterStartOrComplete() {
+        // reschedule / changeRoom / adjustCapacity / cancel all requireState(PUBLISHED)
+        // so once IN_PROGRESS or COMPLETED they must be locked.
+        Workshop started_ = createPublished();
+        started_.start(START);
+        Workshop completed = createPublished();
+        completed.start(START);
+        completed.complete(END);
+        RoomReference newRoom = RoomReference.of(UUID.randomUUID(), "Room 301", "Floor 3", 50);
+
+        for (Workshop w : java.util.List.of(started_, completed)) {
+            assertThatThrownBy(() -> w.reschedule(START.plus(Duration.ofDays(3)),
+                    START.plus(Duration.ofDays(3)).plusSeconds(7200), NOW))
+                    .isInstanceOf(InvalidWorkshopStateException.class);
+            assertThatThrownBy(() -> w.changeRoom(newRoom, NOW))
+                    .isInstanceOf(InvalidWorkshopStateException.class);
+            assertThatThrownBy(() -> w.adjustCapacity(WorkshopCapacity.of(40), 0, NOW))
+                    .isInstanceOf(InvalidWorkshopStateException.class);
+            assertThatThrownBy(() -> w.cancel(NOW))
+                    .isInstanceOf(InvalidWorkshopStateException.class);
+            assertThatThrownBy(() -> w.updateSchedule(START.plus(Duration.ofDays(3)),
+                    START.plus(Duration.ofDays(3)).plusSeconds(7200), NOW))
+                    .isInstanceOf(InvalidWorkshopStateException.class);
+        }
     }
 
     // ----------------------------------------------------------------

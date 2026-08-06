@@ -4,10 +4,12 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.AdjustWorkshopCapacityCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CancelWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CompleteWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PlanWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PublishWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.RescheduleWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.StartWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UnplanWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopInfoCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopScheduleCommand;
@@ -71,6 +73,18 @@ class WorkshopCommandController {
     ResponseEntity<CancelWorkshopCommand.Result> cancel(@PathVariable UUID id) {
         var command = new CancelWorkshopCommand(id);
         CancelWorkshopCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/start")
+    ResponseEntity<StartWorkshopCommand.Result> start(@PathVariable UUID id) {
+        StartWorkshopCommand.Result result = commandBus.execute(new StartWorkshopCommand(id));
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/complete")
+    ResponseEntity<CompleteWorkshopCommand.Result> complete(@PathVariable UUID id) {
+        CompleteWorkshopCommand.Result result = commandBus.execute(new CompleteWorkshopCommand(id));
         return ResponseEntity.ok(result);
     }
 
