@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.persist
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopOverlapView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import io.github.ryu200o.eduworkshop.workshop.jooq.tables.Workshops;
@@ -67,7 +68,7 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
     }
 
     @Override
-    public List<WorkshopSummaryView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
+    public List<WorkshopOverlapView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
         var condition = WORKSHOPS.ROOM_ID.eq(roomId)
                 .and(WORKSHOPS.END_TIME.greaterThan(OffsetDateTime.ofInstant(startTime, java.time.ZoneOffset.UTC)))
                 .and(WORKSHOPS.STATE.in("PUBLISHED", "PLANNED"));
@@ -76,16 +77,11 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
         }
         return dsl.select(
                         WORKSHOPS.ID,
-                        WORKSHOPS.TITLE,
-                        WORKSHOPS.START_TIME,
-                        WORKSHOPS.END_TIME,
-                        WORKSHOPS.IS_ROOM_EVICTED,
-                        WORKSHOPS.ROOM_EVICTED_AT,
                         WORKSHOPS.STATE)
                 .from(WORKSHOPS)
                 .where(condition)
                 .fetch()
-                .map(JooqWorkshopReadAdapter::toSummaryView);
+                .map(JooqWorkshopReadAdapter::toOverlapView);
     }
 
     @Override
@@ -120,6 +116,13 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
 
     private static WorkshopIdView toIdView(Record record) {
         return new WorkshopIdView(record.get(WORKSHOPS.ID));
+    }
+
+    private static WorkshopOverlapView toOverlapView(Record record) {
+        return new WorkshopOverlapView(
+                record.get(WORKSHOPS.ID),
+                record.get(WORKSHOPS.STATE)
+        );
     }
 
     private static WorkshopDetailView toDetailView(Record record) {

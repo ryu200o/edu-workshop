@@ -4,7 +4,7 @@ import io.github.ryu200o.eduworkshop.shared.application.exception.ResourceNotFou
 
 /**
  * Application-layer exception raised when the referenced workshop cannot be found while registering.
- * Thrown by the register handler after {@code WorkshopExposeAPI.getForRegistration} returns empty.
+ * Thrown by the register handler after {@code WorkshopExposeAPI.lockForRegistration} returns empty.
  * This is an application concern, not a domain invariant.
  */
 public final class ReferencedWorkshopNotFoundException extends ResourceNotFoundException {

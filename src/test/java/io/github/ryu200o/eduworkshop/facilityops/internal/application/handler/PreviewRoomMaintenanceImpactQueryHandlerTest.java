@@ -52,7 +52,7 @@ class PreviewRoomMaintenanceImpactQueryHandlerTest {
     }
 
     private static WorkshopImpactContract workshop(UUID id, WorkshopStateContract state) {
-        return new WorkshopImpactContract(id, state, false, null);
+        return new WorkshopImpactContract(id, state);
     }
 
     @Test

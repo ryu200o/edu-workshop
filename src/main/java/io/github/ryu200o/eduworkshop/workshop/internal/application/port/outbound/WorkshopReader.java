@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.port.outboun
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopOverlapView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 
 import java.time.Instant;
@@ -33,12 +34,17 @@ public interface WorkshopReader {
      * condition: {@code wsStart < maintEnd && wsEnd > maintStart}. If {@code maintEnd} is null
      * (indefinite maintenance), all workshops starting after {@code maintStart} match.
      *
+     * <p>Task-tailored per ADR 0017: returns only {@code id} + {@code state} (the
+     * {@link WorkshopOverlapView}) — the cross-module consumer (FacilityOps impact analysis) needs
+     * nothing more, so the adapter selects exactly these two columns (no over-fetch of the UI
+     * {@link WorkshopSummaryView}).
+     *
      * @param roomId    the room to filter by
      * @param startTime the maintenance window start (inclusive lower bound)
      * @param endTime   the maintenance window end (null = indefinite)
-     * @return list of matching workshops as lightweight summaries
+     * @return list of matching workshops as {@link WorkshopOverlapView}
      */
-    List<WorkshopSummaryView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
+    List<WorkshopOverlapView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
 
     /**
      * Gets the ids of every {@code PUBLISHED} workshop whose start time has passed ({@code startTime <= now}).
