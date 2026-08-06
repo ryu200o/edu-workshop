@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.persistence.jooq;
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
@@ -49,11 +50,13 @@ class JooqWorkshopReadAdapterTest {
     }
 
     private static Workshop newWorkshop() {
+        return newWorkshop(Instant.parse("2026-10-01T09:00:00Z"), Instant.parse("2026-10-01T11:00:00Z"));
+    }
+
+    private static Workshop newWorkshop(Instant start, Instant end) {
         WorkshopId id = WorkshopId.generate();
         WorkshopTitle title = WorkshopTitle.of("Intro to AI");
         WorkshopDescription description = WorkshopDescription.of("A beginner workshop");
-        Instant start = Instant.parse("2026-10-01T09:00:00Z");
-        Instant end = Instant.parse("2026-10-01T11:00:00Z");
         WorkshopCapacity capacity = WorkshopCapacity.of(30);
         return Workshop.create(id, title, description, start, end, capacity, Instant.parse("2026-09-15T00:00:00Z"));
     }
@@ -151,5 +154,110 @@ class JooqWorkshopReadAdapterTest {
     @Test
     void findAll_whenEmpty_returnsEmptyList() {
         assertThat(workshopReader.getAll()).isEmpty();
+    }
+
+    @Test
+    void getPublishedDueToStart_returnsOnlyPublishedWithStartPassed() {
+        Workshop due = newWorkshop();
+        due.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        due.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+
+        Workshop notDue = newWorkshop(Instant.parse("2026-10-01T13:00:00Z"), Instant.parse("2026-10-01T15:00:00Z"));
+        notDue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        notDue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+
+        Workshop planned = newWorkshop();
+        planned.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+
+        Workshop inProgress = newWorkshop();
+        inProgress.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        inProgress.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        inProgress.start(Instant.parse("2026-10-01T09:00:00Z"));
+
+        Workshop completed = newWorkshop();
+        completed.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        completed.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        completed.start(Instant.parse("2026-10-01T09:00:00Z"));
+        completed.complete(Instant.parse("2026-10-01T11:00:00Z"));
+
+        workshopRepository.saveAll(List.of(due, notDue, planned, inProgress, completed));
+
+        Instant now = Instant.parse("2026-10-01T10:00:00Z");
+
+        List<WorkshopIdView> views = workshopReader.getPublishedDueToStart(now);
+
+        assertThat(views).hasSize(1);
+        assertThat(views.getFirst().id()).isEqualTo(due.id().value());
+    }
+
+    @Test
+    void getInProgressDueToComplete_returnsOnlyInProgressWithEndPassed() {
+        Workshop due = newWorkshop();
+        due.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        due.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        due.start(Instant.parse("2026-10-01T09:00:00Z"));
+
+        Workshop notDue = newWorkshop(Instant.parse("2026-10-01T09:00:00Z"), Instant.parse("2026-10-01T13:00:00Z"));
+        notDue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        notDue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        notDue.start(Instant.parse("2026-10-01T09:00:00Z"));
+
+        Workshop completed = newWorkshop();
+        completed.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        completed.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        completed.start(Instant.parse("2026-10-01T09:00:00Z"));
+        completed.complete(Instant.parse("2026-10-01T11:00:00Z"));
+
+        workshopRepository.saveAll(List.of(due, notDue, completed));
+
+        Instant now = Instant.parse("2026-10-01T11:00:00Z");
+
+        List<WorkshopIdView> views = workshopReader.getInProgressDueToComplete(now);
+
+        assertThat(views).hasSize(1);
+        assertThat(views.getFirst().id()).isEqualTo(due.id().value());
+    }
+
+    @Test
+    void getPublishedOverdueByEndTime_returnsOnlyPublishedOverdue() {
+        Workshop overdue = newWorkshop();
+        overdue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        overdue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+
+        Workshop notOverdue = newWorkshop(Instant.parse("2026-10-01T09:00:00Z"), Instant.parse("2026-10-01T13:00:00Z"));
+        notOverdue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        notOverdue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+
+        Workshop overdueInProgress = newWorkshop();
+        overdueInProgress.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        overdueInProgress.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        overdueInProgress.start(Instant.parse("2026-10-01T09:00:00Z"));
+
+        Workshop overdueCompleted = newWorkshop();
+        overdueCompleted.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                Instant.parse("2026-09-15T00:00:01Z"));
+        overdueCompleted.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
+        overdueCompleted.start(Instant.parse("2026-10-01T09:00:00Z"));
+        overdueCompleted.complete(Instant.parse("2026-10-01T11:00:00Z"));
+
+        workshopRepository.saveAll(List.of(overdue, notOverdue, overdueInProgress, overdueCompleted));
+
+        Instant now = Instant.parse("2026-10-01T12:00:00Z");
+
+        List<WorkshopIdView> views = workshopReader.getPublishedOverdueByEndTime(now);
+
+        assertThat(views).hasSize(1);
+        assertThat(views.getFirst().id()).isEqualTo(overdue.id().value());
     }
 }

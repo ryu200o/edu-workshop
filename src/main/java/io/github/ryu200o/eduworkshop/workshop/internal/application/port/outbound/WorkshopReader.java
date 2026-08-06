@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound;
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 
 import java.time.Instant;
@@ -38,4 +39,39 @@ public interface WorkshopReader {
      * @return list of matching workshops as lightweight summaries
      */
     List<WorkshopSummaryView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
+
+    /**
+     * Gets the ids of every {@code PUBLISHED} workshop whose start time has passed ({@code startTime <= now}).
+     * Used by the lifecycle scheduler to auto-start workshops that are due (D1). Only the id is returned —
+     * the consumer (lifecycle job) only needs the identity to dispatch a {@code StartWorkshopCommand}
+     * (consumer-driven, avoids over-fetch). The state and time predicates are pushed down to SQL (DB Query
+     * Pushdown), never filtered in memory.
+     *
+     * @param now the current instant (inclusive upper bound on {@code start_time})
+     * @return list of matching workshop ids
+     */
+    List<WorkshopIdView> getPublishedDueToStart(Instant now);
+
+    /**
+     * Gets the ids of every {@code IN_PROGRESS} workshop whose end time has passed ({@code endTime <= now}).
+     * Used by the lifecycle scheduler to auto-complete workshops that are due (D2). Only the id is returned —
+     * the consumer (lifecycle job) only needs the identity to dispatch a {@code CompleteWorkshopCommand}.
+     * The state and time predicates are pushed down to SQL (DB Query Pushdown), never filtered in memory.
+     *
+     * @param now the current instant (inclusive upper bound on {@code end_time})
+     * @return list of lightweight workshop ids
+     */
+    List<WorkshopIdView> getInProgressDueToComplete(Instant now);
+
+    /**
+     * Gets the ids of every {@code PUBLISHED} workshop that is already overdue ({@code endTime < now}).
+     * Used by the lifecycle scheduler for the stale catch-up (D3): such a workshop must be rushed through
+     * {@code start()} then {@code complete()} within a single transaction. Only the id is returned — the
+     * consumer (lifecycle job) only needs the identity to dispatch a {@code CatchUpWorkshopCommand}. The
+     * state and time predicates are pushed down to SQL (DB Query Pushdown), never filtered in memory.
+     *
+     * @param now the current instant (strict upper bound on {@code end_time})
+     * @return list of lightweight workshop ids
+     */
+    List<WorkshopIdView> getPublishedOverdueByEndTime(Instant now);
 }
