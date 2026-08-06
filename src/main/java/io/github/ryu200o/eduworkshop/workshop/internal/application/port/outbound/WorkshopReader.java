@@ -38,4 +38,35 @@ public interface WorkshopReader {
      * @return list of matching workshops as lightweight summaries
      */
     List<WorkshopSummaryView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
+
+    /**
+     * Gets every {@code PUBLISHED} workshop whose start time has passed ({@code startTime <= now}).
+     * Used by the lifecycle scheduler to auto-start workshops that are due (D1). The state and time
+     * predicates are pushed down to SQL (DB Query Pushdown), never filtered in memory.
+     *
+     * @param now the current instant (inclusive upper bound on {@code start_time})
+     * @return list of matching workshops as lightweight summaries
+     */
+    List<WorkshopSummaryView> getPublishedDueToStart(Instant now);
+
+    /**
+     * Gets every {@code IN_PROGRESS} workshop whose end time has passed ({@code endTime <= now}).
+     * Used by the lifecycle scheduler to auto-complete workshops that are due (D2). The state and
+     * time predicates are pushed down to SQL (DB Query Pushdown), never filtered in memory.
+     *
+     * @param now the current instant (inclusive upper bound on {@code end_time})
+     * @return list of matching workshops as lightweight summaries
+     */
+    List<WorkshopSummaryView> getInProgressDueToComplete(Instant now);
+
+    /**
+     * Gets every {@code PUBLISHED} workshop that is already overdue ({@code endTime < now}).
+     * Used by the lifecycle scheduler for the stale catch-up (D3): such a workshop must be rushed
+     * through {@code start()} then {@code complete()} within a single transaction. The state and
+     * time predicates are pushed down to SQL (DB Query Pushdown), never filtered in memory.
+     *
+     * @param now the current instant (strict upper bound on {@code end_time})
+     * @return list of matching workshops as lightweight summaries
+     */
+    List<WorkshopSummaryView> getPublishedOverdueByEndTime(Instant now);
 }

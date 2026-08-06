@@ -87,6 +87,57 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                 .map(JooqWorkshopReadAdapter::toSummaryView);
     }
 
+    @Override
+    public List<WorkshopSummaryView> getPublishedDueToStart(Instant now) {
+        return dsl.select(
+                        WORKSHOPS.ID,
+                        WORKSHOPS.TITLE,
+                        WORKSHOPS.START_TIME,
+                        WORKSHOPS.END_TIME,
+                        WORKSHOPS.IS_ROOM_EVICTED,
+                        WORKSHOPS.ROOM_EVICTED_AT,
+                        WORKSHOPS.STATE)
+                .from(WORKSHOPS)
+                .where(WORKSHOPS.STATE.eq("PUBLISHED"))
+                .and(WORKSHOPS.START_TIME.lessOrEqual(OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC)))
+                .fetch()
+                .map(JooqWorkshopReadAdapter::toSummaryView);
+    }
+
+    @Override
+    public List<WorkshopSummaryView> getInProgressDueToComplete(Instant now) {
+        return dsl.select(
+                        WORKSHOPS.ID,
+                        WORKSHOPS.TITLE,
+                        WORKSHOPS.START_TIME,
+                        WORKSHOPS.END_TIME,
+                        WORKSHOPS.IS_ROOM_EVICTED,
+                        WORKSHOPS.ROOM_EVICTED_AT,
+                        WORKSHOPS.STATE)
+                .from(WORKSHOPS)
+                .where(WORKSHOPS.STATE.eq("IN_PROGRESS"))
+                .and(WORKSHOPS.END_TIME.lessOrEqual(OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC)))
+                .fetch()
+                .map(JooqWorkshopReadAdapter::toSummaryView);
+    }
+
+    @Override
+    public List<WorkshopSummaryView> getPublishedOverdueByEndTime(Instant now) {
+        return dsl.select(
+                        WORKSHOPS.ID,
+                        WORKSHOPS.TITLE,
+                        WORKSHOPS.START_TIME,
+                        WORKSHOPS.END_TIME,
+                        WORKSHOPS.IS_ROOM_EVICTED,
+                        WORKSHOPS.ROOM_EVICTED_AT,
+                        WORKSHOPS.STATE)
+                .from(WORKSHOPS)
+                .where(WORKSHOPS.STATE.eq("PUBLISHED"))
+                .and(WORKSHOPS.END_TIME.lessThan(OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC)))
+                .fetch()
+                .map(JooqWorkshopReadAdapter::toSummaryView);
+    }
+
     private static WorkshopDetailView toDetailView(Record record) {
         return new WorkshopDetailView(
                 record.get(WORKSHOPS.ID),
