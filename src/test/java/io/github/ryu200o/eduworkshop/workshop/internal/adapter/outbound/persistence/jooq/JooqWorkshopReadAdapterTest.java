@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.persistence.jooq;
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
@@ -188,11 +189,10 @@ class JooqWorkshopReadAdapterTest {
 
         Instant now = Instant.parse("2026-10-01T10:00:00Z");
 
-        List<WorkshopSummaryView> views = workshopReader.getPublishedDueToStart(now);
+        List<WorkshopIdView> views = workshopReader.getPublishedDueToStart(now);
 
         assertThat(views).hasSize(1);
         assertThat(views.getFirst().id()).isEqualTo(due.id().value());
-        assertThat(views.getFirst().state()).isEqualTo(WorkshopState.PUBLISHED.name());
     }
 
     @Test
@@ -220,11 +220,10 @@ class JooqWorkshopReadAdapterTest {
 
         Instant now = Instant.parse("2026-10-01T11:00:00Z");
 
-        List<WorkshopSummaryView> views = workshopReader.getInProgressDueToComplete(now);
+        List<WorkshopIdView> views = workshopReader.getInProgressDueToComplete(now);
 
         assertThat(views).hasSize(1);
         assertThat(views.getFirst().id()).isEqualTo(due.id().value());
-        assertThat(views.getFirst().state()).isEqualTo(WorkshopState.IN_PROGRESS.name());
     }
 
     @Test
@@ -256,10 +255,9 @@ class JooqWorkshopReadAdapterTest {
 
         Instant now = Instant.parse("2026-10-01T12:00:00Z");
 
-        List<WorkshopSummaryView> views = workshopReader.getPublishedOverdueByEndTime(now);
+        List<WorkshopIdView> views = workshopReader.getPublishedOverdueByEndTime(now);
 
         assertThat(views).hasSize(1);
         assertThat(views.getFirst().id()).isEqualTo(overdue.id().value());
-        assertThat(views.getFirst().state()).isEqualTo(WorkshopState.PUBLISHED.name());
     }
 }

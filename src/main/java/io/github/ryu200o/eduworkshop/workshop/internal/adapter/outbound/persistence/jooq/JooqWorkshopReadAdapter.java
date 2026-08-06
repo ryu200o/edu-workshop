@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.persistence.jooq;
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopIdView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopSummaryView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import io.github.ryu200o.eduworkshop.workshop.jooq.tables.Workshops;
@@ -88,54 +89,37 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
     }
 
     @Override
-    public List<WorkshopSummaryView> getPublishedDueToStart(Instant now) {
-        return dsl.select(
-                        WORKSHOPS.ID,
-                        WORKSHOPS.TITLE,
-                        WORKSHOPS.START_TIME,
-                        WORKSHOPS.END_TIME,
-                        WORKSHOPS.IS_ROOM_EVICTED,
-                        WORKSHOPS.ROOM_EVICTED_AT,
-                        WORKSHOPS.STATE)
+    public List<WorkshopIdView> getPublishedDueToStart(Instant now) {
+        return dsl.select(WORKSHOPS.ID)
                 .from(WORKSHOPS)
                 .where(WORKSHOPS.STATE.eq("PUBLISHED"))
                 .and(WORKSHOPS.START_TIME.lessOrEqual(OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC)))
                 .fetch()
-                .map(JooqWorkshopReadAdapter::toSummaryView);
+                .map(JooqWorkshopReadAdapter::toIdView);
     }
 
     @Override
-    public List<WorkshopSummaryView> getInProgressDueToComplete(Instant now) {
-        return dsl.select(
-                        WORKSHOPS.ID,
-                        WORKSHOPS.TITLE,
-                        WORKSHOPS.START_TIME,
-                        WORKSHOPS.END_TIME,
-                        WORKSHOPS.IS_ROOM_EVICTED,
-                        WORKSHOPS.ROOM_EVICTED_AT,
-                        WORKSHOPS.STATE)
+    public List<WorkshopIdView> getInProgressDueToComplete(Instant now) {
+        return dsl.select(WORKSHOPS.ID)
                 .from(WORKSHOPS)
                 .where(WORKSHOPS.STATE.eq("IN_PROGRESS"))
                 .and(WORKSHOPS.END_TIME.lessOrEqual(OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC)))
                 .fetch()
-                .map(JooqWorkshopReadAdapter::toSummaryView);
+                .map(JooqWorkshopReadAdapter::toIdView);
     }
 
     @Override
-    public List<WorkshopSummaryView> getPublishedOverdueByEndTime(Instant now) {
-        return dsl.select(
-                        WORKSHOPS.ID,
-                        WORKSHOPS.TITLE,
-                        WORKSHOPS.START_TIME,
-                        WORKSHOPS.END_TIME,
-                        WORKSHOPS.IS_ROOM_EVICTED,
-                        WORKSHOPS.ROOM_EVICTED_AT,
-                        WORKSHOPS.STATE)
+    public List<WorkshopIdView> getPublishedOverdueByEndTime(Instant now) {
+        return dsl.select(WORKSHOPS.ID)
                 .from(WORKSHOPS)
                 .where(WORKSHOPS.STATE.eq("PUBLISHED"))
                 .and(WORKSHOPS.END_TIME.lessThan(OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC)))
                 .fetch()
-                .map(JooqWorkshopReadAdapter::toSummaryView);
+                .map(JooqWorkshopReadAdapter::toIdView);
+    }
+
+    private static WorkshopIdView toIdView(Record record) {
+        return new WorkshopIdView(record.get(WORKSHOPS.ID));
     }
 
     private static WorkshopDetailView toDetailView(Record record) {
