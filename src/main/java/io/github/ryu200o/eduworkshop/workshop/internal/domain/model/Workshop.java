@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.domain.model;
 
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCapacityAdjusted;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCompleted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopInformationUpdated;
@@ -11,6 +12,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomChanged;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopScheduleUpdated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomEvicted;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopStarted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopUnplanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
@@ -18,6 +20,8 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.Re
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopAlreadyStartedException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityBelowRegistrationsException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCapacityExceedsRoomException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopCompletionNotDueException;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopStartNotDueException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopTitleLockedException;
 
 import java.time.Duration;
@@ -433,6 +437,58 @@ public class Workshop {
     }
 
     /**
+     * Starts a PUBLISHED workshop (→ {@code IN_PROGRESS}).
+     *
+     * <p>Strict start guard (D1): the session must not begin early — {@code now} must be at or
+     * after {@code startTime}. This protects the late-booking {@code BOOK} flow: once the session
+     * is {@code IN_PROGRESS}, the Registration gate rejects new registrations. The room is always
+     * present in {@code PUBLISHED} (a publish invariant), so the emitted {@link WorkshopStarted}
+     * carries the room id for downstream consumers (attendance / analytics).</p>
+     *
+     * @param now the current instant; must not be before {@code startTime}
+     * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
+     * @throws WorkshopStartNotDueException if {@code now} is before {@code startTime}
+     */
+    public void start(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.PUBLISHED, "start");
+
+        if (now.isBefore(this.startTime)) {
+            throw new WorkshopStartNotDueException(id, startTime, now);
+        }
+
+        this.state = WorkshopState.IN_PROGRESS;
+        this.touch(now);
+
+        record(new WorkshopStarted(id, roomReference.roomId(), updatedAt));
+    }
+
+    /**
+     * Completes an IN_PROGRESS workshop (→ {@code COMPLETED}).
+     *
+     * <p>Strict completion guard (D2): the session must not be completed before it is due to end —
+     * {@code now} must be at or after {@code endTime}. Once {@code COMPLETED} the workshop is
+     * terminal and frozen (read-only).</p>
+     *
+     * @param now the current instant; must not be before {@code endTime}
+     * @throws InvalidWorkshopStateException if the workshop is not {@code IN_PROGRESS}
+     * @throws WorkshopCompletionNotDueException if {@code now} is before {@code endTime}
+     */
+    public void complete(Instant now) {
+        requireNonNull(now, "now cannot be null");
+        requireState(WorkshopState.IN_PROGRESS, "complete");
+
+        if (now.isBefore(this.endTime)) {
+            throw new WorkshopCompletionNotDueException(id, endTime, now);
+        }
+
+        this.state = WorkshopState.COMPLETED;
+        this.touch(now);
+
+        record(new WorkshopCompleted(id, updatedAt));
+    }
+
+    /**
      * Reschedules a PUBLISHED workshop to a new time window, keeping the room and all student
      * registrations.
      *
@@ -487,14 +543,16 @@ public class Workshop {
      *   <li>{@code PUBLISHED}: description is always mutable; title is locked when
      *       {@code activeRegistrations > 0} (prevents topic drift on issued tickets).
      *       Title changes are rejected with {@link WorkshopTitleLockedException}.</li>
-     *   <li>{@code CANCELLED}: read-only — rejected with {@link InvalidWorkshopStateException}.</li>
+     *   <li>{@code CANCELLED}, {@code IN_PROGRESS}, {@code COMPLETED}: read-only / frozen — rejected
+     *       with {@link InvalidWorkshopStateException}.</li>
      * </ul>
      *
      * @param newTitle           the new title (must not be null)
      * @param newDescription     the new description (must not be null)
      * @param activeRegistrations the current count of active (REGISTERED) seats
      * @param now                the current instant, used for {@code updatedAt}
-     * @throws InvalidWorkshopStateException if the workshop is {@code CANCELLED}
+     * @throws InvalidWorkshopStateException if the workshop is {@code CANCELLED}, {@code IN_PROGRESS},
+     *         or {@code COMPLETED}
      * @throws WorkshopTitleLockedException if the workshop is {@code PUBLISHED} with
      *         {@code activeRegistrations > 0} and the title is being changed
      */
@@ -504,10 +562,12 @@ public class Workshop {
         requireNonNull(newDescription, "newDescription cannot be null");
         requireNonNull(now, "now cannot be null");
 
-        if (state == WorkshopState.CANCELLED) {
+        if (state == WorkshopState.CANCELLED
+                || state == WorkshopState.IN_PROGRESS
+                || state == WorkshopState.COMPLETED) {
             throw new InvalidWorkshopStateException(
                     id, state, null,
-                    "Cannot update information of a CANCELLED workshop.");
+                    "Cannot update information of a workshop in state " + state + ".");
         }
 
         boolean titleChanged = !this.title.equals(newTitle);
