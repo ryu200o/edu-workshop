@@ -1,6 +1,9 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.domain;
 
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.AdjustmentJustification;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.ReservationStrength;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopBuffer;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
@@ -556,6 +559,103 @@ class WorkshopTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> workshop.reschedule(newStart, newStart, null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------
+    // Occupancy Contract (ADR 0018) — buffer, derived windows, reservation strength
+    // ----------------------------------------------------------------
+
+    @Test
+    void create_withBuffer_occupancyWindowExtendsTeachingWindow() {
+        WorkshopBuffer buffer = WorkshopBuffer.of(15, 20);
+        Workshop workshop = Workshop.create(newId(), title(), description(), START, END, buffer, CAPACITY, NOW);
+
+        assertThat(workshop.buffer()).isEqualTo(buffer);
+        assertThat(workshop.occupancyStart()).isEqualTo(START.minus(Duration.ofMinutes(15)));
+        assertThat(workshop.occupancyEnd()).isEqualTo(END.plus(Duration.ofMinutes(20)));
+    }
+
+    @Test
+    void create_zeroBuffer_occupancyWindowEqualsTeachingWindow() {
+        Workshop workshop = Workshop.create(newId(), title(), description(), START, END,
+                WorkshopBuffer.ZERO, CAPACITY, NOW);
+
+        assertThat(workshop.occupancyStart()).isEqualTo(START);
+        assertThat(workshop.occupancyEnd()).isEqualTo(END);
+    }
+
+    @Test
+    void create_negativeBufferBefore_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> new WorkshopBuffer(-1, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void create_negativeBufferAfter_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> new WorkshopBuffer(0, -5))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void reschedule_withNewBuffer_updatesBufferAndOccupancy() {
+        Workshop workshop = createPublished();
+        WorkshopBuffer newBuffer = WorkshopBuffer.of(30, 30);
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        workshop.reschedule(newStart, newEnd, AdjustmentJustification.of("room change"), newBuffer, NOW);
+
+        assertThat(workshop.buffer()).isEqualTo(newBuffer);
+        assertThat(workshop.occupancyStart()).isEqualTo(newStart.minus(Duration.ofMinutes(30)));
+        assertThat(workshop.occupancyEnd()).isEqualTo(newEnd.plus(Duration.ofMinutes(30)));
+    }
+
+    @Test
+    void reschedule_nullBuffer_keepsExistingBuffer() {
+        WorkshopBuffer original = WorkshopBuffer.of(10, 10);
+        Workshop workshop = Workshop.create(newId(), title(), description(), START, END, original, CAPACITY, NOW);
+        workshop.plan(ROOM, false, NOW);
+        workshop.publish(NOW, 50);
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        workshop.reschedule(newStart, newEnd, AdjustmentJustification.of("maintenance"), null, NOW);
+
+        assertThat(workshop.buffer()).isEqualTo(original);
+    }
+
+    @Test
+    void reschedule_justificationBlank_throwsIllegalArgumentException() {
+        Workshop workshop = createPublished();
+        Instant newStart = START.plus(Duration.ofDays(3));
+        Instant newEnd = newStart.plusSeconds(7200);
+
+        assertThatThrownBy(() -> workshop.reschedule(newStart, newEnd,
+                AdjustmentJustification.of("   "), null, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void reservationStrength_planned_returnsSOFT() {
+        Workshop workshop = createDraft();
+        workshop.plan(ROOM, false, NOW);
+
+        assertThat(workshop.reservationStrength()).isEqualTo(ReservationStrength.SOFT);
+    }
+
+    @Test
+    void reservationStrength_published_returnsHARD() {
+        Workshop workshop = createPublished();
+
+        assertThat(workshop.reservationStrength()).isEqualTo(ReservationStrength.HARD);
+    }
+
+    @Test
+    void reservationStrength_draft_throwsIllegalStateException() {
+        Workshop workshop = createDraft();
+
+        assertThatThrownBy(workshop::reservationStrength)
+                .isInstanceOf(IllegalStateException.class);
     }
 
     // ----------------------------------------------------------------

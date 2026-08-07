@@ -67,6 +67,7 @@ public class Workshop {
     private RoomReference roomReference;
     private Instant startTime;
     private Instant endTime;
+    private WorkshopBuffer buffer;
     private WorkshopCapacity capacity;
     private boolean hasRoomWarning;
     private boolean isRoomEvicted;
@@ -83,6 +84,7 @@ public class Workshop {
                      RoomReference roomReference,
                      Instant startTime,
                      Instant endTime,
+                     WorkshopBuffer buffer,
                      WorkshopCapacity capacity,
                      boolean hasRoomWarning,
                      boolean isRoomEvicted,
@@ -96,6 +98,7 @@ public class Workshop {
         this.roomReference = roomReference;
         this.startTime = requireNonNull(startTime, "startTime cannot be null");
         this.endTime = requireNonNull(endTime, "endTime cannot be null");
+        this.buffer = requireNonNull(buffer, "WorkshopBuffer cannot be null");
         this.capacity = requireNonNull(capacity, "capacity cannot be null");
         this.hasRoomWarning = hasRoomWarning;
         this.isRoomEvicted = isRoomEvicted;
@@ -117,22 +120,33 @@ public class Workshop {
      * @param description the workshop description (self-validating VO)
      * @param startTime   planned start instant
      * @param endTime     planned end instant; must be after {@code startTime}
+     * @param buffer      the buffer time before/after the teaching window (self-validating VO)
      * @param capacity    maximum participant capacity (self-validating VO)
      * @param now         the current instant, used for {@code createdAt}/{@code updatedAt}
      * @return the newly created aggregate
      * @throws InvalidWorkshopTimeRangeException if {@code endTime} is not after {@code startTime}
      */
     public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description,
-                                   Instant startTime, Instant endTime, WorkshopCapacity capacity, Instant now) {
+                                   Instant startTime, Instant endTime, WorkshopBuffer buffer,
+                                   WorkshopCapacity capacity, Instant now) {
         if (!endTime.isAfter(startTime)) {
             throw new InvalidWorkshopTimeRangeException("endTime must be after startTime");
         }
         Workshop workshop = new Workshop(
                 id, title, description,
-                null, startTime, endTime, capacity,
+                null, startTime, endTime, buffer, capacity,
                 false, false, null, WorkshopState.DRAFT, now, now);
         workshop.record(new WorkshopCreated(id.value(), id, startTime, endTime, capacity, now));
         return workshop;
+    }
+
+    /**
+     * Backward-compatible create with zero buffer (legacy callers). Scheduled occupancy window equals
+     * the teaching window. To be removed once all callers pass an explicit {@link WorkshopBuffer}.
+     */
+    public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description,
+                                   Instant startTime, Instant endTime, WorkshopCapacity capacity, Instant now) {
+        return create(id, title, description, startTime, endTime, WorkshopBuffer.ZERO, capacity, now);
     }
 
     /**
@@ -148,6 +162,7 @@ public class Workshop {
                                        RoomReference roomReference,
                                        Instant startTime,
                                        Instant endTime,
+                                       WorkshopBuffer buffer,
                                        WorkshopCapacity capacity,
                                        boolean hasRoomWarning,
                                        boolean isRoomEvicted,
@@ -156,7 +171,28 @@ public class Workshop {
                                        Instant createdAt,
                                        Instant updatedAt) {
         return new Workshop(id, title, description, roomReference, startTime, endTime,
-                capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
+                buffer, capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
+    }
+
+    /**
+     * Backward-compatible reconstruct with zero buffer (legacy persistence path). The JPA entity gains
+     * buffer columns in Commit 2; until then the write adapter calls this with {@code WorkshopBuffer.ZERO}.
+     */
+    public static Workshop reconstruct(WorkshopId id,
+                                       WorkshopTitle title,
+                                       WorkshopDescription description,
+                                       RoomReference roomReference,
+                                       Instant startTime,
+                                       Instant endTime,
+                                       WorkshopCapacity capacity,
+                                       boolean hasRoomWarning,
+                                       boolean isRoomEvicted,
+                                       Instant roomEvictedAt,
+                                       WorkshopState state,
+                                       Instant createdAt,
+                                       Instant updatedAt) {
+        return reconstruct(id, title, description, roomReference, startTime, endTime,
+                WorkshopBuffer.ZERO, capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
     }
 
     /**
@@ -500,15 +536,19 @@ public class Workshop {
      *
      * @param newStartTime the new start instant; must be strictly in the future
      * @param newEndTime   the new end instant; must be after {@code newStartTime}
+     * @param justification the reason for renegotiating the Occupancy Contract (ADR 0018 P4); required
+     * @param newBuffer    the new buffer (nullable — {@code null} keeps the current buffer)
      * @param now          the current instant, used for the deadline check and {@code updatedAt}
      * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
      * @throws RescheduleDeadlineExceededException if {@code now} is after {@code startTime − RESCHEDULE_DEADLINE}
      * @throws InvalidWorkshopTimeRangeException if {@code newEndTime} is not after {@code newStartTime},
      *         or {@code newStartTime} is not strictly in the future
      */
-    public void reschedule(Instant newStartTime, Instant newEndTime, Instant now) {
+    public void reschedule(Instant newStartTime, Instant newEndTime,
+                           AdjustmentJustification justification, WorkshopBuffer newBuffer, Instant now) {
         requireNonNull(newStartTime, "newStartTime cannot be null");
         requireNonNull(newEndTime, "newEndTime cannot be null");
+        requireNonNull(justification, "justification cannot be null");
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.PUBLISHED, "reschedule");
 
@@ -528,10 +568,23 @@ public class Workshop {
         Instant oldEndTime = this.endTime;
         this.startTime = newStartTime;
         this.endTime = newEndTime;
+        if (newBuffer != null) {
+            this.buffer = newBuffer;
+        }
         clearRoomEviction();
         this.touch(now);
 
         record(new WorkshopRescheduled(id, oldStartTime, oldEndTime, newStartTime, newEndTime, updatedAt));
+    }
+
+    /**
+     * Backward-compatible reschedule that keeps the current buffer. Used by legacy callers and tests
+     * until they pass an explicit {@link AdjustmentJustification} and optional new buffer. The
+     * justification is synthesized here (ADR 0018 P4) — real Planner justifications come from the
+     * {@code RescheduleWorkshopCommand} via {@link #reschedule(Instant, Instant, AdjustmentJustification, WorkshopBuffer, Instant)}.
+     */
+    public void reschedule(Instant newStartTime, Instant newEndTime, Instant now) {
+        reschedule(newStartTime, newEndTime, AdjustmentJustification.of("reschedule"), null, now);
     }
 
     /**
@@ -643,6 +696,40 @@ public class Workshop {
     }
 
     // ---------------------------------------------------------------------
+    // Derived accessors for the Occupancy Contract (ADR 0018 P1)
+    // ---------------------------------------------------------------------
+
+    /**
+     * The instant the room is effectively occupied — {@code startTime - buffer.beforeMinutes}.
+     * Used by overlap predicates (scheduled occupancy window).
+     */
+    public Instant occupancyStart() {
+        return startTime.minusSeconds(buffer.beforeMinutes() * 60L);
+    }
+
+    /**
+     * The instant the room is effectively released — {@code endTime + buffer.afterMinutes}.
+     * Used by overlap predicates (scheduled occupancy window).
+     */
+    public Instant occupancyEnd() {
+        return endTime.plusSeconds(buffer.afterMinutes() * 60L);
+    }
+
+    /**
+     * Derived reservation strength (ADR 0018 P1). {@code SOFT} at {@code PLANNED} (non-exclusive
+     * planning, ADR 0008); {@code HARD} at {@code PUBLISHED} (exclusive reservation). Not persisted.
+     *
+     * @throws IllegalStateException in any state where reservation strength is undefined
+     */
+    public ReservationStrength reservationStrength() {
+        return switch (state) {
+            case PLANNED -> ReservationStrength.SOFT;
+            case PUBLISHED -> ReservationStrength.HARD;
+            default -> throw new IllegalStateException("No reservation strength in " + state);
+        };
+    }
+
+    // ---------------------------------------------------------------------
     // Guards / helpers
     // ---------------------------------------------------------------------
 
@@ -711,6 +798,10 @@ public class Workshop {
 
     public Instant endTime() {
         return endTime;
+    }
+
+    public WorkshopBuffer buffer() {
+        return buffer;
     }
 
     public WorkshopCapacity capacity() {
