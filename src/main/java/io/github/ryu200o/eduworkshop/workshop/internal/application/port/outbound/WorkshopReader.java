@@ -28,11 +28,12 @@ public interface WorkshopReader {
     List<WorkshopSummaryView> getAll();
 
     /**
-     * Gets workshops assigned to a given room whose time window overlaps the specified range.
-     * Only planning-relevant states ({@code PUBLISHED}, {@code PLANNED}) are returned — the state
-     * predicate is pushed down to SQL (DB Query Pushdown), never filtered in memory. Overlap
-     * condition: {@code wsStart < maintEnd && wsEnd > maintStart}. If {@code maintEnd} is null
-     * (indefinite maintenance), all workshops starting after {@code maintStart} match.
+     * Gets workshops assigned to a given room whose <em>scheduled occupancy window</em> (Spec v2 /
+     * ADR 0018) overlaps the specified range. Only planning-relevant states ({@code PUBLISHED},
+     * {@code PLANNED}) are returned — the state predicate is pushed down to SQL (DB Query Pushdown),
+     * never filtered in memory. Overlap condition: {@code wsScheduledOccupancyStart < maintEnd &&
+     * wsScheduledOccupancyEnd > maintStart}. If {@code maintEnd} is null (indefinite maintenance),
+     * all workshops whose occupancy ends after {@code maintStart} match.
      *
      * <p>Task-tailored per ADR 0017: returns only {@code id} + {@code state} (the
      * {@link WorkshopOverlapView}) — the cross-module consumer (FacilityOps impact analysis) needs

@@ -59,12 +59,13 @@ public class WorkshopRoomEventHandler {
     }
 
     /**
-     * Auto-flags every PUBLISHED workshop whose time window overlaps the maintenance window with an
-     * eviction notice (Titik 2). The workshop's state is deliberately NOT changed —
-     * {@code Workshop.markRoomEvicted} only sets {@code isRoomEvicted = true} + {@code roomEvictedAt}
-     * (a notice, not a cancellation). Overlap condition:
-     * {@code w.startTime < maintEnd && w.endTime > maintStart}; a null {@code endTime} (indefinite
-     * maintenance) matches every workshop starting after {@code startTime}.
+     * Auto-flags every PUBLISHED workshop whose <em>scheduled occupancy window</em> (Spec v2 / ADR 0018)
+     * overlaps the maintenance window with an eviction notice (Titik 2). The workshop's state is
+     * deliberately NOT changed — {@code Workshop.markRoomEvicted} only sets {@code isRoomEvicted = true}
+     * + {@code roomEvictedAt} (a notice, not a cancellation). Overlap condition:
+     * {@code w.scheduledOccupancyStart < maintEnd && w.scheduledOccupancyEnd > maintStart}; a null
+     * {@code endTime} (indefinite maintenance) matches every workshop whose occupancy ends after
+     * {@code startTime}.
      *
      * <p>Follows the 3-Phase Execution Pattern: (1) mutate domain + collect events, (2) batch persist
      * via {@code saveAll}, (3) batch publish domain events. Early-returns when no PUBLISHED workshop

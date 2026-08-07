@@ -25,8 +25,10 @@ public interface WorkshopExposeAPI {
     Optional<WorkshopRegistrationContract> lockForRegistration(UUID workshopId);
 
     /**
-     * Returns the workshops assigned to a given room whose time window overlaps the specified range,
-     * as consumer-driven DTOs (id + state). Empty when no workshop overlaps.
+     * Returns the workshops assigned to a given room whose <em>scheduled occupancy window</em>
+     * (Spec v2 / ADR 0018) overlaps the specified range, as consumer-driven DTOs (id + state).
+     * Empty when no workshop overlaps. Signature unchanged — semantics now compare against the
+     * scheduled occupancy window rather than the teaching window.
      *
      * @param roomId    the room to filter by
      * @param startTime the maintenance window start (inclusive lower bound)

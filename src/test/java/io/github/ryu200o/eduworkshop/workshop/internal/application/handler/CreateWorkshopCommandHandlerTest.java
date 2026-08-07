@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.config.WorkshopBufferConfig;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.InvalidBufferSizeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
@@ -31,17 +30,15 @@ class CreateWorkshopCommandHandlerTest {
     @Mock
     private WorkshopRepository workshopRepository;
 
-    private WorkshopBufferConfig bufferConfig;
     private Clock clock;
 
     @BeforeEach
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-07-22T10:00:00Z"), ZoneOffset.UTC);
-        bufferConfig = new WorkshopBufferConfig(15, 15, 0, 60);
     }
 
     private CreateWorkshopCommandHandler handler() {
-        return new CreateWorkshopCommandHandler(workshopRepository, bufferConfig, clock);
+        return new CreateWorkshopCommandHandler(workshopRepository, clock, 15, 15, 0, 60);
     }
 
     @Test

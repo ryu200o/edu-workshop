@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
-import io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.config.WorkshopBufferConfig;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.InvalidBufferSizeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
@@ -12,6 +11,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDesc
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,22 +21,31 @@ import java.time.Instant;
 /**
  * Handler for {@link CreateWorkshopCommand}. Validates raw input into domain value objects,
  * delegates to {@link Workshop#create}, persists via {@link WorkshopRepository}, and returns a
- * lightweight result. Buffer values are resolved against {@link WorkshopBufferConfig} (Operational
- * Policy — ADR 0018 P2) and validated against the configured min/max bounds.
+ * lightweight result. Buffer values are resolved against the Operational Policy
+ * ({@code app.workshop.buffer.*}) and validated against the configured min/max bounds (ADR 0018 P2).
  */
 @Component
 class CreateWorkshopCommandHandler implements CommandHandler<CreateWorkshopCommand, CreateWorkshopCommand.Result> {
 
     private final WorkshopRepository workshopRepository;
-    private final WorkshopBufferConfig workshopBufferConfig;
     private final Clock clock;
+    private final int beforeDefaultMinutes;
+    private final int afterDefaultMinutes;
+    private final int minMinutes;
+    private final int maxMinutes;
 
     CreateWorkshopCommandHandler(WorkshopRepository workshopRepository,
-                                 WorkshopBufferConfig workshopBufferConfig,
-                                 Clock clock) {
+                                 Clock clock,
+                                 @Value("${app.workshop.buffer.before-default-minutes:15}") int beforeDefaultMinutes,
+                                 @Value("${app.workshop.buffer.after-default-minutes:15}") int afterDefaultMinutes,
+                                 @Value("${app.workshop.buffer.min-minutes:0}") int minMinutes,
+                                 @Value("${app.workshop.buffer.max-minutes:60}") int maxMinutes) {
         this.workshopRepository = workshopRepository;
-        this.workshopBufferConfig = workshopBufferConfig;
         this.clock = clock;
+        this.beforeDefaultMinutes = beforeDefaultMinutes;
+        this.afterDefaultMinutes = afterDefaultMinutes;
+        this.minMinutes = minMinutes;
+        this.maxMinutes = maxMinutes;
     }
 
     @Override
@@ -59,14 +68,13 @@ class CreateWorkshopCommandHandler implements CommandHandler<CreateWorkshopComma
     }
 
     private WorkshopBuffer resolveBuffer(Integer before, Integer after) {
-        int resolvedBefore = before != null ? before : workshopBufferConfig.beforeDefaultMinutes();
-        int resolvedAfter = after != null ? after : workshopBufferConfig.afterDefaultMinutes();
+        int resolvedBefore = before != null ? before : beforeDefaultMinutes;
+        int resolvedAfter = after != null ? after : afterDefaultMinutes;
 
-        if (resolvedBefore < workshopBufferConfig.minMinutes() || resolvedBefore > workshopBufferConfig.maxMinutes()
-                || resolvedAfter < workshopBufferConfig.minMinutes() || resolvedAfter > workshopBufferConfig.maxMinutes()) {
+        if (resolvedBefore < minMinutes || resolvedBefore > maxMinutes
+                || resolvedAfter < minMinutes || resolvedAfter > maxMinutes) {
             throw new InvalidBufferSizeException(
-                    "buffer before/after must be within [" + workshopBufferConfig.minMinutes()
-                            + ", " + workshopBufferConfig.maxMinutes() + "] minutes");
+                    "buffer before/after must be within [" + minMinutes + ", " + maxMinutes + "] minutes");
         }
         return WorkshopBuffer.of(resolvedBefore, resolvedAfter);
     }

@@ -335,6 +335,47 @@ class WorkshopCommandControllerE2ETest {
                 .isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
     }
 
+    @Test
+    void reschedule_bufferOverlapWithPublished_returnsConflict() throws Exception {
+        // WS1 occupies the room 09:00-11:00 with default 15-min buffer → occupancy [08:45, 11:15].
+        UUID roomId = createRoom("BUF", 50);
+        UUID ws1 = publish(plan(createWorkshop("WS1",
+                Instant.parse("2026-09-01T09:00:00Z"), Instant.parse("2026-09-01T11:00:00Z"), 30), roomId));
+        // WS2 at 12:00-14:00 → occupancy [11:45, 14:15]. Gap after WS1 occupancy ends (11:15) → no conflict.
+        UUID ws2 = publish(plan(createWorkshop("WS2",
+                Instant.parse("2026-09-01T12:00:00Z"), Instant.parse("2026-09-01T14:00:00Z"), 30), roomId));
+
+        // Reschedule WS2 to 11:00-13:00 → new occupancy [10:45, 13:15]. This overlaps WS1's occupancy
+        // (WS1 ends at 11:15, WS2 occupancy starts at 10:45) → must conflict.
+        HttpResponse<String> rescheduled = post("/api/v1/workshops/" + ws2 + "/reschedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "buffer conflict"}
+                """.formatted(Instant.parse("2026-09-01T11:00:00Z"), Instant.parse("2026-09-01T13:00:00Z")), Map.of());
+
+        assertThat(rescheduled.statusCode()).as("reschedule buffer overlap: %s", rescheduled.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void reschedule_noBufferOverlap_returnsOk() throws Exception {
+        // Two workshops with a gap larger than the combined buffers — no occupancy overlap.
+        UUID roomId = createRoom("BUF2", 50);
+        // WS1: 09:00-11:00 → occupancy [08:45, 11:15]
+        publish(plan(createWorkshop("WS1",
+                Instant.parse("2026-09-01T09:00:00Z"), Instant.parse("2026-09-01T11:00:00Z"), 30), roomId));
+        // WS2: 12:00-14:00 → occupancy [11:45, 14:15]. Gap of 45min after WS1 occupancy ends.
+        UUID ws2 = publish(plan(createWorkshop("WS2",
+                Instant.parse("2026-09-01T12:00:00Z"), Instant.parse("2026-09-01T14:00:00Z"), 30), roomId));
+
+        HttpResponse<String> rescheduled = post("/api/v1/workshops/" + ws2 + "/reschedule",
+                """
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "no overlap"}
+                """.formatted(Instant.parse("2026-09-01T12:00:00Z"), Instant.parse("2026-09-01T14:00:00Z")), Map.of());
+
+        assertThat(rescheduled.statusCode()).as("reschedule no buffer overlap: %s", rescheduled.body())
+                .isEqualTo(HttpStatus.OK.value());
+    }
+
     // ----------------------------------------------------------------
     // start / complete (Epic 1 — lifecycle completion)
     // ----------------------------------------------------------------

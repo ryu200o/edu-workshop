@@ -9,6 +9,12 @@ ALTER TABLE workshops ADD COLUMN buffer_after_minutes INTEGER NOT NULL DEFAULT 0
 ALTER TABLE workshops ADD COLUMN scheduled_occupancy_start TIMESTAMP WITH TIME ZONE NULL;
 ALTER TABLE workshops ADD COLUMN scheduled_occupancy_end TIMESTAMP WITH TIME ZONE NULL;
 
+-- Backfill: existing rows have buffer 0/0, so scheduled occupancy equals the teaching window.
+UPDATE workshops SET
+    scheduled_occupancy_start = start_time,
+    scheduled_occupancy_end = end_time
+WHERE scheduled_occupancy_start IS NULL;
+
 ALTER TABLE workshops ADD CONSTRAINT chk_workshop_buffer_before CHECK (buffer_before_minutes >= 0);
 ALTER TABLE workshops ADD CONSTRAINT chk_workshop_buffer_after CHECK (buffer_after_minutes >= 0);
 ALTER TABLE workshops ADD CONSTRAINT chk_scheduled_occupancy_time

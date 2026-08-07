@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.config.WorkshopBufferConfig;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.InvalidBufferSizeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
@@ -56,15 +55,13 @@ class RescheduleWorkshopCommandHandlerTest {
 
     private final Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
 
-    private static final WorkshopBufferConfig BUFFER_CONFIG = new WorkshopBufferConfig(15, 15, 0, 60);
-
     private RescheduleWorkshopCommandHandler handler;
 
     @BeforeEach
     void setUp() {
         handler = new RescheduleWorkshopCommandHandler(
                 workshopRepository, workshopDomainEventPublisher,
-                new PlannedWorkshopKicker(workshopRepository), BUFFER_CONFIG, fixedClock);
+                new PlannedWorkshopKicker(workshopRepository), fixedClock, 15, 15, 0, 60);
     }
 
     private Workshop createPublishedWorkshop() {
@@ -174,8 +171,8 @@ class RescheduleWorkshopCommandHandlerTest {
         Instant within24h = START.minus(Duration.ofHours(12));
         RescheduleWorkshopCommandHandler lateHandler = new RescheduleWorkshopCommandHandler(
                 workshopRepository, workshopDomainEventPublisher,
-                new PlannedWorkshopKicker(workshopRepository), BUFFER_CONFIG,
-                Clock.fixed(within24h, ZoneOffset.UTC));
+                new PlannedWorkshopKicker(workshopRepository),
+                Clock.fixed(within24h, ZoneOffset.UTC), 15, 15, 0, 60);
 
         assertThatThrownBy(() -> lateHandler.handle(
                 new RescheduleWorkshopCommand(WORKSHOP_ID, NEW_START, NEW_END, null, null, "reschedule")))
