@@ -52,6 +52,18 @@ class WorkshopJpaEntity {
     @Column(name = "end_time", nullable = false)
     private Instant endTime;
 
+    @Column(name = "buffer_before_minutes", nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private int bufferBeforeMinutes = 0;
+
+    @Column(name = "buffer_after_minutes", nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private int bufferAfterMinutes = 0;
+
+    @Column(name = "scheduled_occupancy_start")
+    private Instant scheduledOccupancyStart;
+
+    @Column(name = "scheduled_occupancy_end")
+    private Instant scheduledOccupancyEnd;
+
     @Column(nullable = false)
     private int capacity;
 
@@ -171,6 +183,38 @@ class WorkshopJpaEntity {
 
     void setEndTime(Instant endTime) {
         this.endTime = endTime;
+    }
+
+    public int getBufferBeforeMinutes() {
+        return bufferBeforeMinutes;
+    }
+
+    void setBufferBeforeMinutes(int bufferBeforeMinutes) {
+        this.bufferBeforeMinutes = bufferBeforeMinutes;
+    }
+
+    public int getBufferAfterMinutes() {
+        return bufferAfterMinutes;
+    }
+
+    void setBufferAfterMinutes(int bufferAfterMinutes) {
+        this.bufferAfterMinutes = bufferAfterMinutes;
+    }
+
+    public Instant getScheduledOccupancyStart() {
+        return scheduledOccupancyStart;
+    }
+
+    void setScheduledOccupancyStart(Instant scheduledOccupancyStart) {
+        this.scheduledOccupancyStart = scheduledOccupancyStart;
+    }
+
+    public Instant getScheduledOccupancyEnd() {
+        return scheduledOccupancyEnd;
+    }
+
+    void setScheduledOccupancyEnd(Instant scheduledOccupancyEnd) {
+        this.scheduledOccupancyEnd = scheduledOccupancyEnd;
     }
 
     public int getCapacity() {

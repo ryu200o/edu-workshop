@@ -14,6 +14,10 @@ CREATE TABLE workshops (
     room_evicted_at TIMESTAMP WITH TIME ZONE NULL,
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    buffer_before_minutes INTEGER NOT NULL DEFAULT 0,
+    buffer_after_minutes INTEGER NOT NULL DEFAULT 0,
+    scheduled_occupancy_start TIMESTAMP WITH TIME ZONE NULL,
+    scheduled_occupancy_end TIMESTAMP WITH TIME ZONE NULL,
     capacity INTEGER NOT NULL,
     state VARCHAR(50) NOT NULL,
     version BIGINT NOT NULL DEFAULT 0,
@@ -21,10 +25,15 @@ CREATE TABLE workshops (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT pk_workshops PRIMARY KEY (id),
     CONSTRAINT chk_workshop_time CHECK (end_time > start_time),
+    CONSTRAINT chk_workshop_buffer_before CHECK (buffer_before_minutes >= 0),
+    CONSTRAINT chk_workshop_buffer_after CHECK (buffer_after_minutes >= 0),
+    CONSTRAINT chk_scheduled_occupancy_time CHECK (scheduled_occupancy_end IS NULL OR scheduled_occupancy_end > scheduled_occupancy_start),
     CONSTRAINT chk_workshop_capacity CHECK (capacity > 0)
 );
 
 CREATE INDEX idx_workshops_evicted ON workshops (is_room_evicted);
+
+CREATE INDEX idx_workshops_scheduled_occupancy ON workshops (room_id, scheduled_occupancy_start, scheduled_occupancy_end);
 
 CREATE TABLE workshop_histories (
     id UUID NOT NULL,

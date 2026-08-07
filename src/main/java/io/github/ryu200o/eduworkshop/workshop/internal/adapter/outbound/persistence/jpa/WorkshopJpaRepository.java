@@ -21,28 +21,28 @@ interface WorkshopJpaRepository extends JpaRepository<WorkshopJpaEntity, UUID> {
 
     /**
      * Set-based pessimistic lock (ADR 0015 / ADR 0008): locks every PLANNED or PUBLISHED workshop
-     * in the room whose window overlaps the given window. Serializes concurrent publish/reschedule/
-     * change-room operations in the same room/window (lock-set-first) and closes the write-skew
-     * double-booking gap.
+     * in the room whose <em>scheduled occupancy window</em> overlaps the given window (Spec v2 / ADR 0018).
+     * Serializes concurrent publish/reschedule/change-room operations in the same room/window
+     * (lock-set-first) and closes the write-skew double-booking gap.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             SELECT w FROM WorkshopJpaEntity w
             WHERE w.roomId = :roomId
               AND w.state IN ('PUBLISHED', 'PLANNED')
-              AND w.startTime < :endTime
-              AND w.endTime > :startTime
+              AND w.scheduledOccupancyStart < :queryScheduledOccupancyEnd
+              AND w.scheduledOccupancyEnd > :queryScheduledOccupancyStart
             """)
     List<WorkshopJpaEntity> findPublishedAndPlannedOverlappingWithLock(@Param("roomId") UUID roomId,
-                                                                      @Param("startTime") Instant startTime,
-                                                                      @Param("endTime") Instant endTime);
+                                                                      @Param("queryScheduledOccupancyStart") Instant queryScheduledOccupancyStart,
+                                                                      @Param("queryScheduledOccupancyEnd") Instant queryScheduledOccupancyEnd);
 
     @Query("""
             SELECT w FROM WorkshopJpaEntity w
             WHERE w.roomId = :roomId
               AND w.state = 'PUBLISHED'
-              AND (w.startTime < :endTime OR :endTime IS NULL)
-              AND w.endTime > :startTime
+              AND (w.scheduledOccupancyStart < :endTime OR :endTime IS NULL)
+              AND w.scheduledOccupancyEnd > :startTime
             """)
     List<WorkshopJpaEntity> loadPublishedOverlappingWithTimeWindow(@Param("roomId") UUID roomId,
                                                                   @Param("startTime") Instant startTime,

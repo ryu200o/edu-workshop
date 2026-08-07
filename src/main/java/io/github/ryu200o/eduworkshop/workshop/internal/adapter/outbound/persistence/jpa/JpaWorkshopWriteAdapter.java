@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.adapter.outbound.persist
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopBuffer;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
@@ -104,6 +105,10 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
         entity.setRoomEvictedAt(workshop.roomEvictedAt());
         entity.setStartTime(workshop.startTime());
         entity.setEndTime(workshop.endTime());
+        entity.setBufferBeforeMinutes(workshop.buffer().beforeMinutes());
+        entity.setBufferAfterMinutes(workshop.buffer().afterMinutes());
+        entity.setScheduledOccupancyStart(workshop.occupancyStart());
+        entity.setScheduledOccupancyEnd(workshop.occupancyEnd());
         entity.setCapacity(workshop.capacity().value());
         entity.setState(workshop.state());
         entity.setCreatedAt(workshop.createdAt());
@@ -125,6 +130,7 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
                         : null,
                 entity.getStartTime(),
                 entity.getEndTime(),
+                WorkshopBuffer.of(entity.getBufferBeforeMinutes(), entity.getBufferAfterMinutes()),
                 WorkshopCapacity.of(entity.getCapacity()),
                 entity.isHasRoomWarning(),
                 entity.isRoomEvicted(),

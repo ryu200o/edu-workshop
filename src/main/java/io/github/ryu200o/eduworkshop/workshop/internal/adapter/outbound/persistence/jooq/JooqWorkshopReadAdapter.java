@@ -70,10 +70,10 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
     @Override
     public List<WorkshopOverlapView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
         var condition = WORKSHOPS.ROOM_ID.eq(roomId)
-                .and(WORKSHOPS.END_TIME.greaterThan(OffsetDateTime.ofInstant(startTime, java.time.ZoneOffset.UTC)))
+                .and(WORKSHOPS.SCHEDULED_OCCUPANCY_END.greaterThan(OffsetDateTime.ofInstant(startTime, java.time.ZoneOffset.UTC)))
                 .and(WORKSHOPS.STATE.in("PUBLISHED", "PLANNED"));
         if (endTime != null) {
-            condition = condition.and(WORKSHOPS.START_TIME.lessThan(OffsetDateTime.ofInstant(endTime, java.time.ZoneOffset.UTC)));
+            condition = condition.and(WORKSHOPS.SCHEDULED_OCCUPANCY_START.lessThan(OffsetDateTime.ofInstant(endTime, java.time.ZoneOffset.UTC)));
         }
         return dsl.select(
                         WORKSHOPS.ID,

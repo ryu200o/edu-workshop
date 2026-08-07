@@ -25,12 +25,12 @@ public interface WorkshopRepository {
     List<Workshop> loadByRoomId(UUID roomId);
 
     /**
-     * Loads every workshop in the given room whose time window overlaps the specified window —
-     * {@code PLANNED} AND {@code PUBLISHED} states — under a {@code SELECT ... FOR UPDATE}
-     * pessimistic write lock (ADR 0015 / ADR 0008). Locking the whole overlapping set up front
-     * (lock-set-first) closes the write-skew that a single-row target lock allows: two concurrent
-     * publishes in the same room/window now serialize on the shared rows instead of both seeing an
-     * empty {@code PUBLISHED} set.
+     * Loads every workshop in the given room whose <em>scheduled occupancy window</em> (Spec v2 / ADR 0018)
+     * overlaps the specified window — {@code PLANNED} AND {@code PUBLISHED} states — under a
+     * {@code SELECT ... FOR UPDATE} pessimistic write lock (ADR 0015 / ADR 0008). Locking the whole
+     * overlapping set up front (lock-set-first) closes the write-skew that a single-row target lock
+     * allows: two concurrent publishes in the same room/window now serialize on the shared rows
+     * instead of both seeing an empty {@code PUBLISHED} set.
      *
      * <p>The target workshop is deliberately <em>not</em> excluded: callers resolve it from the
      * returned list (it overlaps its own window), so it is covered by the same lock. Used by
@@ -40,9 +40,10 @@ public interface WorkshopRepository {
     List<Workshop> loadPublishedAndPlannedOverlappingWithLock(UUID roomId, Instant startTime, Instant endTime);
 
     /**
-     * Loads only the PUBLISHED workshops in the given room whose time window overlaps the given
-     * maintenance window. Overlap condition: {@code w.startTime < maintEnd && w.endTime > maintStart};
-     * when {@code endTime} is null (indefinite maintenance), every workshop starting after
+     * Loads only the PUBLISHED workshops in the given room whose <em>scheduled occupancy window</em>
+     * (Spec v2 / ADR 0018) overlaps the given maintenance window. Overlap condition:
+     * {@code w.scheduledOccupancyStart < maintEnd && w.scheduledOccupancyEnd > maintStart};
+     * when {@code endTime} is null (indefinite maintenance), every workshop whose occupancy ends after
      * {@code startTime} matches. Used by {@code WorkshopRoomEventHandler} (Titik 2) to
      * auto-flag affected workshops with an eviction notice without changing their state.
      */
