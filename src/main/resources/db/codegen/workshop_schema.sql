@@ -18,6 +18,7 @@ CREATE TABLE workshops (
     buffer_after_minutes INTEGER NOT NULL DEFAULT 0,
     scheduled_occupancy_start TIMESTAMP WITH TIME ZONE NULL,
     scheduled_occupancy_end TIMESTAMP WITH TIME ZONE NULL,
+    buffer_justification TEXT NULL,
     capacity INTEGER NOT NULL,
     state VARCHAR(50) NOT NULL,
     version BIGINT NOT NULL DEFAULT 0,

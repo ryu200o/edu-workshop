@@ -8,6 +8,7 @@ ALTER TABLE workshops ADD COLUMN buffer_before_minutes INTEGER NOT NULL DEFAULT 
 ALTER TABLE workshops ADD COLUMN buffer_after_minutes INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE workshops ADD COLUMN scheduled_occupancy_start TIMESTAMP WITH TIME ZONE NULL;
 ALTER TABLE workshops ADD COLUMN scheduled_occupancy_end TIMESTAMP WITH TIME ZONE NULL;
+ALTER TABLE workshops ADD COLUMN buffer_justification TEXT NULL;
 
 -- Backfill: existing rows have buffer 0/0, so scheduled occupancy equals the teaching window.
 UPDATE workshops SET

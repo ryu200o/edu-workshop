@@ -5,24 +5,15 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Inv
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.RescheduleWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.AdjustmentJustification;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.BufferJustification;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopBuffer;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,10 +28,11 @@ import java.util.UUID;
  * Reschedules a PUBLISHED workshop to a new time window (ADR 0008: post-publish change, room and
  * registrations kept).
  *
- * <p>Orchestration (ADR 0005 + ADR 0015 lock-set-first): discovery read → pessimistic-lock the
- * whole overlapping set (PUBLISHED + PLANNED) in the new window → hard-block if another PUBLISHED
- * workshop occupies the new window → {@code Workshop.reschedule} (deadline 24h + window validity are
- * local invariants) → evict overlapping PLANNED workshops → save → publish all events via the outbox.</p>
+ * <p>Orchestration (ADR 0005 + ADR 0015 lock-set-first): validate contract terms → discovery read →
+ * pessimistic-lock the whole overlapping set (PUBLISHED + PLANNED) in the new scheduled-occupancy
+ * window → hard-block if another PUBLISHED workshop occupies the window → {@code Workshop.reschedule}
+ * (deadline 24h + window validity are local invariants) → evict overlapping PLANNED workshops → save →
+ * publish all events via the outbox.</p>
  */
 @Component
 class RescheduleWorkshopCommandHandler
@@ -50,27 +42,18 @@ class RescheduleWorkshopCommandHandler
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
     private final PlannedWorkshopKicker plannedWorkshopKicker;
     private final Clock clock;
-    private final int beforeDefaultMinutes;
-    private final int afterDefaultMinutes;
-    private final int minMinutes;
-    private final int maxMinutes;
+    private final WorkshopBufferParameters workshopBufferParameters;
 
     RescheduleWorkshopCommandHandler(WorkshopRepository workshopRepository,
                                      WorkshopDomainEventPublisher workshopDomainEventPublisher,
                                      PlannedWorkshopKicker plannedWorkshopKicker,
                                      Clock clock,
-                                     @Value("${app.workshop.buffer.before-default-minutes:15}") int beforeDefaultMinutes,
-                                     @Value("${app.workshop.buffer.after-default-minutes:15}") int afterDefaultMinutes,
-                                     @Value("${app.workshop.buffer.min-minutes:0}") int minMinutes,
-                                     @Value("${app.workshop.buffer.max-minutes:60}") int maxMinutes) {
+                                     WorkshopBufferParameters workshopBufferParameters) {
         this.workshopRepository = workshopRepository;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
         this.plannedWorkshopKicker = plannedWorkshopKicker;
         this.clock = clock;
-        this.beforeDefaultMinutes = beforeDefaultMinutes;
-        this.afterDefaultMinutes = afterDefaultMinutes;
-        this.minMinutes = minMinutes;
-        this.maxMinutes = maxMinutes;
+        this.workshopBufferParameters = workshopBufferParameters;
     }
 
     @Override
@@ -80,7 +63,7 @@ class RescheduleWorkshopCommandHandler
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
         // Validate contract terms up-front (ADR 0018 P4) — fail before any DB read.
-        AdjustmentJustification justification = AdjustmentJustification.of(command.justification());
+        BufferJustification justification = BufferJustification.of(command.justification());
         WorkshopBuffer newBuffer = resolveNewBuffer(command.bufferBeforeMinutes(), command.bufferAfterMinutes());
 
         // Discovery read (non-locking) to learn the target's room before locking.
@@ -141,12 +124,13 @@ class RescheduleWorkshopCommandHandler
         if (before == null && after == null) {
             return null;
         }
-        int resolvedBefore = before != null ? before : beforeDefaultMinutes;
-        int resolvedAfter = after != null ? after : afterDefaultMinutes;
-        if (resolvedBefore < minMinutes || resolvedBefore > maxMinutes
-                || resolvedAfter < minMinutes || resolvedAfter > maxMinutes) {
+        int resolvedBefore = before != null ? before : workshopBufferParameters.beforeDefaultMinutes();
+        int resolvedAfter = after != null ? after : workshopBufferParameters.afterDefaultMinutes();
+        if (resolvedBefore < workshopBufferParameters.minMinutes() || resolvedBefore > workshopBufferParameters.maxMinutes()
+                || resolvedAfter < workshopBufferParameters.minMinutes() || resolvedAfter > workshopBufferParameters.maxMinutes()) {
             throw new InvalidBufferSizeException(
-                    "buffer before/after must be within [" + minMinutes + ", " + maxMinutes + "] minutes");
+                    "buffer before/after must be within [" + workshopBufferParameters.minMinutes()
+                            + ", " + workshopBufferParameters.maxMinutes() + "] minutes");
         }
         return WorkshopBuffer.of(resolvedBefore, resolvedAfter);
     }

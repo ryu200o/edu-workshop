@@ -64,6 +64,9 @@ class WorkshopJpaEntity {
     @Column(name = "scheduled_occupancy_end")
     private Instant scheduledOccupancyEnd;
 
+    @Column(name = "buffer_justification")
+    private String bufferJustification;
+
     @Column(nullable = false)
     private int capacity;
 
@@ -215,6 +218,14 @@ class WorkshopJpaEntity {
 
     void setScheduledOccupancyEnd(Instant scheduledOccupancyEnd) {
         this.scheduledOccupancyEnd = scheduledOccupancyEnd;
+    }
+
+    public String getBufferJustification() {
+        return bufferJustification;
+    }
+
+    void setBufferJustification(String bufferJustification) {
+        this.bufferJustification = bufferJustification;
     }
 
     public int getCapacity() {

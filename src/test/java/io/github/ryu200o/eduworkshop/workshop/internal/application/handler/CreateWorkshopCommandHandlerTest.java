@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.InvalidBufferSizeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
@@ -38,7 +39,8 @@ class CreateWorkshopCommandHandlerTest {
     }
 
     private CreateWorkshopCommandHandler handler() {
-        return new CreateWorkshopCommandHandler(workshopRepository, clock, 15, 15, 0, 60);
+        return new CreateWorkshopCommandHandler(workshopRepository, clock,
+                new WorkshopBufferParameters(15, 15, 0, 60));
     }
 
     @Test

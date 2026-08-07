@@ -10,7 +10,6 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Wor
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.AdjustmentJustification;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
@@ -54,7 +53,6 @@ class ChangeWorkshopRoomCommandHandler
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
         UUID newRoomId = command.newRoomId();
-        AdjustmentJustification justification = AdjustmentJustification.of(command.justification());
 
         // Discovery read (non-locking) to learn the target's time window before locking.
         Workshop workshop = workshopRepository.loadById(workshopId)

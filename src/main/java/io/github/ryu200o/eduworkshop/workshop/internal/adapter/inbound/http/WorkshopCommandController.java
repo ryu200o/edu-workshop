@@ -93,7 +93,7 @@ class WorkshopCommandController {
     @PostMapping("/{id}/change-room")
     ResponseEntity<ChangeWorkshopRoomCommand.Result> changeRoom(@PathVariable UUID id,
                                                                 @RequestBody ChangeWorkshopRoomRequest request) {
-        var command = new ChangeWorkshopRoomCommand(id, request.roomId(), request.justification());
+        var command = new ChangeWorkshopRoomCommand(id, request.roomId());
         ChangeWorkshopRoomCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
@@ -101,7 +101,7 @@ class WorkshopCommandController {
     @PostMapping("/{id}/adjust-capacity")
     ResponseEntity<AdjustWorkshopCapacityCommand.Result> adjustCapacity(@PathVariable UUID id,
                                                                         @RequestBody AdjustWorkshopCapacityRequest request) {
-        var command = new AdjustWorkshopCapacityCommand(id, request.newCapacity(), request.justification());
+        var command = new AdjustWorkshopCapacityCommand(id, request.newCapacity());
         AdjustWorkshopCapacityCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
@@ -151,10 +151,10 @@ class WorkshopCommandController {
     record PlanWorkshopRequest(UUID roomId) {
     }
 
-    record ChangeWorkshopRoomRequest(UUID roomId, String justification) {
+    record ChangeWorkshopRoomRequest(UUID roomId) {
     }
 
-    record AdjustWorkshopCapacityRequest(int newCapacity, String justification) {
+    record AdjustWorkshopCapacityRequest(int newCapacity) {
     }
 
     record RescheduleWorkshopRequest(Instant newStartTime, Instant newEndTime,

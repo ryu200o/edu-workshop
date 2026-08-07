@@ -1,6 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.domain;
 
-import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.AdjustmentJustification;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.BufferJustification;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.ReservationStrength;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopBuffer;
@@ -603,7 +603,7 @@ class WorkshopTest {
         Instant newStart = START.plus(Duration.ofDays(3));
         Instant newEnd = newStart.plusSeconds(7200);
 
-        workshop.reschedule(newStart, newEnd, AdjustmentJustification.of("room change"), newBuffer, NOW);
+        workshop.reschedule(newStart, newEnd, BufferJustification.of("room change"), newBuffer, NOW);
 
         assertThat(workshop.buffer()).isEqualTo(newBuffer);
         assertThat(workshop.occupancyStart()).isEqualTo(newStart.minus(Duration.ofMinutes(30)));
@@ -619,7 +619,7 @@ class WorkshopTest {
         Instant newStart = START.plus(Duration.ofDays(3));
         Instant newEnd = newStart.plusSeconds(7200);
 
-        workshop.reschedule(newStart, newEnd, AdjustmentJustification.of("maintenance"), null, NOW);
+        workshop.reschedule(newStart, newEnd, BufferJustification.of("maintenance"), null, NOW);
 
         assertThat(workshop.buffer()).isEqualTo(original);
     }
@@ -631,7 +631,7 @@ class WorkshopTest {
         Instant newEnd = newStart.plusSeconds(7200);
 
         assertThatThrownBy(() -> workshop.reschedule(newStart, newEnd,
-                AdjustmentJustification.of("   "), null, NOW))
+                BufferJustification.of("   "), null, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

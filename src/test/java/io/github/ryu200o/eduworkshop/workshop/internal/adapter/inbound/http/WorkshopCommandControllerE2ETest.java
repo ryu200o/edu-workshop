@@ -189,7 +189,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s", "justification": "relocation"}
+                {"roomId": "%s"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room: %s", changed.body()).isEqualTo(HttpStatus.OK.value());
@@ -205,7 +205,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s", "justification": "relocation"}
+                {"roomId": "%s"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room maintenance: %s", changed.body())
@@ -222,7 +222,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s", "justification": "relocation"}
+                {"roomId": "%s"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room overlap: %s", changed.body())
@@ -237,7 +237,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s", "justification": "relocation"}
+                {"roomId": "%s"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room capacity: %s", changed.body())
@@ -255,7 +255,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s", "justification": "relocation"}
+                {"roomId": "%s"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room kick-out: %s", changed.body())
@@ -479,7 +479,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
-                {"newCapacity": 1, "justification": "capacity adjustment"}
+                {"newCapacity": 1}
                 """.formatted(), Map.of());
 
         assertThat(adjusted.statusCode()).as("adjust-capacity below: %s", adjusted.body())
@@ -493,7 +493,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
-                {"newCapacity": 40, "justification": "capacity adjustment"}
+                {"newCapacity": 40}
                 """, Map.of());
 
         assertThat(adjusted.statusCode()).as("adjust-capacity: %s", adjusted.body())
@@ -508,7 +508,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
-                {"newCapacity": 60, "justification": "capacity adjustment"}
+                {"newCapacity": 60}
                 """, Map.of());
 
         assertThat(adjusted.statusCode()).as("adjust-capacity exceeds room: %s", adjusted.body())

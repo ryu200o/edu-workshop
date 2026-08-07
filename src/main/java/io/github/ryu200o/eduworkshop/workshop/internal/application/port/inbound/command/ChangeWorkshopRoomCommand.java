@@ -7,8 +7,7 @@ import java.util.UUID;
 
 public record ChangeWorkshopRoomCommand(
         UUID workshopId,
-        UUID newRoomId,
-        String justification
+        UUID newRoomId
 ) implements Command<ChangeWorkshopRoomCommand.Result> {
 
     public record Result(UUID id, UUID roomId, Instant updatedAt) {

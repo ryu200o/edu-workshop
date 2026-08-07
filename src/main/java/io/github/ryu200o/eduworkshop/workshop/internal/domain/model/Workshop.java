@@ -68,6 +68,7 @@ public class Workshop {
     private Instant startTime;
     private Instant endTime;
     private WorkshopBuffer buffer;
+    private BufferJustification bufferJustification;
     private WorkshopCapacity capacity;
     private boolean hasRoomWarning;
     private boolean isRoomEvicted;
@@ -85,6 +86,7 @@ public class Workshop {
                      Instant startTime,
                      Instant endTime,
                      WorkshopBuffer buffer,
+                     BufferJustification bufferJustification,
                      WorkshopCapacity capacity,
                      boolean hasRoomWarning,
                      boolean isRoomEvicted,
@@ -99,6 +101,7 @@ public class Workshop {
         this.startTime = requireNonNull(startTime, "startTime cannot be null");
         this.endTime = requireNonNull(endTime, "endTime cannot be null");
         this.buffer = requireNonNull(buffer, "WorkshopBuffer cannot be null");
+        this.bufferJustification = bufferJustification;
         this.capacity = requireNonNull(capacity, "capacity cannot be null");
         this.hasRoomWarning = hasRoomWarning;
         this.isRoomEvicted = isRoomEvicted;
@@ -134,7 +137,7 @@ public class Workshop {
         }
         Workshop workshop = new Workshop(
                 id, title, description,
-                null, startTime, endTime, buffer, capacity,
+                null, startTime, endTime, buffer, null, capacity,
                 false, false, null, WorkshopState.DRAFT, now, now);
         workshop.record(new WorkshopCreated(id.value(), id, startTime, endTime, capacity, now));
         return workshop;
@@ -163,6 +166,7 @@ public class Workshop {
                                        Instant startTime,
                                        Instant endTime,
                                        WorkshopBuffer buffer,
+                                       BufferJustification bufferJustification,
                                        WorkshopCapacity capacity,
                                        boolean hasRoomWarning,
                                        boolean isRoomEvicted,
@@ -171,12 +175,11 @@ public class Workshop {
                                        Instant createdAt,
                                        Instant updatedAt) {
         return new Workshop(id, title, description, roomReference, startTime, endTime,
-                buffer, capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
+                buffer, bufferJustification, capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
     }
 
     /**
-     * Backward-compatible reconstruct with zero buffer (legacy persistence path). The JPA entity gains
-     * buffer columns in Commit 2; until then the write adapter calls this with {@code WorkshopBuffer.ZERO}.
+     * Backward-compatible reconstruct with zero buffer and no justification (legacy persistence path).
      */
     public static Workshop reconstruct(WorkshopId id,
                                        WorkshopTitle title,
@@ -192,7 +195,8 @@ public class Workshop {
                                        Instant createdAt,
                                        Instant updatedAt) {
         return reconstruct(id, title, description, roomReference, startTime, endTime,
-                WorkshopBuffer.ZERO, capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
+                WorkshopBuffer.ZERO, (BufferJustification) null, capacity,
+                hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
     }
 
     /**
@@ -545,7 +549,7 @@ public class Workshop {
      *         or {@code newStartTime} is not strictly in the future
      */
     public void reschedule(Instant newStartTime, Instant newEndTime,
-                           AdjustmentJustification justification, WorkshopBuffer newBuffer, Instant now) {
+                           BufferJustification justification, WorkshopBuffer newBuffer, Instant now) {
         requireNonNull(newStartTime, "newStartTime cannot be null");
         requireNonNull(newEndTime, "newEndTime cannot be null");
         requireNonNull(justification, "justification cannot be null");
@@ -571,6 +575,7 @@ public class Workshop {
         if (newBuffer != null) {
             this.buffer = newBuffer;
         }
+        this.bufferJustification = justification;
         clearRoomEviction();
         this.touch(now);
 
@@ -579,12 +584,12 @@ public class Workshop {
 
     /**
      * Backward-compatible reschedule that keeps the current buffer. Used by legacy callers and tests
-     * until they pass an explicit {@link AdjustmentJustification} and optional new buffer. The
+     * until they pass an explicit {@link BufferJustification} and optional new buffer. The
      * justification is synthesized here (ADR 0018 P4) — real Planner justifications come from the
-     * {@code RescheduleWorkshopCommand} via {@link #reschedule(Instant, Instant, AdjustmentJustification, WorkshopBuffer, Instant)}.
+     * {@code RescheduleWorkshopCommand} via {@link #reschedule(Instant, Instant, BufferJustification, WorkshopBuffer, Instant)}.
      */
     public void reschedule(Instant newStartTime, Instant newEndTime, Instant now) {
-        reschedule(newStartTime, newEndTime, AdjustmentJustification.of("reschedule"), null, now);
+        reschedule(newStartTime, newEndTime, BufferJustification.of("reschedule"), null, now);
     }
 
     /**
@@ -802,6 +807,10 @@ public class Workshop {
 
     public WorkshopBuffer buffer() {
         return buffer;
+    }
+
+    public BufferJustification bufferJustification() {
+        return bufferJustification;
     }
 
     public WorkshopCapacity capacity() {
