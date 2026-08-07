@@ -7,7 +7,8 @@ import java.util.UUID;
 
 public record AdjustWorkshopCapacityCommand(
         UUID workshopId,
-        int newCapacity
+        int newCapacity,
+        String justification
 ) implements Command<AdjustWorkshopCapacityCommand.Result> {
 
     public record Result(UUID id, int capacity, Instant updatedAt) {

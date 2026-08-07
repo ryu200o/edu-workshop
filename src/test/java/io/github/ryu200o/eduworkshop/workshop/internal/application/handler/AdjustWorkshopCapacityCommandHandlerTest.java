@@ -83,7 +83,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(20);
 
         AdjustWorkshopCapacityCommand.Result result = handler.handle(
-                new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 40));
+                new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 40, "justification"));
 
         assertThat(result.capacity()).isEqualTo(40);
         assertThat(result.updatedAt()).isEqualTo(NOW);
@@ -101,7 +101,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(25);
 
-        assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 20)))
+        assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 20, "justification")))
                 .isInstanceOf(WorkshopCapacityBelowRegistrationsException.class);
     }
 
@@ -112,7 +112,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(10);
 
-        assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 60)))
+        assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 60, "justification")))
                 .isInstanceOf(WorkshopCapacityExceedsRoomException.class);
     }
 
@@ -120,7 +120,7 @@ class AdjustWorkshopCapacityCommandHandlerTest {
     void adjustCapacity_throwsWhenWorkshopNotFound() {
         given(workshopRepository.loadById(any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 40)))
+        assertThatThrownBy(() -> handler.handle(new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 40, "justification")))
                 .isInstanceOf(WorkshopNotFoundException.class);
     }
 }

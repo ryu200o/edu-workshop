@@ -9,18 +9,22 @@ import java.util.UUID;
  * Write command to create a new workshop in DRAFT state. Raw input parameters only — all
  * validation/normalization is performed by the Workshop domain value objects inside the handler.
  *
- * @param title       the workshop title (non-blank; validated by {@code WorkshopTitle})
- * @param description the workshop description (nullable; validated by {@code WorkshopDescription})
- * @param startTime   the planned start time (must be before endTime; validated by aggregate)
- * @param endTime     the planned end time (must be after startTime; validated by aggregate)
- * @param capacity    the maximum participant count (positive; validated by {@code WorkshopCapacity})
+ * @param title               the workshop title (non-blank; validated by {@code WorkshopTitle})
+ * @param description         the workshop description (nullable; validated by {@code WorkshopDescription})
+ * @param startTime           the planned start time (must be before endTime; validated by aggregate)
+ * @param endTime             the planned end time (must be after startTime; validated by aggregate)
+ * @param capacity            the maximum participant count (positive; validated by {@code WorkshopCapacity})
+ * @param bufferBeforeMinutes buffer time before the teaching window in minutes (nullable → default from config)
+ * @param bufferAfterMinutes  buffer time after the teaching window in minutes (nullable → default from config)
  */
 public record CreateWorkshopCommand(
         String title,
         String description,
         Instant startTime,
         Instant endTime,
-        int capacity
+        int capacity,
+        Integer bufferBeforeMinutes,
+        Integer bufferAfterMinutes
 ) implements Command<CreateWorkshopCommand.Result> {
 
     /**

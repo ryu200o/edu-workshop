@@ -133,7 +133,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(workshop));
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
-                    new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
+                    new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification"));
 
             assertThat(result.roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
@@ -160,7 +160,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(workshop));
 
             ChangeWorkshopRoomCommand.Result result = handler.handle(
-                    new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
+                    new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification"));
 
             assertThat(result.roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
@@ -190,7 +190,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
 
-            handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
+            handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification"));
 
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(planned.state()).isEqualTo(WorkshopState.PLANNED);
@@ -209,7 +209,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
-            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification")))
                     .isInstanceOf(RoomNotAvailableForPublishingException.class)
                     .hasMessageContaining("Room is under maintenance");
         }
@@ -222,7 +222,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(BLOCKED_PERMISSION));
 
-            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification")))
                     .isInstanceOf(RoomNotAvailableForPublishingException.class)
                     .hasMessageContaining("Room is deactivated");
         }
@@ -234,7 +234,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification")))
                     .isInstanceOf(ReferencedRoomNotFoundException.class);
         }
     }
@@ -258,7 +258,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
 
-            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification")))
                     .isInstanceOf(RoomConflictException.class);
         }
 
@@ -266,7 +266,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
         void changeRoom_throwsWhenWorkshopNotFound() {
             given(workshopRepository.loadById(any())).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID)))
+            assertThatThrownBy(() -> handler.handle(new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID, "justification")))
                     .isInstanceOf(WorkshopNotFoundException.class);
         }
     }

@@ -189,7 +189,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s"}
+                {"roomId": "%s", "justification": "relocation"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room: %s", changed.body()).isEqualTo(HttpStatus.OK.value());
@@ -205,7 +205,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s"}
+                {"roomId": "%s", "justification": "relocation"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room maintenance: %s", changed.body())
@@ -222,7 +222,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s"}
+                {"roomId": "%s", "justification": "relocation"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room overlap: %s", changed.body())
@@ -237,7 +237,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s"}
+                {"roomId": "%s", "justification": "relocation"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room capacity: %s", changed.body())
@@ -255,7 +255,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> changed = post("/api/v1/workshops/" + workshopId + "/change-room",
                 """
-                {"roomId": "%s"}
+                {"roomId": "%s", "justification": "relocation"}
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room kick-out: %s", changed.body())
@@ -277,7 +277,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
                 """
-                {"newStartTime": "%s", "newEndTime": "%s"}
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "reschedule"}
                 """.formatted(newStart, newEnd), Map.of());
 
         assertThat(rescheduled.statusCode()).as("reschedule: %s", rescheduled.body())
@@ -295,7 +295,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
                 """
-                {"newStartTime": "%s", "newEndTime": "%s"}
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "reschedule"}
                 """.formatted(START.plus(Duration.ofDays(3)), START.plus(Duration.ofDays(3)).plusSeconds(7200)), Map.of());
 
         assertThat(rescheduled.statusCode()).as("reschedule conflict: %s", rescheduled.body())
@@ -309,7 +309,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
                 """
-                {"newStartTime": "%s", "newEndTime": "%s"}
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "reschedule"}
                 """.formatted(END, START), Map.of());
 
         assertThat(rescheduled.statusCode()).as("reschedule invalid window: %s", rescheduled.body())
@@ -328,7 +328,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> rescheduled = post("/api/v1/workshops/" + workshopId + "/reschedule",
                 """
-                {"newStartTime": "%s", "newEndTime": "%s"}
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "reschedule"}
                 """.formatted(nearStart.plus(Duration.ofDays(3)), nearEnd.plus(Duration.ofDays(3))), Map.of());
 
         assertThat(rescheduled.statusCode()).as("reschedule past deadline: %s", rescheduled.body())
@@ -438,7 +438,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
-                {"newCapacity": 1}
+                {"newCapacity": 1, "justification": "capacity adjustment"}
                 """.formatted(), Map.of());
 
         assertThat(adjusted.statusCode()).as("adjust-capacity below: %s", adjusted.body())
@@ -452,7 +452,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
-                {"newCapacity": 40}
+                {"newCapacity": 40, "justification": "capacity adjustment"}
                 """, Map.of());
 
         assertThat(adjusted.statusCode()).as("adjust-capacity: %s", adjusted.body())
@@ -467,7 +467,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
-                {"newCapacity": 60}
+                {"newCapacity": 60, "justification": "capacity adjustment"}
                 """, Map.of());
 
         assertThat(adjusted.statusCode()).as("adjust-capacity exceeds room: %s", adjusted.body())
@@ -537,7 +537,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/schedule",
                 """
-                {"newStartTime": "%s", "newEndTime": "%s"}
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "reschedule"}
                 """.formatted(newStart, newEnd), Map.of());
 
         assertThat(response.statusCode()).as("updateSchedule draft: %s", response.body())
@@ -556,7 +556,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/schedule",
                 """
-                {"newStartTime": "%s", "newEndTime": "%s"}
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "reschedule"}
                 """.formatted(newStart, newEnd), Map.of());
 
         assertThat(response.statusCode()).as("updateSchedule published: %s", response.body())
@@ -570,7 +570,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/schedule",
                 """
-                {"newStartTime": "%s", "newEndTime": "%s"}
+                {"newStartTime": "%s", "newEndTime": "%s", "justification": "reschedule"}
                 """.formatted(END, START), Map.of());
 
         assertThat(response.statusCode()).as("updateSchedule invalid range: %s", response.body())

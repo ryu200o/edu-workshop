@@ -10,6 +10,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Wor
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.AdjustmentJustification;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
@@ -53,6 +54,7 @@ class ChangeWorkshopRoomCommandHandler
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
         UUID newRoomId = command.newRoomId();
+        AdjustmentJustification justification = AdjustmentJustification.of(command.justification());
 
         // Discovery read (non-locking) to learn the target's time window before locking.
         Workshop workshop = workshopRepository.loadById(workshopId)
@@ -66,9 +68,10 @@ class ChangeWorkshopRoomCommandHandler
         }
 
         // Lock-set-first (ADR 0015): pessimistic-lock ALL overlapping workshops (PUBLISHED +
-        // PLANNED) in the NEW room/time window before mutating any state.
+        // PLANNED) in the NEW room's scheduled-occupancy window (Spec v2 / ADR 0018) before
+        // mutating any state.
         List<Workshop> overlapping = workshopRepository.loadPublishedAndPlannedOverlappingWithLock(
-                newRoomId, workshop.startTime(), workshop.endTime());
+                newRoomId, workshop.occupancyStart(), workshop.occupancyEnd());
 
         // The target lives in the OLD room, so it is never part of the new-room set — lock it
         // separately (after the set, preserving the consistent set-first lock order).

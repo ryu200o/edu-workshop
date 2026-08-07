@@ -49,7 +49,9 @@ class WorkshopCommandController {
                 request.description(),
                 request.startTime(),
                 request.endTime(),
-                request.capacity());
+                request.capacity(),
+                request.bufferBeforeMinutes(),
+                request.bufferAfterMinutes());
         CreateWorkshopCommand.Result result = commandBus.execute(command);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
@@ -91,7 +93,7 @@ class WorkshopCommandController {
     @PostMapping("/{id}/change-room")
     ResponseEntity<ChangeWorkshopRoomCommand.Result> changeRoom(@PathVariable UUID id,
                                                                 @RequestBody ChangeWorkshopRoomRequest request) {
-        var command = new ChangeWorkshopRoomCommand(id, request.roomId());
+        var command = new ChangeWorkshopRoomCommand(id, request.roomId(), request.justification());
         ChangeWorkshopRoomCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
@@ -99,7 +101,7 @@ class WorkshopCommandController {
     @PostMapping("/{id}/adjust-capacity")
     ResponseEntity<AdjustWorkshopCapacityCommand.Result> adjustCapacity(@PathVariable UUID id,
                                                                         @RequestBody AdjustWorkshopCapacityRequest request) {
-        var command = new AdjustWorkshopCapacityCommand(id, request.newCapacity());
+        var command = new AdjustWorkshopCapacityCommand(id, request.newCapacity(), request.justification());
         AdjustWorkshopCapacityCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
@@ -107,7 +109,8 @@ class WorkshopCommandController {
 @PostMapping("/{id}/reschedule")
     ResponseEntity<RescheduleWorkshopCommand.Result> reschedule(@PathVariable UUID id,
                                                                  @RequestBody RescheduleWorkshopRequest request) {
-        var command = new RescheduleWorkshopCommand(id, request.newStartTime(), request.newEndTime());
+        var command = new RescheduleWorkshopCommand(id, request.newStartTime(), request.newEndTime(),
+                request.bufferBeforeMinutes(), request.bufferAfterMinutes(), request.justification());
         RescheduleWorkshopCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
@@ -139,20 +142,24 @@ class WorkshopCommandController {
             String description,
             Instant startTime,
             Instant endTime,
-            int capacity
+            int capacity,
+            Integer bufferBeforeMinutes,
+            Integer bufferAfterMinutes
     ) {
     }
 
     record PlanWorkshopRequest(UUID roomId) {
     }
 
-    record ChangeWorkshopRoomRequest(UUID roomId) {
+    record ChangeWorkshopRoomRequest(UUID roomId, String justification) {
     }
 
-    record AdjustWorkshopCapacityRequest(int newCapacity) {
+    record AdjustWorkshopCapacityRequest(int newCapacity, String justification) {
     }
 
-    record RescheduleWorkshopRequest(Instant newStartTime, Instant newEndTime) {
+    record RescheduleWorkshopRequest(Instant newStartTime, Instant newEndTime,
+                                     Integer bufferBeforeMinutes, Integer bufferAfterMinutes,
+                                     String justification) {
     }
 
     record UpdateWorkshopInfoRequest(String newTitle, String newDescription) {

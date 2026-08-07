@@ -115,7 +115,7 @@ class EventPublicationDurabilityTest {
 
         CreateWorkshopCommand.Result created = commandBus.execute(new CreateWorkshopCommand(
                 "Intro to DDD", "workshop description",
-                Instant.parse("2026-09-01T09:00:00Z"), Instant.parse("2026-09-01T11:00:00Z"), 25));
+                Instant.parse("2026-09-01T09:00:00Z"), Instant.parse("2026-09-01T11:00:00Z"), 25, null, null));
 
         commandBus.execute(new PlanWorkshopCommand(created.id(), roomId));
 

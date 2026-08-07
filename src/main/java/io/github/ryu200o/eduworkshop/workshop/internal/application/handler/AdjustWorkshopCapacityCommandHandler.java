@@ -7,6 +7,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Wor
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.AdjustWorkshopCapacityCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.AdjustmentJustification;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
@@ -41,6 +42,7 @@ class AdjustWorkshopCapacityCommandHandler
     public AdjustWorkshopCapacityCommand.Result handle(AdjustWorkshopCapacityCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
+        AdjustmentJustification justification = AdjustmentJustification.of(command.justification());
 
         Workshop workshop = workshopRepository.loadById(workshopId)
                 .orElseThrow(() -> new WorkshopNotFoundException("id", command.workshopId()));

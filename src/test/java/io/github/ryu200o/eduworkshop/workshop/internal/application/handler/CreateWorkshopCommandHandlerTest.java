@@ -1,5 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
+import io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.config.WorkshopBufferConfig;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.InvalidBufferSizeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
@@ -29,15 +31,17 @@ class CreateWorkshopCommandHandlerTest {
     @Mock
     private WorkshopRepository workshopRepository;
 
+    private WorkshopBufferConfig bufferConfig;
     private Clock clock;
 
     @BeforeEach
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-07-22T10:00:00Z"), ZoneOffset.UTC);
+        bufferConfig = new WorkshopBufferConfig(15, 15, 0, 60);
     }
 
     private CreateWorkshopCommandHandler handler() {
-        return new CreateWorkshopCommandHandler(workshopRepository, clock);
+        return new CreateWorkshopCommandHandler(workshopRepository, bufferConfig, clock);
     }
 
     @Test
@@ -47,7 +51,9 @@ class CreateWorkshopCommandHandlerTest {
                 "Hands-on intro to Spring Modulith.",
                 Instant.parse("2026-09-01T09:00:00Z"),
                 Instant.parse("2026-09-01T11:00:00Z"),
-                30);
+                30,
+                15,
+                15);
 
         when(workshopRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -60,13 +66,50 @@ class CreateWorkshopCommandHandlerTest {
     }
 
     @Test
+    void happyPath_omittedBuffer_usesDefault() {
+        var command = new CreateWorkshopCommand(
+                "Spring Boot Workshop",
+                "Hands-on intro to Spring Modulith.",
+                Instant.parse("2026-09-01T09:00:00Z"),
+                Instant.parse("2026-09-01T11:00:00Z"),
+                30,
+                null,
+                null);
+
+        when(workshopRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        handler().handle(command);
+
+        verify(workshopRepository).save(any());
+    }
+
+    @Test
+    void bufferGuard_rejectsOutOfRangeBuffer() {
+        var command = new CreateWorkshopCommand(
+                "Workshop",
+                "desc",
+                Instant.parse("2026-09-01T09:00:00Z"),
+                Instant.parse("2026-09-01T11:00:00Z"),
+                30,
+                120,
+                null);
+
+        assertThatThrownBy(() -> handler().handle(command))
+                .isInstanceOf(InvalidBufferSizeException.class);
+
+        verifyNoInteractions(workshopRepository);
+    }
+
+    @Test
     void ramGuard_rejectsBlankTitle() {
         var command = new CreateWorkshopCommand(
                 "   ",
                 "desc",
                 Instant.parse("2026-09-01T09:00:00Z"),
                 Instant.parse("2026-09-01T11:00:00Z"),
-                30);
+                30,
+                null,
+                null);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -81,7 +124,9 @@ class CreateWorkshopCommandHandlerTest {
                 "desc",
                 Instant.parse("2026-09-01T11:00:00Z"),
                 Instant.parse("2026-09-01T09:00:00Z"),
-                30);
+                30,
+                null,
+                null);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(WorkshopDomainException.class)
@@ -97,7 +142,9 @@ class CreateWorkshopCommandHandlerTest {
                 "desc",
                 Instant.parse("2026-09-01T09:00:00Z"),
                 Instant.parse("2026-09-01T11:00:00Z"),
-                0);
+                0,
+                null,
+                null);
 
         assertThatThrownBy(() -> handler().handle(command))
                 .isInstanceOf(IllegalArgumentException.class);
