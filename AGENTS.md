@@ -130,6 +130,16 @@ Consult these before designing or coding. They are the source of truth:
   use **`get*`** (e.g. `getById`, `getByRoomAndTimeOverlap`); cross-module ExposeAPI read
   lookups use **`get*`** (renamed from legacy `find*`/`check*`, ADR 0010 §6). Adapter impl classes
   (`JpaXWriteAdapter`, `JooqXReadAdapter`) kept as-is.
+- `docs/architecture/adr/0017-task-tailored-views-projection.md` — **Accepted**: CQRS query-side
+  projections are task-specific views built on the read model; no generic DTO coupling.
+- `docs/architecture/adr/0018-occupancy-contract-as-business-contract.md` — **Accepted (Lean &
+  Clean — REVISED)**: System Buffer = **Operational Guardrail** (Ops), not a business contract.
+  Core invariant: platform schedules room occupancy, not human activities. Buffer single knob
+  `app.workshop.buffer.before-default-minutes`, snapshot immutable into `buffer_before_minutes`;
+  **no** `max-minutes`, custom buffer, `ReBuffer`/`BufferJustification`, teaching window.
+  Occupancy Window `[startTime - bufferBefore, endTime]`; overlap via existing
+  `loadPublishedAndPlannedOverlappingWithLock` superset + in-memory filter; storage ceiling =
+  DB `CHECK (buffer_before_minutes BETWEEN 0 AND 300)`.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).

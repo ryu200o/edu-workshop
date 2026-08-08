@@ -17,8 +17,7 @@ class WorkshopBufferBootstrapConfig {
     @Bean
     public WorkshopBufferParameters workshopBufferParameters(WorkshopBufferProperties props) {
         return new WorkshopBufferParameters(
-                props.beforeDefaultMinutes(),
-                props.maxMinutes()
+                props.beforeDefaultMinutes()
         );
     }
 }

@@ -3,15 +3,14 @@ package io.github.ryu200o.eduworkshop.workshop.internal.adapter.bootstrap;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Bound properties for buffer policy (Spec v2 / ADR 0018 Lean Model — single-sided).
+ * Bound properties for buffer policy (Spec v3 / ADR 0018 — System Buffer Guardrail, single knob).
  *
- * <p>Keys: {@code app.workshop.buffer.before-default-minutes} and
- * {@code app.workshop.buffer.max-minutes}. Exposing defaults only; the Lean Model has no
- * after-buffer, so no {@code after-default-minutes} property exists.</p>
+ * <p>Only key: {@code app.workshop.buffer.before-default-minutes}. The Lean/System Guardrail model has a single-sided
+ * buffer, no after-buffer, no max/cap knob and no custom buffer at create — the storage ceiling is a DB
+ * {@code CHECK} constraint, not a property. Therefore no {@code max-minutes} property exists.</p>
  */
 @ConfigurationProperties(prefix = "app.workshop.buffer")
 record WorkshopBufferProperties(
-        int beforeDefaultMinutes,
-        int maxMinutes
+        int beforeDefaultMinutes
 ) {
 }
