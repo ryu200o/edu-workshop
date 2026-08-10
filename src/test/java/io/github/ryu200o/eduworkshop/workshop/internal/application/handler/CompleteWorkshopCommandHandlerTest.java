@@ -25,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -70,10 +71,11 @@ class CompleteWorkshopCommandHandlerTest {
                 WorkshopTitle.of("Test Workshop"),
                 WorkshopDescription.of("Description"),
                 START, END,
+                START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(30),
                 Instant.parse("2026-07-01T00:00:00Z"));
         workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
-                Instant.parse("2026-07-02T00:00:00Z"));
+                workshop.occupancyStart(), Instant.parse("2026-07-02T00:00:00Z"));
         workshop.publish(Instant.parse("2026-07-03T00:00:00Z"), 50);
         workshop.start(START);   // → IN_PROGRESS
         return workshop;
@@ -114,6 +116,7 @@ class CompleteWorkshopCommandHandlerTest {
                 WorkshopTitle.of("Test Workshop"),
                 WorkshopDescription.of("Description"),
                 START, END,
+                START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(30),
                 NOW);
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))

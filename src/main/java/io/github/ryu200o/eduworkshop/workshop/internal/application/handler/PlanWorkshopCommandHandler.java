@@ -7,6 +7,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Ref
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPlanningException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PlanWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 
 @Component
@@ -24,13 +26,16 @@ class PlanWorkshopCommandHandler
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
+    private final WorkshopBufferParameters bufferParameters;
     private final Clock clock;
 
     PlanWorkshopCommandHandler(WorkshopRepository workshopRepository,
                                RoomExposeAPI roomExposeApi,
+                               WorkshopBufferParameters bufferParameters,
                                Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
+        this.bufferParameters = bufferParameters;
         this.clock = clock;
     }
 
@@ -60,7 +65,13 @@ class PlanWorkshopCommandHandler
                 locationSnapshot,
                 permission.planning().capacity());
 
-        workshop.plan(roomRef, hasRoomWarning, now);
+        // Config pure function (ADR 0018): room-space assignment is a scheduling-axis mutation, so
+        // the Occupancy Window start is re-applied against the current Ops buffer (occupancyStart =
+        // startTime − currentConfigBuffer).
+        Instant occupancyStart = workshop.startTime()
+                .minus(Duration.ofMinutes(bufferParameters.beforeDefaultMinutes()));
+
+        workshop.plan(roomRef, hasRoomWarning, occupancyStart, now);
 
         workshopRepository.save(workshop);
 

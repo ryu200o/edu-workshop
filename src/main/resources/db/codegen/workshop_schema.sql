@@ -1,5 +1,5 @@
 -- Codegen-only DDL for JOOQ (DDLDatabase).
--- Mirrors the final workshop schema (post V13 + V14) so code generation does not depend on
+-- Mirrors the final workshop schema (post V13 + V14 + V16) so code generation does not depend on
 -- H2-incompatible ALTER statements. NOT a Flyway migration.
 CREATE TABLE workshops (
     id UUID NOT NULL,
@@ -15,6 +15,7 @@ CREATE TABLE workshops (
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     capacity INTEGER NOT NULL,
+    occupancy_start TIMESTAMP WITH TIME ZONE NOT NULL,
     state VARCHAR(50) NOT NULL,
     version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -25,6 +26,8 @@ CREATE TABLE workshops (
 );
 
 CREATE INDEX idx_workshops_evicted ON workshops (is_room_evicted);
+
+CREATE INDEX idx_workshops_room_occupancy ON workshops (room_id, occupancy_start, end_time);
 
 CREATE TABLE workshop_histories (
     id UUID NOT NULL,

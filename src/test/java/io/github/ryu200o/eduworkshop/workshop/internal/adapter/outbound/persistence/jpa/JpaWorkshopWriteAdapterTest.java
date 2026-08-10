@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -33,10 +34,11 @@ class JpaWorkshopWriteAdapterTest {
         WorkshopDescription description = WorkshopDescription.of("Test description");
         Instant start = Instant.parse("2026-09-01T09:00:00Z");
         Instant end = Instant.parse("2026-09-01T11:00:00Z");
+        Instant occupancyStart = start.minus(Duration.ofMinutes(15));
         WorkshopCapacity capacity = WorkshopCapacity.of(25);
 
         Workshop saved = adapter.save(
-                Workshop.create(id, title, description, start, end, capacity, now));
+                Workshop.create(id, title, description, start, end, occupancyStart, capacity, now));
 
         assertThat(saved.id()).isEqualTo(id);
         assertThat(saved.state()).isEqualTo(WorkshopState.DRAFT);
@@ -48,6 +50,7 @@ class JpaWorkshopWriteAdapterTest {
         assertThat(loaded.startTime()).isEqualTo(start);
         assertThat(loaded.endTime()).isEqualTo(end);
         assertThat(loaded.capacity()).isEqualTo(capacity);
+        assertThat(loaded.occupancyStart()).isEqualTo(occupancyStart);
         assertThat(loaded.state()).isEqualTo(WorkshopState.DRAFT);
         assertThat(loaded.roomReference()).isNull();
         assertThat(loaded.createdAt()).isNotNull();
@@ -58,15 +61,18 @@ class JpaWorkshopWriteAdapterTest {
     void saveAndLoadById_roundTripsEvictionFlag() {
         Instant now = Instant.now();
         WorkshopId id = WorkshopId.generate();
+        Instant start = Instant.parse("2026-09-01T09:00:00Z");
         Workshop workshop = Workshop.create(
                 id,
                 WorkshopTitle.of("Test Workshop"),
                 WorkshopDescription.of("Test description"),
-                Instant.parse("2026-09-01T09:00:00Z"),
+                start,
                 Instant.parse("2026-09-01T11:00:00Z"),
+                start.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(25),
                 now);
-        workshop.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false, now);
+        workshop.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
+                workshop.occupancyStart(), now);
         workshop.publish(now, 50);
         Instant evictedAt = now.plusSeconds(1);
         workshop.markRoomEvicted(evictedAt);
@@ -89,6 +95,7 @@ class JpaWorkshopWriteAdapterTest {
         UUID roomId = UUID.randomUUID();
         Instant windowStart = Instant.parse("2026-09-01T09:00:00Z");
         Instant windowEnd = Instant.parse("2026-09-01T11:00:00Z");
+        Instant occupancyStart = windowStart.minus(Duration.ofMinutes(15));
 
         Workshop overlappingPlanned = Workshop.create(
                 WorkshopId.generate(),
@@ -96,9 +103,11 @@ class JpaWorkshopWriteAdapterTest {
                 WorkshopDescription.of("d"),
                 Instant.parse("2026-09-01T10:00:00Z"),
                 Instant.parse("2026-09-01T12:00:00Z"),
+                Instant.parse("2026-09-01T09:45:00Z"),
                 WorkshopCapacity.of(20),
                 now);
-        overlappingPlanned.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false, now);
+        overlappingPlanned.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
+                overlappingPlanned.occupancyStart(), now);
         adapter.save(overlappingPlanned);
 
         Workshop nonOverlapping = Workshop.create(
@@ -107,13 +116,15 @@ class JpaWorkshopWriteAdapterTest {
                 WorkshopDescription.of("d"),
                 Instant.parse("2026-09-02T09:00:00Z"),
                 Instant.parse("2026-09-02T11:00:00Z"),
+                Instant.parse("2026-09-02T08:45:00Z"),
                 WorkshopCapacity.of(20),
                 now);
-        nonOverlapping.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false, now);
+        nonOverlapping.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
+                nonOverlapping.occupancyStart(), now);
         adapter.save(nonOverlapping);
 
         var overlapping = adapter.loadPublishedAndPlannedOverlappingWithLock(
-                roomId, windowStart, windowEnd);
+                roomId, occupancyStart, windowEnd);
 
         assertThat(overlapping).extracting(Workshop::id)
                 .containsExactly(overlappingPlanned.id());

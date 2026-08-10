@@ -52,6 +52,14 @@ class WorkshopJpaEntity {
     @Column(name = "end_time", nullable = false)
     private Instant endTime;
 
+    /**
+     * Occupancy Window start (ADR 0018): {@code startTime − currentConfigBuffer}, computed by the
+     * Application layer via the pure function and persisted. The room is considered occupied from
+     * this instant. Backed by index {@code idx_workshops_room_occupancy (room_id, occupancy_start, end_time)}.
+     */
+    @Column(name = "occupancy_start", nullable = false)
+    private Instant occupancyStart;
+
     @Column(nullable = false)
     private int capacity;
 
@@ -171,6 +179,14 @@ class WorkshopJpaEntity {
 
     void setEndTime(Instant endTime) {
         this.endTime = endTime;
+    }
+
+    public Instant getOccupancyStart() {
+        return occupancyStart;
+    }
+
+    void setOccupancyStart(Instant occupancyStart) {
+        this.occupancyStart = occupancyStart;
     }
 
     public int getCapacity() {

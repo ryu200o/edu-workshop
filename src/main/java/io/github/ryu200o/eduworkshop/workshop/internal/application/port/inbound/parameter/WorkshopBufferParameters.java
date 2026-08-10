@@ -3,14 +3,18 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound
 /**
  * Operational Policy for the workshop buffer (Spec v3 / ADR 0018 — System Buffer Guardrail, single knob).
  *
- * <p>Application-layer POJO produced by {@code WorkshopBufferBootstrapConfig} from bound properties and injected into
- * command handlers. The domain never references this type; the only local invariant lives in
- * {@code WorkshopBuffer} ({@code beforeMinutes >= 0}).</p>
+ * <p>Application-layer POJO produced by {@code WorkshopBufferBootstrapConfig} from bound properties
+ * and injected into command handlers. It feeds the ADR 0018 pure function applied at the Application
+ * edge: {@code occupancy_start = startTime − beforeDefaultMinutes}. The domain never references this
+ * type and never receives the buffer minutes — it only receives the already-computed
+ * {@code occupancyStart}: the buffer is consumed at the Application boundary, never persisted, never
+ * hinted into the Aggregate (ADR 0018 §4.1). Negative values are rejected here (config validation,
+ * {@code WorkshopBufferBootstrapConfig}).</p>
  *
- * <p>Single-sided: buffer applies only <em>before</em> {@code start_time}; there is no trailing/after buffer.
- * The buffer value is snapshot at scheduling from this default — callers must not pass a custom buffer.
- * There is no max/cap knob: the storage ceiling is enforced by a DB {@code CHECK (buffer_before_minutes BETWEEN 0 AND 300)}
- * and doubles as the superset bound for overlap checks, so changing the default is a config-only change.</p>
+ * <p>Single-sided: buffer applies only <em>before</em> {@code start_time}; there is no trailing/after
+ * buffer. The buffer value is applied at scheduling from this default — callers must not pass a custom
+ * buffer. There is no max/cap knob and no {@code STORAGE_CEILING}: only the single operational default
+ * exists, so changing the default is a config-only change.</p>
  */
 public record WorkshopBufferParameters(
         int beforeDefaultMinutes

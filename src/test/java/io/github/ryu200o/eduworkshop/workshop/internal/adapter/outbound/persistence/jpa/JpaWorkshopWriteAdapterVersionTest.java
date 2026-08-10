@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,12 +38,14 @@ class JpaWorkshopWriteAdapterVersionTest {
     @Test
     void save_thenUpdate_keepsAndIncrementsOptimisticVersion() {
         WorkshopId id = transactionTemplate.execute(status -> {
+            Instant start = Instant.parse("2026-09-01T09:00:00Z");
             Workshop workshop = Workshop.create(
                     WorkshopId.generate(),
                     WorkshopTitle.of("Test Workshop"),
                     WorkshopDescription.of("Test description"),
-                    Instant.parse("2026-09-01T09:00:00Z"),
+                    start,
                     Instant.parse("2026-09-01T11:00:00Z"),
+                    start.minus(Duration.ofMinutes(15)),
                     WorkshopCapacity.of(25),
                     Instant.now());
             workshopRepository.save(workshop);

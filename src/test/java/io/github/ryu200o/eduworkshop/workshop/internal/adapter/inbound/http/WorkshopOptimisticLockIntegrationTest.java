@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -43,12 +44,14 @@ class WorkshopOptimisticLockIntegrationTest {
 
     private WorkshopId createPersistedWorkshop() {
         return transactionTemplate.execute(status -> {
+            Instant start = Instant.parse("2026-09-01T09:00:00Z");
             Workshop workshop = Workshop.create(
                     WorkshopId.generate(),
                     WorkshopTitle.of("Lock Test"),
                     WorkshopDescription.of("desc"),
-                    Instant.parse("2026-09-01T09:00:00Z"),
+                    start,
                     Instant.parse("2026-09-01T11:00:00Z"),
+                    start.minus(Duration.ofMinutes(15)),
                     WorkshopCapacity.of(20),
                     Instant.now());
             workshopRepository.save(workshop);

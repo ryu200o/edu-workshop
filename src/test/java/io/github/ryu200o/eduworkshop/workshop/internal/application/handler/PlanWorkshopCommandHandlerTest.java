@@ -8,6 +8,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Ref
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPlanningException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.PlanWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -76,7 +78,8 @@ class PlanWorkshopCommandHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new PlanWorkshopCommandHandler(workshopRepository, roomExposeApi, fixedClock);
+        handler = new PlanWorkshopCommandHandler(
+                workshopRepository, roomExposeApi, new WorkshopBufferParameters(15), fixedClock);
     }
 
     private Workshop createDraftWorkshop() {
@@ -85,6 +88,7 @@ class PlanWorkshopCommandHandlerTest {
                 WorkshopTitle.of("Test Workshop"),
                 WorkshopDescription.of("Description"),
                 START, END,
+                START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(30),
                 NOW
         );
@@ -115,6 +119,8 @@ class PlanWorkshopCommandHandlerTest {
             assertThat(workshop.roomReference().roomLocationSnapshot()).isEqualTo(BUILDING + "/" + FLOOR);
             assertThat(workshop.roomReference().roomCapacitySnapshot()).isEqualTo(50);
             assertThat(workshop.hasRoomWarning()).isFalse();
+            // Room-space mutation re-applies the ADR 0018 pure function (startTime − currentConfigBuffer).
+            assertThat(workshop.occupancyStart()).isEqualTo(START.minus(Duration.ofMinutes(15)));
 
             verify(workshopRepository).save(workshop);
         }

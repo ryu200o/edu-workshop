@@ -24,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -69,9 +70,11 @@ class CancelWorkshopCommandHandlerTest {
                 WorkshopTitle.of("Test Workshop"),
                 WorkshopDescription.of("Description"),
                 START, END,
+                START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(30),
                 NOW);
-        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
+                workshop.occupancyStart(), NOW);
         workshop.publish(NOW, 50);
         return workshop;
     }

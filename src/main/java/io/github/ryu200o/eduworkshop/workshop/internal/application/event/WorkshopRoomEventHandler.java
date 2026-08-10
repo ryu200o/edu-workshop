@@ -59,12 +59,14 @@ public class WorkshopRoomEventHandler {
     }
 
     /**
-     * Auto-flags every PUBLISHED workshop whose time window overlaps the maintenance window with an
-     * eviction notice (Titik 2). The workshop's state is deliberately NOT changed —
+     * Auto-flags every PUBLISHED workshop whose Occupancy Window overlaps the maintenance window
+     * with an eviction notice (Titik 2, ADR 0018). The workshop's state is deliberately NOT changed —
      * {@code Workshop.markRoomEvicted} only sets {@code isRoomEvicted = true} + {@code roomEvictedAt}
-     * (a notice, not a cancellation). Overlap condition:
-     * {@code w.startTime < maintEnd && w.endTime > maintStart}; a null {@code endTime} (indefinite
-     * maintenance) matches every workshop starting after {@code startTime}.
+     * (a notice, not a cancellation). Overlap is decided natively on the denormalized
+     * {@code occupancy_start} (SQL predicate {@code occStart < maintEnd && end_time > maintStart},
+     * approved by the composite index {@code idx_workshops_room_occupancy}) — no widened superset,
+     * no in-memory filter. A null {@code endTime} (indefinite maintenance) matches every workshop
+     * whose session ends after {@code startTime}.
      *
      * <p>Follows the 3-Phase Execution Pattern: (1) mutate domain + collect events, (2) batch persist
      * via {@code saveAll}, (3) batch publish domain events. Early-returns when no PUBLISHED workshop
@@ -72,8 +74,9 @@ public class WorkshopRoomEventHandler {
      */
     private void handleMaintenanceScheduled(RoomMaintenanceScheduledIntegrationEvent event) {
         Instant now = Instant.now(clock);
+        Instant maintEnd = event.endTime();
         List<Workshop> affected = workshopRepository.loadPublishedOverlappingWithTimeWindow(
-                event.roomId(), event.startTime(), event.endTime());
+                event.roomId(), event.startTime(), maintEnd);
 
         if (affected.isEmpty()) {
             log.debug("No PUBLISHED workshop overlaps maintenance window for room {} — nothing to flag",
