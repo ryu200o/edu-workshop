@@ -1,7 +1,7 @@
 # ADR 0018: System Buffer as an Operational Guardrail for Room Occupancy
 
-* **Status**: ACCEPTED (Lean & Clean — REVISED)
-* **Date**: 2026-08-08
+* **Status**: ACCEPTED (Selective Occupancy Denormalization — REVISED v2)
+* **Date**: 2026-08-10
 * **Deciders**: Lead Engineer, Solution Architect (SA), Business/Nghiệm thu
 * **Technical Domain**: `Workshop` Aggregate, Room Scheduling, Time Modeling (Occupancy Window), Operational Configuration, Cross-Module Contracts (`workshop` → `room` / `facilityops`)
 * **Related**: ADR 0001 (Room static vs temporal state), ADR 0005 (Application orchestration of global rules), ADR 0007 (Selective Snapshotting), ADR 0008 (Planning vs Reservation), ADR 0015 (Concurrency), ADR 0016 (Port/ExposeAPI naming & DB pushdown), ADR 0017 (Task-Tailored Views), Spec v3 (`.llm/epic1_extension_gap_time_spec.md`)
@@ -23,10 +23,12 @@ chúng chi tiết ra sao.
 |---|---|---|
 | **Window** | `[startTime, endTime]` | Trung lập (neutral), thay cho khái niệm `Teaching Window` gượng ép. |
 | **`System Buffer`** | `bufferBefore` (phút) | **Operational Guardrail** thuộc Tầng Vận hành (Ops/DevOps) — dùng để chống đè lịch & rủi ro chuyển giao phòng. **Không phải** giờ chuẩn bị của Organizer. |
-| **Occupancy Window** | `[startTime - bufferBefore, endTime]` | Khung phòng bị giữ (reserved) trên thực tế cho mục đích lập lịch. |
+| **Occupancy Window** | `[occupancy_start, occupancy_end]` | Khung phòng bị giữ (reserved) trên thực tế cho mục đích lập lịch. **Được denormalize trực tiếp thành 2 cột** trong bảng `workshops` (Selective Denormalization). |
 
-Buffer là **bất biến sau khi lập lịch** — khác với bản nháp cũ (có thể đàm phán lại). Một khi Workshop đã được tạo với
-một buffer cụ thể, giá trị đó được chốt snapshot vào bản ghi và không bao giờ thay đổi bởi hệ thống.
+Occupancy Window được tính **một lần tại thời điểm lập lịch** rồi được lưu trực tiếp:
+`occupancy_start = startTime - bufferBefore` (bufferBefore = config tại lúc tạo), `occupancy_end = endTime`.
+Buffer là **bất biến sau khi lập lịch** — khác với bản nháp cũ (có thể đàm phán lại). Số phút buffer **không được lưu
+làm cột riêng**; khi cần hiển thị thì suy ra từ cặp occupancy: `Duration.between(occupancy_start, startTime).toMinutes()`.
 
 ---
 
@@ -34,16 +36,16 @@ một buffer cụ thể, giá trị đó được chốt snapshot vào bản ghi
 
 | Thành phần | Trạng thái | Mô tả Kỹ thuật |
 |---|---|---|
-| **Scope** | **System Guardrail** | Buffer được cấp từ `application.properties` (`app.workshop.buffer.before-default-minutes` — single knob), đóng dấu **snapshot** vào DB (`buffer_before_minutes`). Không có `max-minutes`; trần dữ liệu do DB `CHECK` đảm nhiệm. |
+| **Scope** | **System Guardrail** | Buffer được cấp từ `application.properties` (`app.workshop.buffer.before-default-minutes` — single knob), dùng **đúng một lần** để tính `occupancy_start` lúc lập lịch rồi **denormalize** vào `occupancy_start`/`occupancy_end`. Cột `buffer_before_minutes` **KHÔNG tồn tại** trong schema. |
 | **ReBuffer Flow** | **REMOVED** | Xóa hoàn toàn `ReBufferWorkshopCommand` và `BufferJustification`. Buffer là **bất biến sau khi lập lịch**. Không có use case "đàm phán lại" buffer. |
-| **Domain Model** | **Lean `Workshop`** | Chỉ giữ `startTime`, `endTime` và `WorkshopBuffer` (validate `beforeMinutes >= 0`). Không VO nguồn `buffer_justification`. |
-| **UI/UX Responsibility** | **Presentation Layer** | UI chịu trách nhiệm render **vùng xám System Transition Buffer** để giải thích cho Planner vì sao 1 phòng không book được trong khoảng xung đột, từ đó Planner đồng ý/hiểu rõ rule rồi chủ động xử lý. |
+| **Domain Model** | **Lean `Workshop`** | Chỉ giữ `startTime`, `endTime`, `occupancyStart`, `occupancyEnd` (cặp occupancy tính tại create/reschedule). Không VO nguồn `buffer_justification`, không lưu số phút buffer. |
+| **UI/UX Responsibility** | **Presentation Layer** | UI chịu trách nhiệm render **vùng xám System Transition Buffer** để giải thích cho Planner vì sao 1 phòng không book được trong khoảng xung đột, từ đó Planner đồng ý/hiểu rõ rule rồi chủ động xử lý. Giá trị phút buffer để hiển thị được suy ra bằng `Duration.between(occupancyStart, startTime)`. |
 
 ### 2.1 Bounded Contexts — tách bạch
 
 | Bounded Context | Quản lý | Công thức | Phạm vi |
 |---|---|---|---|
-| **Facility/Workshop Context** | Không gian & Phòng vật lý | `Occupancy Window = [startTime - bufferBefore, endTime]` | **Task hiện tại** |
+| **Facility/Workshop Context** | Không gian & Phòng vật lý | Occupancy Window = cặp `occupancy_start`/`occupancy_end` denormalized | **Task hiện tại** |
 | **Attendance Context** | Con người & Điểm danh | Check-in/Check-out — quy tắc riêng, **độc lập** với System Buffer | **Epic 3 (tương lai)** — ghi nhận quan trọng, chưa phạm vi task này |
 
 Attendance không phụ thuộc buffer: kể cả khi Organizer check-in sớm/điểm danh trong ngưỡng buffer, hệ thống điểm danh
@@ -55,12 +57,14 @@ có luật riêng của nó. Đây là ranh giới rõ để Epic 3 triển khai
 
 - **Bảo lãnh kinh doanh (loyalty)**: buffer là guardrail (rail) không phải business contract. Thay đổi default 15→30 chỉ
   là thay config ở tầng vận hành, **không đụng domain logic**.
-- **Bất biến sau lập lịch**: hợp đồng đã chốt (workshop được lịch với buffer C) không bị đảo lộn khi config toàn hệ thống
-  đổi ngày mai. Snapshot bảo vệ hợp đồng với giảng viên/room hirer.
-- **Giảm phức tạp**: Bỏ `BufferJustification` + `ReBuffer` → bớt 1 command, 1 handler, 1 event, 1 cụm test, 0 bề mặt concurrency
-  không cần.
-- **Tính toán runtime**: occupancy window là hàm `(startTime, endTime, bufferBefore)` — luôn tính được, không cần cột
-  denormalized (ADR 0001).
+- **Bất biến sau lập lịch**: hợp đồng đã chốt (workshop được lịch với occupancy window C) không bị đảo lộn khi config
+  toàn hệ thống đổi ngày mai. Denormalization snapshot bảo vệ hợp đồng với giảng viên/room hirer.
+- **DB Native Query Pushdown**: vì occupancy window là **cột thật**, overlap check bắt buộc đè lịch phòng được đơn giản
+  hoá 100% về predicate thuần `occupancy_end > :tOccStart AND occupancy_start < :tOccEnd`, tận dụng **Composite B-Tree
+  Index** `(room_id, occupancy_start, occupancy_end)` — portable giữa H2/PostgreSQL, không còn superset `+300`, không còn
+  bước lọc in-memory Java (thay cho ADR v1).
+- **Giảm phức tạp**: Bỏ `BufferJustification` + `ReBuffer` + bỏ hẳn cơ chế superset `STORAGE_CEILING=300` + filter
+  in-memory → bớt 1 command, 1 handler, 1 event, 1 cụm test, 0 bề mặt concurrency không cần.
 - **Attendance độc lập**: Epic 3 không bị vướng buffer.
 
 ---
@@ -71,52 +75,69 @@ có luật riêng của nó. Đây là ranh giới rõ để Epic 3 triển khai
 
 | | Key property | Default |
 |---|---|---|
-| Default buffer (snapshot) | `app.workshop.buffer.before-default-minutes` | `15` |
+| Default buffer (tại lúc lập lịch) | `app.workshop.buffer.before-default-minutes` | `15` |
 
 - **Single knob**: chỉ duy nhất 1 key — `before-default-minutes`. Không có `max-minutes`.
-- Trần dữ liệu là **storage ceiling về phía DB**: `CHECK (buffer_before_minutes BETWEEN 0 AND 300)` — hằng số trong schema,
-  không thay đổi runtime; vừa là giới hạn nhập liệu, vừa là bound cho superset overlap (xem §4.3).
-- Domain VO `WorkshopBuffer` chỉ giữ invariant `beforeMinutes >= 0`.
+- Buffer **không phải cột DB**. Không có hằng số storage ceiling 300 (v1) — cơ chế ấy đã được thay bằng denormalization.
+- Domain VO `WorkshopBuffer` (nếu còn) chỉ giữ invariant `beforeMinutes >= 0`.
 - **Không hardcode** default trong domain.
 
-### 4.2 Snapshot tại lập lịch
+### 4.2 Selective Denormalization — Occupancy Window (Flyway V16)
 
-- Khi tạo/phân phối Workshop, `buffer_before_minutes` snapshot từ config hiện hành trực tiếp vào bản ghi.
-- Sau khi config thay đổi: Workshop mới lấy buffer mới, Workshop đã tồn tại giữ buffer cũ (immutability).
+Là thay đổi cốt lõi so với ADR v1 (Pure Normalization: lưu `buffer_before_minutes` + query superset `+300` + lọc
+in-memory). Bản mới **lưu trực tiếp cặp mốc thời gian Occupancy Window**:
 
-### 4.3 Overlap Check (Room Occupancy Invariant)
-
-Thuật toán kiểm tra trùng phòng (Đặt lịch / Đổi phòng / Xuất bản) **BẮT BUỘC** dựa trên **Occupancy Window**
-`[target = startTime - bufferBefore, endTime]` của target so với các workshop khác.
-
-Hai đối tượng A, B cùng phòng xung đột khi:
+```sql
+ALTER TABLE workshops ADD COLUMN occupancy_start TIMESTAMP WITH TIME ZONE NOT NULL;
+ALTER TABLE workshops ADD COLUMN occupancy_end   TIMESTAMP WITH TIME ZONE NOT NULL;
+CREATE INDEX idx_workshops_room_occupancy ON workshops (room_id, occupancy_start, occupancy_end);
 ```
-(S_A - B_before_A) < E_B AND E_A > (S_B - B_before_B)
+
+- `occupancy_start = start_time - bufferBefore` với `bufferBefore` = `app.workshop.buffer.before-default-minutes`
+  nạp từ config (qua `WorkshopBufferParameters` ở Application) **tại thời điểm create / reschedule**.
+- `occupancy_end = end_time`.
+- **Trường suy ra (derived field)**: số phút buffer hiển thị tính ngược trên Java:
+  `Duration.between(occupancyStart, startTime).toMinutes()` — không cần cột riêng.
+
+### 4.3 Overlap Check (Room Occupancy Invariant) — DB Native Pushdown
+
+Thuật toán kiểm tra trùng phòng (Đặt lịch / Đổi phòng / Xuất bản) **BẮT BUỘC** dựa trên **cột Occupancy Window**
+denormalized, so với occupancy của các workshop khác:
+
+```
+Occupancy Window của bản ghi: [occupancy_start, occupancy_end]
+Xung đột khi: targetOccEnd > :occStart AND targetOccStart < :occEnd  (= overlap 2 chiều)
 ```
 
 Vận dụng:
 
 - Quy trình này là **global / set-based rule** → do Application orchestrate + **lock-set-first** (ADR 0005, ADR 0015);
   không inject query hay policy vào Aggregate.
-- JPQL/Hibernate không trừ được `Instant - Integer` portable → gọi method hiện có
-  `loadPublishedAndPlannedOverlappingWithLock(roomId, startTime, endTime)` với window **bảo thủ superset**
-  `[targetStart - targetBuffer, targetEnd + STORAGE_CEILING]` (`STORAGE_CEILING` = hằng số DB `CHECK`, mặc định 300
-  phút; chỉ widen phía end vì buffer nằm ở occupancyStart của "other" — bên target đã trừ buffer chính xác), rồi **lọc
-  chính xác trong memory** bằng `occupancyStart()/occupancyEnd()` của từng bản ghi (dựa trên `BUFFER_BEFORE_MINUTES`
-  snapshot, độc lập với config runtime). Superset dùng hằng số DB — không phải config — để tránh false-negative khi
-  DevOps đổi default.
-- JOOQ read-side (`getByRoomAndTimeOverlap`) áp dụng cùng kỹ thuật: dùng `BUFFER_BEFORE_MINUTES` từ DB làm predicate
-  (pushed-down), không phụ thuộc config.
+- Predicate **Native/JPQL thuần trên cột** (không trừ `Instant - Integer` trong query), tận dụng composite index:
+
+  ```sql
+  WHERE room_id = :roomId
+    AND state IN ('PUBLISHED', 'PLANNED')
+    AND occupancy_end > :targetOccStart
+    AND occupancy_start < :targetOccEnd
+  ```
+
+  Trong đó `:targetOccStart`/`:targetOccEnd` là occupancy của workshop target (đọc từ chính bản ghi); `PublishWorkshop`
+  còn cần loại target khỏi tập kết quả.
+- **Không còn** superset widen `+300`, **không còn** `STORAGE_CEILING`, **không còn** lọc chính xác in-memory bằng
+  `occupancyStart()/occupancyEnd()` — toàn bộ được đẩy xuống DB (DB Query Pushdown, ADR 0016).
+- JOOQ/JPQL read-side (`getByRoomAndTimeOverlap`, maintenance impact) dùng cùng predicate trên `OCCUPANCY_START`/
+  `OCCUPANCY_END`.
 
 ### 4.4 Use Case Scope (chốt mới)
 
-| Use Case | Phase | Buffer | Governance |
+| Use Case | Phase | Occupancy Window | Governance |
 |---|---|---|---|
-| `CreateWorkshop` | DRAFT | Luôn snapshot default từ config (không cho truyền buffer tùy ý) | Config → snapshot |
+| `CreateWorkshop` | DRAFT | Tính `occupancy_start = startTime - configBuffer`, `occupancy_end = endTime`; snapshot vào bản ghi | Config → denormalize |
 | `UpdateWorkshopSchedule` | DRAFT/PLANNED | Giữ nguyên (bất biến) | — |
-| `RescheduleWorkshop` | PUBLISHED | Giữ nguyên | — |
+| `RescheduleWorkshop` | PUBLISHED | **Re-tính lại** cặp occupancy theo buffer đang giữ, snapshot mới | Recompute + snapshot |
 | `ChangeWorkshopRoom` | PUBLISHED | Giữ nguyên | — |
-| `PublishWorkshop` | → PUBLISHED | overlap check trên occupancy window | lock-set-first |
+| `PublishWorkshop` | → PUBLISHED | overlap check trên cột occupancy (native predicate, lock-set-first) | lock-set-first |
 | ~~ReBuffer~~ | **REMOVED** | — | — |
 
 ---
@@ -124,8 +145,9 @@ Vận dụng:
 ## 5. UI/UX Responsibility (System Transition Buffer)
 
 - Presentation layer (query/view/Controller) render "vùng xám System Transition Buffer" trong lịch/biểu đồ phòng.
-- Mục đích: giải thích cho Planner lý do 1 slot không book được (do bị giữ buffer của event khác), **không phải**
+- Mục đích: giải thích cho Planner lý do 1 slot không book được (do bị giữ occupancy của event khác), **không phải**
   modal reject cứng — UI giữ vai trò giải thích & hướng dẫn.
+- Số phút buffer suy ra từ cặp occupancy (`Duration.between`) — đây là derived field, không phải cột.
 - Phần này nằm ở read-side/view DTO, không đụng domain.
 
 ---
@@ -133,12 +155,17 @@ Vận dụng:
 ## 6. Consequences
 
 **Positive**
+- Overlap check là predicate **thuần native trên cột** → đơn giản, chính xác, tận dụng index B-Tree, portable H2/Postgres.
+- Không còn superset widen `+300` + lọc in-memory Java → giảm mạnh bề mặt code & test; không còn cơ hội false-positive/
+  false-negative do lệch bound.
 - Thỏa mãn bên vận hành: đổi buffer default chỉ đổi config, không restart domain logic — trả lời được email "linh hoạt hợp đồng".
 - Không còn `BufferJustification`/`ReBuffer` → giảm mạnh bề mặt phức tạp, test, event.
-- Immutable buffer → hợp đồng đã ký an toàn khi config đổi.
+- Immutable buffer → hợp đồng đã ký an toàn khi config đổi (denormalized snapshot).
 - Ranh giới Attendance (Epic 3) rõ ràng độc lập buffer.
 
 **Negative**
+- Denormalization mang tính dai dẳng dữ liệu: khi `RescheduleWorkshop`/duration đổi, handler **phải** re-tính và cập nhật
+  lại cặp `occupancy_start`/`occupancy_end` (Application orchestration chịu trách nhiệm, không để lệch).
 - Không hỗ trợ đàm phán lại buffer, loại bỏ 1 use case thực tế (nếu sau này business cần đổi buffer cho workshop đang
   active thì phải mở 1 task riêng, không thuộc phạm vi buffer guardrail).
 
@@ -146,15 +173,21 @@ Vận dụng:
 
 ## 7. Compliance Checklist (Workshop module)
 
-- [ ] `workshops` có cột `buffer_before_minutes INT NOT NULL DEFAULT 15` (snapshot). **Không** `buffer_justification`, `buffer_after_minutes`, `scheduled_occupancy_*`.
-- [ ] `WorkshopBuffer` domain VO: chỉ `beforeMinutes`, invariant `>= 0`, **không** `DEFAULT` hardcode. Bỏ `BufferJustification`.
+- [ ] `workshops` có cặp `occupancy_start TIMESTAMPTZ NOT NULL` / `occupancy_end TIMESTAMPTZ NOT NULL` + index
+      `idx_workshops_room_occupancy (room_id, occupancy_start, occupancy_end)`. **Không** cột `buffer_before_minutes`,
+      **không** `buffer_justification`, `buffer_after_minutes`, `scheduled_occupancy_*`, **không** hằng số `STORAGE_CEILING = 300`.
+- [ ] `Workshop` domain giữ `startTime`, `endTime`, `occupancyStart`, `occupancyEnd`; occupancy tính tại `create`/
+      `reschedule`. Bỏ `BufferJustification`. (VO `WorkshopBuffer` nếu còn chỉ giữ invariant `>= 0`.)
 - [ ] Config chỉ 1 knob `app.workshop.buffer.before-default-minutes` nạp qua `WorkshopBufferParameters` (Application). **Không** `max-minutes`.
-- [ ] Storage ceiling bằng DB `CHECK (buffer_before_minutes BETWEEN 0 AND 300)` — hằng số schema, không phải config.
-- [ ] Overlap predicate (JPA lock + JOOQ read) push-down bằng `BUFFER_BEFORE_MINUTES` + superset theo `STORAGE_CEILING`, rồi lọc chính xác trong memory, không phụ thuộc config runtime (đọc snapshot từng row).
+- [ ] Overlap predicate (JPA lock + JOOQ read) là **Native/JPQL thuần trên cột** `occupancy_start`/`occupancy_end` —
+      **không** superset widen, **không** lọc exact in-memory, không phụ thuộc config runtime.
+- [ ] Derived buffer hiển thị = `Duration.between(occupancyStart, startTime).toMinutes()` (Java), không phải cột DB.
 - [ ] Không còn `ReBufferWorkshopCommand` / `BufferJustification` / event liên quan trong code & spec.
 - [ ] UI read-side render "System Transition Buffer" zone (để sau, presentation-layer).
 
 ---
 
-> **Ghi chú**: Đây là REVISED version theo quyết định buổi họp (Lead Engineer + SA + Business). Bản nháp cũ
-> (double-sided buffer, justification, scheduled_occupancy_*) hoàn toàn được thay thế và không còn giá trị triển khai.
+> **Ghi chú**: Đây là REVISED v2 theo khuyến nghị chốt hạ từ Bên Nghiệm thu — chuyển từ **Pure Normalization**
+> (lưu `buffer_before_minutes` + superset `+300` + lọc in-memory) sang **Selective Denormalization** (lưu trực tiếp cặp
+> `occupancy_start`/`occupancy_end`). Cơ chế v1 (hằng số storage ceiling 300, widening superset, filter exact trong memory)
+> hoàn toàn được thay thế và không còn giá trị triển khai.
