@@ -9,6 +9,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Roo
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
@@ -27,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -36,6 +38,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -87,7 +90,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
     void setUp() {
         handler = new ChangeWorkshopRoomCommandHandler(
                 workshopRepository, roomExposeApi, workshopDomainEventPublisher,
-                new PlannedWorkshopKicker(workshopRepository), fixedClock);
+                new PlannedWorkshopKicker(workshopRepository), new WorkshopBufferParameters(15), fixedClock);
     }
 
     private Workshop createPublishedWorkshop() {
@@ -96,9 +99,11 @@ class ChangeWorkshopRoomCommandHandlerTest {
                 WorkshopTitle.of("Test Workshop"),
                 WorkshopDescription.of("Description"),
                 START, END,
+                START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(30),
                 NOW);
-        workshop.plan(RoomReference.of(OLD_ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        workshop.plan(RoomReference.of(OLD_ROOM_ID, "Room 201", "Building A/2", 50), false,
+                START.minus(Duration.ofMinutes(15)), NOW);
         workshop.publish(NOW, 50);
         return workshop;
     }
@@ -109,9 +114,11 @@ class ChangeWorkshopRoomCommandHandlerTest {
                 WorkshopTitle.of("Other Workshop"),
                 WorkshopDescription.of("Description"),
                 start, end,
+                start.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(20),
                 NOW);
-        workshop.plan(RoomReference.of(roomId, "Room 302", "Building B/3", roomCapacity), false, NOW);
+        workshop.plan(RoomReference.of(roomId, "Room 302", "Building B/3", roomCapacity), false,
+                start.minus(Duration.ofMinutes(15)), NOW);
         return workshop;
     }
 
@@ -127,7 +134,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             // Target lives in the OLD room, so the new-room locked set is empty; the target is
             // resolved via the lock-by-id fallback.
-            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(NEW_ROOM_ID), any(Instant.class), any(Instant.class)))
                     .willReturn(List.of());
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
@@ -139,6 +146,8 @@ class ChangeWorkshopRoomCommandHandlerTest {
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomNameSnapshot()).isEqualTo("Room 302");
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
+            // Room-space mutation re-applies the ADR 0018 pure function (startTime − currentConfigBuffer).
+            assertThat(workshop.occupancyStart()).isEqualTo(START.minus(Duration.ofMinutes(15)));
 
             verify(workshopRepository).save(workshop);
             verify(workshopDomainEventPublisher).publish(any());
@@ -154,7 +163,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(NEW_ROOM_ID), any(Instant.class), any(Instant.class)))
                     .willReturn(List.of(planned));
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
@@ -185,7 +194,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
             given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
             // The non-overlapping workshop is not part of the locked overlapping set.
-            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(NEW_ROOM_ID), any(Instant.class), any(Instant.class)))
                     .willReturn(List.of());
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
@@ -253,7 +262,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
                     .willReturn(Optional.of(workshop));
             given(roomExposeApi.getPlanningPermission(NEW_ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
-            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(NEW_ROOM_ID, START, END))
+            given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(NEW_ROOM_ID), any(Instant.class), any(Instant.class)))
                     .willReturn(List.of(otherPublished));
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));

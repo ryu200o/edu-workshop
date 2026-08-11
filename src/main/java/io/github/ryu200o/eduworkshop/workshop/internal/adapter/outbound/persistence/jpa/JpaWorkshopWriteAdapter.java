@@ -51,15 +51,15 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
     }
 
     @Override
-    public List<Workshop> loadPublishedAndPlannedOverlappingWithLock(UUID roomId, Instant startTime, Instant endTime) {
-        return repository.findPublishedAndPlannedOverlappingWithLock(roomId, startTime, endTime).stream()
+    public List<Workshop> loadPublishedAndPlannedOverlappingWithLock(UUID roomId, Instant targetStartTime, Instant targetEndTime) {
+        return repository.findPublishedAndPlannedOverlappingWithLock(roomId, targetStartTime, targetEndTime).stream()
                 .map(this::toWorkshop)
                 .toList();
     }
 
     @Override
-    public List<Workshop> loadPublishedOverlappingWithTimeWindow(UUID roomId, Instant startTime, Instant endTime) {
-        return repository.loadPublishedOverlappingWithTimeWindow(roomId, startTime, endTime).stream()
+    public List<Workshop> loadPublishedOverlappingWithTimeWindow(UUID roomId, Instant targetStartTime, Instant targetEndTime) {
+        return repository.loadPublishedOverlappingWithTimeWindow(roomId, targetStartTime, targetEndTime).stream()
                 .map(this::toWorkshop)
                 .toList();
     }
@@ -104,6 +104,7 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
         entity.setRoomEvictedAt(workshop.roomEvictedAt());
         entity.setStartTime(workshop.startTime());
         entity.setEndTime(workshop.endTime());
+        entity.setOccupancyStart(workshop.occupancyStart());
         entity.setCapacity(workshop.capacity().value());
         entity.setState(workshop.state());
         entity.setCreatedAt(workshop.createdAt());
@@ -125,6 +126,7 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
                         : null,
                 entity.getStartTime(),
                 entity.getEndTime(),
+                entity.getOccupancyStart(),
                 WorkshopCapacity.of(entity.getCapacity()),
                 entity.isHasRoomWarning(),
                 entity.isRoomEvicted(),

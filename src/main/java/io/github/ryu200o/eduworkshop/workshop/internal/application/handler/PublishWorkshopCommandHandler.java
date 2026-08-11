@@ -68,9 +68,13 @@ class PublishWorkshopCommandHandler
         // Lock-set-first (ADR 0015): pessimistic-lock ALL overlapping workshops (PUBLISHED +
         // PLANNED) in the target room/window before mutating any state. The target overlaps its
         // own window, so it is covered by the same lock — resolving it from the list reuses that
-        // locked, fresh instance.
+        // locked, fresh instance. The overlap is decided natively on the denormalized Occupancy
+        // Window (ADR 0018): the SQL predicate compares occupancy_start/end_time (approved by the
+        // composite index) — no widened superset, no in-memory filter.
+        Instant occStart = workshop.occupancyStart();
+        Instant occEnd = workshop.endTime();
         List<Workshop> overlapping = workshopRepository.loadPublishedAndPlannedOverlappingWithLock(
-                roomId, workshop.startTime(), workshop.endTime());
+                roomId, occStart, occEnd);
 
         Workshop target = overlapping.stream()
                 .filter(w -> w.id().equals(workshopId))

@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopScheduleCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
@@ -55,7 +56,8 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new UpdateWorkshopScheduleCommandHandler(
-                workshopRepository, workshopDomainEventPublisher, fixedClock);
+                workshopRepository, workshopDomainEventPublisher,
+                new WorkshopBufferParameters(15), fixedClock);
     }
 
     private Workshop createDraftWorkshop() {
@@ -64,19 +66,22 @@ class UpdateWorkshopScheduleCommandHandlerTest {
                 WorkshopTitle.of("Test Workshop"),
                 WorkshopDescription.of("Description"),
                 START, END,
+                START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(30),
                 NOW);
     }
 
     private Workshop createPlannedWorkshop() {
         Workshop workshop = createDraftWorkshop();
-        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
+                workshop.occupancyStart(), NOW);
         return workshop;
     }
 
     private Workshop createPublishedWorkshop() {
         Workshop workshop = createDraftWorkshop();
-        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
+                workshop.occupancyStart(), NOW);
         workshop.publish(NOW, 50);
         return workshop;
     }

@@ -67,6 +67,7 @@ public class Workshop {
     private RoomReference roomReference;
     private Instant startTime;
     private Instant endTime;
+    private Instant occupancyStart;
     private WorkshopCapacity capacity;
     private boolean hasRoomWarning;
     private boolean isRoomEvicted;
@@ -83,6 +84,7 @@ public class Workshop {
                      RoomReference roomReference,
                      Instant startTime,
                      Instant endTime,
+                     Instant occupancyStart,
                      WorkshopCapacity capacity,
                      boolean hasRoomWarning,
                      boolean isRoomEvicted,
@@ -96,6 +98,7 @@ public class Workshop {
         this.roomReference = roomReference;
         this.startTime = requireNonNull(startTime, "startTime cannot be null");
         this.endTime = requireNonNull(endTime, "endTime cannot be null");
+        this.occupancyStart = requireNonNull(occupancyStart, "occupancyStart cannot be null");
         this.capacity = requireNonNull(capacity, "capacity cannot be null");
         this.hasRoomWarning = hasRoomWarning;
         this.isRoomEvicted = isRoomEvicted;
@@ -123,13 +126,14 @@ public class Workshop {
      * @throws InvalidWorkshopTimeRangeException if {@code endTime} is not after {@code startTime}
      */
     public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description,
-                                   Instant startTime, Instant endTime, WorkshopCapacity capacity, Instant now) {
+                                   Instant startTime, Instant endTime, Instant occupancyStart,
+                                   WorkshopCapacity capacity, Instant now) {
         if (!endTime.isAfter(startTime)) {
             throw new InvalidWorkshopTimeRangeException("endTime must be after startTime");
         }
         Workshop workshop = new Workshop(
                 id, title, description,
-                null, startTime, endTime, capacity,
+                null, startTime, endTime, occupancyStart, capacity,
                 false, false, null, WorkshopState.DRAFT, now, now);
         workshop.record(new WorkshopCreated(id.value(), id, startTime, endTime, capacity, now));
         return workshop;
@@ -148,6 +152,7 @@ public class Workshop {
                                        RoomReference roomReference,
                                        Instant startTime,
                                        Instant endTime,
+                                       Instant occupancyStart,
                                        WorkshopCapacity capacity,
                                        boolean hasRoomWarning,
                                        boolean isRoomEvicted,
@@ -156,7 +161,7 @@ public class Workshop {
                                        Instant createdAt,
                                        Instant updatedAt) {
         return new Workshop(id, title, description, roomReference, startTime, endTime,
-                capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
+                occupancyStart, capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
     }
 
     /**
@@ -172,17 +177,22 @@ public class Workshop {
      *
      * @param room           the room reference (id + name/location/capacity snapshots, ADR 0007)
      * @param hasRoomWarning whether the room is under maintenance (planning allowed, with warning)
+     * @param occupancyStart the new Occupancy Window start ({@code startTime − currentConfigBuffer},
+     *                       ADR 0018 pure function, computed by the Application layer; room-space
+     *                       mutations re-apply it per the scheduling-axis rule)
      * @param now            the current instant, used for {@code updatedAt}
      * @throws InvalidWorkshopStateException if the workshop is not in {@code DRAFT} or {@code PLANNED}
      */
-    public void plan(RoomReference room, boolean hasRoomWarning, Instant now) {
+    public void plan(RoomReference room, boolean hasRoomWarning, Instant occupancyStart, Instant now) {
         requireNonNull(room, "room must be assigned before planning");
+        requireNonNull(occupancyStart, "occupancyStart cannot be null");
         requireNonNull(now, "now cannot be null");
 
         requireStateIn(List.of(WorkshopState.DRAFT, WorkshopState.PLANNED), "plan");
 
         this.roomReference = room;
         this.hasRoomWarning = hasRoomWarning;
+        this.occupancyStart = occupancyStart;
         this.state = WorkshopState.PLANNED;
         this.touch(now);
 
@@ -357,12 +367,16 @@ public class Workshop {
      * snapshots (ADR 0007).</p>
      *
      * @param newRoomRef the new room reference (id + snapshots) to assign
+     * @param occupancyStart the new Occupancy Window start ({@code startTime − currentConfigBuffer},
+     *                       ADR 0018 pure function, computed by the Application layer; room-space
+     *                       mutations re-apply it per the scheduling-axis rule)
      * @param now        the current instant, used for {@code updatedAt}
      * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
      * @throws WorkshopCapacityExceedsRoomException if the workshop capacity exceeds the new room's capacity
      */
-    public void changeRoom(RoomReference newRoomRef, Instant now) {
+    public void changeRoom(RoomReference newRoomRef, Instant occupancyStart, Instant now) {
         requireNonNull(newRoomRef, "new room reference must not be null");
+        requireNonNull(occupancyStart, "occupancyStart cannot be null");
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.PUBLISHED, "changeRoom");
 
@@ -371,6 +385,7 @@ public class Workshop {
         }
 
         this.roomReference = newRoomRef;
+        this.occupancyStart = occupancyStart;
         clearRoomEviction();
         this.touch(now);
 
@@ -498,17 +513,20 @@ public class Workshop {
      * orchestrated by the Application handler before this call (ADR 0005), which also evicts
      * overlapping {@code PLANNED} workshops. Records a {@link WorkshopRescheduled} event.</p>
      *
-     * @param newStartTime the new start instant; must be strictly in the future
-     * @param newEndTime   the new end instant; must be after {@code newStartTime}
-     * @param now          the current instant, used for the deadline check and {@code updatedAt}
+     * @param newStartTime       the new start instant; must be strictly in the future
+     * @param newEndTime         the new end instant; must be after {@code newStartTime}
+     * @param newOccupancyStart  the new Occupancy Window start ({@code newStartTime − currentConfigBuffer},
+     *                           ADR 0018 pure function, computed by the Application layer)
+     * @param now                the current instant, used for the deadline check and {@code updatedAt}
      * @throws InvalidWorkshopStateException if the workshop is not {@code PUBLISHED}
      * @throws RescheduleDeadlineExceededException if {@code now} is after {@code startTime − RESCHEDULE_DEADLINE}
      * @throws InvalidWorkshopTimeRangeException if {@code newEndTime} is not after {@code newStartTime},
      *         or {@code newStartTime} is not strictly in the future
      */
-    public void reschedule(Instant newStartTime, Instant newEndTime, Instant now) {
+    public void reschedule(Instant newStartTime, Instant newEndTime, Instant newOccupancyStart, Instant now) {
         requireNonNull(newStartTime, "newStartTime cannot be null");
         requireNonNull(newEndTime, "newEndTime cannot be null");
+        requireNonNull(newOccupancyStart, "newOccupancyStart cannot be null");
         requireNonNull(now, "now cannot be null");
         requireState(WorkshopState.PUBLISHED, "reschedule");
 
@@ -528,6 +546,7 @@ public class Workshop {
         Instant oldEndTime = this.endTime;
         this.startTime = newStartTime;
         this.endTime = newEndTime;
+        this.occupancyStart = newOccupancyStart;
         clearRoomEviction();
         this.touch(now);
 
@@ -604,16 +623,19 @@ public class Workshop {
      * deadline). When called in {@code PLANNED}, the existing {@code roomReference}
      * is kept — room conflict checking is deferred to publish time (ADR 0008).</p>
      *
-     * @param newStartTime the new start instant; must be strictly in the future
-     * @param newEndTime   the new end instant; must be after {@code newStartTime}
-     * @param now          the current instant, used for the deadline check and {@code updatedAt}
+     * @param newStartTime       the new start instant; must be strictly in the future
+     * @param newEndTime         the new end instant; must be after {@code newStartTime}
+     * @param newOccupancyStart  the new Occupancy Window start ({@code newStartTime − currentConfigBuffer},
+     *                           ADR 0018 pure function, computed by the Application layer)
+     * @param now                the current instant, used for the deadline check and {@code updatedAt}
      * @throws InvalidWorkshopStateException if the workshop is {@code PUBLISHED} or {@code CANCELLED}
      * @throws InvalidWorkshopTimeRangeException if {@code newEndTime} is not after {@code newStartTime},
      *         or {@code newStartTime} is not strictly in the future
      */
-    public void updateSchedule(Instant newStartTime, Instant newEndTime, Instant now) {
+    public void updateSchedule(Instant newStartTime, Instant newEndTime, Instant newOccupancyStart, Instant now) {
         requireNonNull(newStartTime, "newStartTime cannot be null");
         requireNonNull(newEndTime, "newEndTime cannot be null");
+        requireNonNull(newOccupancyStart, "newOccupancyStart cannot be null");
         requireNonNull(now, "now cannot be null");
 
         if (state == WorkshopState.PUBLISHED) {
@@ -637,6 +659,7 @@ public class Workshop {
 
         this.startTime = newStartTime;
         this.endTime = newEndTime;
+        this.occupancyStart = newOccupancyStart;
         this.touch(now);
 
         record(new WorkshopScheduleUpdated(id, newStartTime, newEndTime, updatedAt));
@@ -715,6 +738,15 @@ public class Workshop {
 
     public WorkshopCapacity capacity() {
         return capacity;
+    }
+
+    /**
+     * Start of the Occupancy Window (ADR 0018): {@code startTime − currentConfigBuffer}, computed by
+     * the Application layer via the pure function and persisted. The room is considered occupied
+     * from this instant — buffer included.
+     */
+    public Instant occupancyStart() {
+        return occupancyStart;
     }
 
     public boolean hasRoomWarning() {

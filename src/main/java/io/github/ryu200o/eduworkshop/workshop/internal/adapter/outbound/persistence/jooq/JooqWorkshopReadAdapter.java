@@ -69,11 +69,16 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
 
     @Override
     public List<WorkshopOverlapView> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime) {
+        // Occupancy Window (ADR 0018): a workshop occupies the room from occupancy_start to end_time,
+        // where occupancy_start = start_time - currentConfigBuffer (denormalized). Overlap with the
+        // maintenance window is decided on that window via the native SQL predicate (approved by the
+        // composite index idx_workshops_room_occupancy (room_id, occupancy_start, end_time));
+        // no in-memory filter / widened superset.
         var condition = WORKSHOPS.ROOM_ID.eq(roomId)
-                .and(WORKSHOPS.END_TIME.greaterThan(OffsetDateTime.ofInstant(startTime, java.time.ZoneOffset.UTC)))
-                .and(WORKSHOPS.STATE.in("PUBLISHED", "PLANNED"));
+                .and(WORKSHOPS.STATE.in("PUBLISHED", "PLANNED"))
+                .and(WORKSHOPS.END_TIME.greaterThan(OffsetDateTime.ofInstant(startTime, java.time.ZoneOffset.UTC)));
         if (endTime != null) {
-            condition = condition.and(WORKSHOPS.START_TIME.lessThan(OffsetDateTime.ofInstant(endTime, java.time.ZoneOffset.UTC)));
+            condition = condition.and(WORKSHOPS.OCCUPANCY_START.lessThan(OffsetDateTime.ofInstant(endTime, java.time.ZoneOffset.UTC)));
         }
         return dsl.select(
                         WORKSHOPS.ID,

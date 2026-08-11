@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -59,7 +60,9 @@ class JooqWorkshopReadAdapterTest {
         WorkshopTitle title = WorkshopTitle.of("Intro to AI");
         WorkshopDescription description = WorkshopDescription.of("A beginner workshop");
         WorkshopCapacity capacity = WorkshopCapacity.of(30);
-        return Workshop.create(id, title, description, start, end, capacity, Instant.parse("2026-09-15T00:00:00Z"));
+        return Workshop.create(id, title, description, start, end,
+                start.minus(Duration.ofMinutes(15)), capacity,
+                Instant.parse("2026-09-15T00:00:00Z"));
     }
 
     @Test
@@ -90,7 +93,7 @@ class JooqWorkshopReadAdapterTest {
     void saveEvictedWorkshop_thenFindById_readsEvictionColumns() {
         Workshop workshop = newWorkshop();
         workshop.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                workshop.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         workshop.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         workshop.markRoomEvicted(Instant.parse("2026-09-15T00:00:03Z"));
         workshopRepository.save(workshop);
@@ -120,16 +123,16 @@ class JooqWorkshopReadAdapterTest {
 
         Workshop planned = newWorkshop();
         planned.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                planned.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
 
         Workshop published = newWorkshop();
         published.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                published.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         published.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
 
         Workshop cancelled = newWorkshop();
         cancelled.plan(RoomReference.of(roomId, "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                cancelled.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         cancelled.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         cancelled.cancel(Instant.parse("2026-09-15T00:00:03Z"));
 
@@ -161,27 +164,27 @@ class JooqWorkshopReadAdapterTest {
     void getPublishedDueToStart_returnsOnlyPublishedWithStartPassed() {
         Workshop due = newWorkshop();
         due.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                due.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         due.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
 
         Workshop notDue = newWorkshop(Instant.parse("2026-10-01T13:00:00Z"), Instant.parse("2026-10-01T15:00:00Z"));
         notDue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                notDue.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         notDue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
 
         Workshop planned = newWorkshop();
         planned.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                planned.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
 
         Workshop inProgress = newWorkshop();
         inProgress.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                inProgress.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         inProgress.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         inProgress.start(Instant.parse("2026-10-01T09:00:00Z"));
 
         Workshop completed = newWorkshop();
         completed.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                completed.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         completed.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         completed.start(Instant.parse("2026-10-01T09:00:00Z"));
         completed.complete(Instant.parse("2026-10-01T11:00:00Z"));
@@ -200,19 +203,19 @@ class JooqWorkshopReadAdapterTest {
     void getInProgressDueToComplete_returnsOnlyInProgressWithEndPassed() {
         Workshop due = newWorkshop();
         due.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                due.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         due.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         due.start(Instant.parse("2026-10-01T09:00:00Z"));
 
         Workshop notDue = newWorkshop(Instant.parse("2026-10-01T09:00:00Z"), Instant.parse("2026-10-01T13:00:00Z"));
         notDue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                notDue.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         notDue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         notDue.start(Instant.parse("2026-10-01T09:00:00Z"));
 
         Workshop completed = newWorkshop();
         completed.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                completed.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         completed.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         completed.start(Instant.parse("2026-10-01T09:00:00Z"));
         completed.complete(Instant.parse("2026-10-01T11:00:00Z"));
@@ -231,23 +234,23 @@ class JooqWorkshopReadAdapterTest {
     void getPublishedOverdueByEndTime_returnsOnlyPublishedOverdue() {
         Workshop overdue = newWorkshop();
         overdue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                overdue.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         overdue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
 
         Workshop notOverdue = newWorkshop(Instant.parse("2026-10-01T09:00:00Z"), Instant.parse("2026-10-01T13:00:00Z"));
         notOverdue.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                notOverdue.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         notOverdue.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
 
         Workshop overdueInProgress = newWorkshop();
         overdueInProgress.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                overdueInProgress.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         overdueInProgress.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         overdueInProgress.start(Instant.parse("2026-10-01T09:00:00Z"));
 
         Workshop overdueCompleted = newWorkshop();
         overdueCompleted.plan(RoomReference.of(UUID.randomUUID(), "Room 201", "Floor 2", 50), false,
-                Instant.parse("2026-09-15T00:00:01Z"));
+                overdueCompleted.occupancyStart(), Instant.parse("2026-09-15T00:00:01Z"));
         overdueCompleted.publish(Instant.parse("2026-09-15T00:00:02Z"), 50);
         overdueCompleted.start(Instant.parse("2026-10-01T09:00:00Z"));
         overdueCompleted.complete(Instant.parse("2026-10-01T11:00:00Z"));

@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomConflictException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.RescheduleWorkshopCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
@@ -32,6 +33,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
@@ -60,7 +62,8 @@ class RescheduleWorkshopCommandHandlerTest {
     void setUp() {
         handler = new RescheduleWorkshopCommandHandler(
                 workshopRepository, workshopDomainEventPublisher,
-                new PlannedWorkshopKicker(workshopRepository), fixedClock);
+                new PlannedWorkshopKicker(workshopRepository),
+                new WorkshopBufferParameters(15), fixedClock);
     }
 
     private Workshop createPublishedWorkshop() {
@@ -69,10 +72,12 @@ class RescheduleWorkshopCommandHandlerTest {
                 WorkshopTitle.of("Published Workshop"),
                 WorkshopDescription.of("Description"),
                 START, END,
+                START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(30),
                 NOW
         );
-        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
+                workshop.occupancyStart(), NOW);
         workshop.publish(NOW, 50);
         return workshop;
     }
@@ -84,7 +89,7 @@ class RescheduleWorkshopCommandHandlerTest {
                 .willReturn(Optional.of(workshop));
         // Locked set for the NEW window is empty; the target (currently in the OLD window) is
         // resolved via the lock-by-id fallback.
-        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, NEW_START, NEW_END))
+        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(ROOM_ID), any(Instant.class), any(Instant.class)))
                 .willReturn(List.of());
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
@@ -112,14 +117,16 @@ class RescheduleWorkshopCommandHandlerTest {
                 WorkshopTitle.of("Planned"),
                 WorkshopDescription.of("Description"),
                 NEW_START, NEW_END,
+                NEW_START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(20),
                 NOW
         );
-        planned.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        planned.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
+                planned.occupancyStart(), NOW);
 
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
-        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, NEW_START, NEW_END))
+        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(ROOM_ID), any(Instant.class), any(Instant.class)))
                 .willReturn(List.of(planned));
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
@@ -139,15 +146,17 @@ class RescheduleWorkshopCommandHandlerTest {
                 WorkshopTitle.of("Other"),
                 WorkshopDescription.of("Description"),
                 NEW_START, NEW_END,
+                NEW_START.minus(Duration.ofMinutes(15)),
                 WorkshopCapacity.of(20),
                 NOW
         );
-        otherPublished.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false, NOW);
+        otherPublished.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
+                otherPublished.occupancyStart(), NOW);
         otherPublished.publish(NOW, 50);
 
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
-        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, NEW_START, NEW_END))
+        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(ROOM_ID), any(Instant.class), any(Instant.class)))
                 .willReturn(List.of(otherPublished));
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
@@ -162,7 +171,7 @@ class RescheduleWorkshopCommandHandlerTest {
         Workshop workshop = createPublishedWorkshop();
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
-        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, NEW_START, NEW_END))
+        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(ROOM_ID), any(Instant.class), any(Instant.class)))
                 .willReturn(List.of());
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
@@ -171,6 +180,7 @@ class RescheduleWorkshopCommandHandlerTest {
         RescheduleWorkshopCommandHandler lateHandler = new RescheduleWorkshopCommandHandler(
                 workshopRepository, workshopDomainEventPublisher,
                 new PlannedWorkshopKicker(workshopRepository),
+                new WorkshopBufferParameters(15),
                 Clock.fixed(within24h, ZoneOffset.UTC));
 
         assertThatThrownBy(() -> lateHandler.handle(
@@ -185,7 +195,7 @@ class RescheduleWorkshopCommandHandlerTest {
         Workshop workshop = createPublishedWorkshop();
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
-        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(ROOM_ID, NEW_START, NEW_START))
+        given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(ROOM_ID), any(Instant.class), any(Instant.class)))
                 .willReturn(List.of());
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));

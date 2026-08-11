@@ -8,6 +8,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.Roo
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.RoomNotAvailableForPublishingException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.exception.WorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,17 +35,20 @@ class ChangeWorkshopRoomCommandHandler
     private final RoomExposeAPI roomExposeApi;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
     private final PlannedWorkshopKicker plannedWorkshopKicker;
+    private final WorkshopBufferParameters bufferParameters;
     private final Clock clock;
 
     ChangeWorkshopRoomCommandHandler(WorkshopRepository workshopRepository,
                                      RoomExposeAPI roomExposeApi,
                                      WorkshopDomainEventPublisher workshopDomainEventPublisher,
                                      PlannedWorkshopKicker plannedWorkshopKicker,
+                                     WorkshopBufferParameters bufferParameters,
                                      Clock clock) {
         this.workshopRepository = workshopRepository;
         this.roomExposeApi = roomExposeApi;
         this.workshopDomainEventPublisher = workshopDomainEventPublisher;
         this.plannedWorkshopKicker = plannedWorkshopKicker;
+        this.bufferParameters = bufferParameters;
         this.clock = clock;
     }
 
@@ -67,8 +72,17 @@ class ChangeWorkshopRoomCommandHandler
 
         // Lock-set-first (ADR 0015): pessimistic-lock ALL overlapping workshops (PUBLISHED +
         // PLANNED) in the NEW room/time window before mutating any state.
+        // Config pure function (ADR 0018): changing the room is a room-space scheduling-axis
+        // mutation, so the Occupancy Window start is re-applied against the current Ops buffer
+        // (occupancyStart = startTime − currentConfigBuffer).
+        Instant newOccupancyStart = workshop.startTime()
+                .minus(Duration.ofMinutes(bufferParameters.beforeDefaultMinutes()));
+        Instant occEnd = workshop.endTime();
+        // The overlap is decided natively on the denormalized Occupancy Window (ADR 0018): the SQL
+        // predicate compares occupancy_start/end_time (approved by the composite index
+        // idx_workshops_room_occupancy) — no widened superset, no in-memory filter.
         List<Workshop> overlapping = workshopRepository.loadPublishedAndPlannedOverlappingWithLock(
-                newRoomId, workshop.startTime(), workshop.endTime());
+                newRoomId, newOccupancyStart, occEnd);
 
         // The target lives in the OLD room, so it is never part of the new-room set — lock it
         // separately (after the set, preserving the consistent set-first lock order).
@@ -92,7 +106,7 @@ class ChangeWorkshopRoomCommandHandler
                 permission.planning().location().building() + "/" + permission.planning().location().floor(),
                 permission.planning().capacity());
 
-        target.changeRoom(newRoomRef, now);
+        target.changeRoom(newRoomRef, newOccupancyStart, now);
         workshopRepository.save(target);
 
         List<WorkshopDomainEvent> events = new ArrayList<>(target.recordedEvents());
