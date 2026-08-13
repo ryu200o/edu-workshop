@@ -3,7 +3,9 @@ package io.github.ryu200o.eduworkshop.workshop.internal.facade;
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRegistrationContract;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopSchedulingContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopStateContract;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
@@ -57,6 +59,21 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
                         view.id(),
                         mapState(view.state())))
                 .toList();
+    }
+
+    @Override
+    public Optional<WorkshopSchedulingContract> getScheduling(UUID workshopId) {
+        return workshopReader.getById(workshopId)
+                .map(this::toSchedulingContract);
+    }
+
+    private WorkshopSchedulingContract toSchedulingContract(WorkshopDetailView view) {
+        WorkshopStateContract state = mapState(view.state());
+        // For a COMPLETED workshop, updatedAt == the completion instant (Workshop.complete touches
+        // the aggregate with `now`). It is the authoritative recovery anchor for the Attendance
+        // module's Reconciliation Window (ADR 0019 §4 / OQ-10) — never the consumer's clock.
+        Instant completedAt = state == WorkshopStateContract.COMPLETED ? view.updatedAt() : null;
+        return new WorkshopSchedulingContract(view.id(), state, completedAt);
     }
 
     private static WorkshopStateContract mapState(String state) {

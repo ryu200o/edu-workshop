@@ -6,7 +6,8 @@ import java.time.Instant;
 
 /**
  * Domain event emitted when an IN_PROGRESS workshop is completed ({@code Workshop.complete} → COMPLETED).
- * No Application layer maps this to an integration event yet (YAGNI).
+ * The Application layer maps this into {@code WorkshopCompletedIntegrationEvent} so the Attendance
+ * module can open the Reconciliation Window (ADR 0019 §4).
  */
 public record WorkshopCompleted(
         WorkshopId workshopId,

@@ -39,4 +39,12 @@ public interface RegistrationReader {
      * in-memory filtering).
      */
     List<MyRegistrationView> getByUserId(UUID userId, MyRegistrationStatus status);
+
+    /**
+     * Returns the status of the single (workshop, user) registration row, if it exists. Used by the
+     * Registration Module Facade to expose the read-only {@code isVerified} predicate to the
+     * Attendance module (SA directive) — Attendance never mutates Registration state, it only reads
+     * it through this path.
+     */
+    java.util.Optional<MyRegistrationStatus> getStatusByWorkshopAndUser(UUID workshopId, UUID userId);
 }

@@ -17,4 +17,15 @@ public interface RegistrationExposeAPI {
      * @return total number of active registrations across all specified workshops
      */
     int countActiveByWorkshopIds(List<UUID> workshopIds);
+
+    /**
+     * Read-only predicate: is the learner's registration for the workshop {@code VERIFIED}?
+     * Used by the Attendance module to gate attendance recording (SA directive) — a learner must
+     * have a verified seat before attendance is recorded. Attendance <em>only reads</em> through
+     * this path; only the Registration module mutates Registration state.
+     *
+     * @return {@code true} if the (workshop, student) registration exists and its status is
+     *         {@code VERIFIED}; {@code false} otherwise (no row, or not yet verified)
+     */
+    boolean isVerified(UUID workshopId, UUID studentId);
 }

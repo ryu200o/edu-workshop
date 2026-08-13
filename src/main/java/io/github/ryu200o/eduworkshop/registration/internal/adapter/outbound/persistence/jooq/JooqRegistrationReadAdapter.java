@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -74,6 +75,16 @@ class JooqRegistrationReadAdapter implements RegistrationReader {
         }
         return select.orderBy(REGISTRATIONS.REGISTERED_AT.desc())
                 .fetch(TO_MY_REGISTRATION_VIEW);
+    }
+
+    @Override
+    public Optional<MyRegistrationStatus> getStatusByWorkshopAndUser(UUID workshopId, UUID userId) {
+        return dsl.select(REGISTRATIONS.STATUS)
+                .from(REGISTRATIONS)
+                .where(REGISTRATIONS.WORKSHOP_ID.eq(workshopId))
+                .and(REGISTRATIONS.USER_ID.eq(userId))
+                .fetchOptional(REGISTRATIONS.STATUS)
+                .map(MyRegistrationStatus::valueOf);
     }
 
     private static Instant toInstant(OffsetDateTime odt) {
