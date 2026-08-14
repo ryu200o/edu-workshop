@@ -510,6 +510,8 @@ class RoomExceptionAdvice {
 
 ## 7. Checklist trước khi tạo PR
 
+> **Quy ước branch (xem AGENTS.md):** mỗi slice = **1 commit** trên cùng nhánh feature (không tách PR nhỏ cho từng slice). **Chỉ mở PR khi task tính năng mà nhánh đó đại diện đã hoàn thiện** (toàn bộ slices xong) → merge **1 PR duy nhất** vào `main`. Checklist dưới đây áp dụng cho PR duy nhất đó.
+
 - [ ] Mọi class trong `internal/` là package-private (handler, port impl, mapper, facade impl...), chỉ API công khai (`*ExposeAPI`, `contract/*`) là `public`.
 - [ ] Contract DTO dùng chung giữa các module nằm ở `contract/` (module root), **không** trong `internal/` (ADR 0010).
 - [ ] Module Facade (`internal/facade/`): implementation package-private, gọi trực tiếp Application Ports, không qua Command/Query Bus (ADR 0010).

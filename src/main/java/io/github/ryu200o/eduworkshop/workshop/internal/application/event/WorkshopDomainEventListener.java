@@ -1,10 +1,12 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.event;
 
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopCancelledIntegrationEvent;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopCompletedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopIntegrationEvent;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRescheduledIntegrationEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopIntegrationEventPublisher;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCancelled;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCompleted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRescheduled;
 
@@ -41,6 +43,7 @@ class WorkshopDomainEventListener {
         WorkshopIntegrationEvent integration = switch (event) {
             case WorkshopCancelled e -> map(e);
             case WorkshopRescheduled e -> map(e);
+            case WorkshopCompleted e -> map(e);
             default -> null;
         };
         if (integration == null) {
@@ -53,6 +56,13 @@ class WorkshopDomainEventListener {
 
     private static WorkshopCancelledIntegrationEvent map(WorkshopCancelled e) {
         return new WorkshopCancelledIntegrationEvent(
+                e.workshopId().value(),
+                e.occurredAt()
+        );
+    }
+
+    private static WorkshopCompletedIntegrationEvent map(WorkshopCompleted e) {
+        return new WorkshopCompletedIntegrationEvent(
                 e.workshopId().value(),
                 e.occurredAt()
         );

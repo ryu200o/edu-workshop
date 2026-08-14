@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop;
 
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRegistrationContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
+import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopSchedulingContract;
 
 import java.time.Instant;
 import java.util.List;
@@ -33,4 +34,13 @@ public interface WorkshopExposeAPI {
      * @param endTime   the maintenance window end (null = indefinite)
      */
     List<WorkshopImpactContract> getByRoomAndTimeOverlap(UUID roomId, Instant startTime, Instant endTime);
+
+    /**
+     * Read-only (no lock) lookup of a workshop's identity + lifecycle state — plus the authoritative
+     * {@code completedAt} when the workshop is {@code COMPLETED}. Used by the Attendance module:
+     * (1) the mark-attendance gate requires {@code IN_PROGRESS}; (2) the recovery path anchors the
+     * Reconciliation Window with {@code completedAt}, never with the consumer's {@code now}
+     * (ADR 0019 §4, OQ-10). Empty when the workshop does not exist.
+     */
+    Optional<WorkshopSchedulingContract> getScheduling(UUID workshopId);
 }

@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.registration.internal.facade;
 
 import io.github.ryu200o.eduworkshop.registration.RegistrationExposeAPI;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.query.MyRegistrationStatus;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationReader;
 
 import org.springframework.stereotype.Component;
@@ -25,5 +26,12 @@ class RegistrationExposeAPIImpl implements RegistrationExposeAPI {
     @Override
     public int countActiveByWorkshopIds(List<UUID> workshopIds) {
         return registrationReader.countActiveByWorkshopIds(workshopIds);
+    }
+
+    @Override
+    public boolean isVerified(UUID workshopId, UUID studentId) {
+        return registrationReader.getStatusByWorkshopAndUser(workshopId, studentId)
+                .map(MyRegistrationStatus.VERIFIED::equals)
+                .orElse(false);
     }
 }

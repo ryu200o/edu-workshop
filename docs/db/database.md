@@ -184,7 +184,63 @@ Records user ticket bookings for workshops, including check-in tracking.
 
 ---
 
-### 7. `event_publication` Table (Spring Modulith Outbox Event Registry)
+### 7. `attendance_records` & `attendance_entries` Tables (Attendance Module)
+
+Append-only Decision Ledger per learner per workshop (ADR 0019). The **master**
+(`attendance_records`) holds the materialized current state (`current_result`, `state`) plus the
+reconciliation anchor (`reconciliation_started_at` = `WorkshopCompleted.completedAt`); the
+**ledger** (`attendance_entries`) is a strictly append-only history of every decision
+(`MARK` / `APPEAL` / `AUDITOR_ADJUST` / `FINALIZE`) — never updated, never deleted. Implemented by
+Flyway `V17__create_attendance_tables.sql`.
+
+#### 7.1 `attendance_records` (master)
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `PRIMARY KEY` | Unique identifier of the attendance record. |
+| `student_id` | `UUID` | `NOT NULL`, `UNIQUE (student_id, workshop_id)` | Logical reference to the learner (no physical FK). |
+| `workshop_id` | `UUID` | `NOT NULL`, `UNIQUE (student_id, workshop_id)` | Logical reference to the workshop (no physical FK). One row per (workshop, student) pair. |
+| `current_result` | `VARCHAR(20)` | `NOT NULL`, `CHECK IN ('PRESENT','LATE','ABSENT','EXCUSED')` | Materialized current result after the latest decision. |
+| `state` | `VARCHAR(20)` | `NOT NULL`, `CHECK IN ('OPEN','RECONCILING','FINALIZED')` | Lifecycle driven by `Workshop.state` (ADR 0019 §4): `OPEN` while the workshop is `IN_PROGRESS`, `RECONCILING` after completion, `FINALIZED` (locked) when the window closes. |
+| `reconciliation_started_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Anchor of the Reconciliation Window — a snapshot of `WorkshopCompleted.completedAt` (ADR 0019 §4). `NULL` until the workshop completes. |
+| `version` | `BIGINT` | `NOT NULL DEFAULT 0` | Optimistic-locking version (ADR 0015 Strategy B); OOLF → 409. |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
+| `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
+
+**Indexes & Constraints**:
+*   `uq_student_workshop`: Unique constraint on `(student_id, workshop_id)` — race-proof backstop for the one-row-per-pair rule.
+*   `chk_attendance_records_state`: CHECK on `state`.
+*   `chk_attendance_records_result`: CHECK on `current_result`.
+*   `idx_att_records_workshop_result`: Index on `(workshop_id, current_result)` for roster queries.
+*   `idx_att_records_student`: Index on `student_id`.
+
+#### 7.2 `attendance_entries` (ledger)
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `record_id` | `UUID` | `NOT NULL`, `FK → attendance_records(id) ON DELETE RESTRICT` | Logical reference to the master record. |
+| `entry_number` | `INT` | `NOT NULL`, `PK (record_id, entry_number)` | 1-based monotonically increasing position in the ledger (never renumbered). |
+| `timestamp` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | When the decision was recorded. |
+| `actor_id` | `UUID` | `NOT NULL` | Logical reference to the acting user. |
+| `actor_role` | `VARCHAR(20)` | `NOT NULL`, `CHECK IN ('TRAINER','STUDENT','AUDITOR','SYSTEM')` | Role of the actor (ADR 0019 §8). |
+| `action` | `VARCHAR(30)` | `NOT NULL`, `CHECK IN ('MARK','APPEAL','AUDITOR_ADJUST','FINALIZE')` | The decision recorded. |
+| `result` | `VARCHAR(20)` | `NOT NULL`, `CHECK IN ('PRESENT','LATE','ABSENT','EXCUSED')` | Result state after this entry. |
+| `reason` | `TEXT` | `NULLABLE` | Justification (mandatory for `AUDITOR_ADJUST`). |
+| `evidence_reference` | `TEXT` | `NULLABLE` | URL / QR hash / camera log id / JSON ref backing the decision. |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
+
+**Indexes & Constraints**:
+*   `pk_attendance_entries`: Primary key `(record_id, entry_number)`.
+*   `fk_entries_record`: FK `ON DELETE RESTRICT` — the ledger cannot outlive the master.
+*   `idx_att_entries_record_seq`: Index on `(record_id, entry_number ASC)` for the audit trail read.
+
+> **Append-only enforcement:** enforced in the JPA mapping (insert-only, no `REMOVE` / orphan-removal)
+> and by the application never exposing UPDATE/DELETE. `FINALIZE` is the terminal ledger entry; the
+> record is then permanently locked (any later mutation → 409).
+
+---
+
+### 8. `event_publication` Table (Spring Modulith Outbox Event Registry)
 
 Transactional outbox for asynchronous event delivery. Managed by Spring Modulith's Event
 Publication Registry (ADR 0011): **one row per (event, listener)**, inserted in the **same
@@ -220,8 +276,8 @@ Each module follows a **3-step data lifecycle** for auditing and traceability:
 
 | Layer | Table(s) | Purpose | Managed By |
 |-------|----------|---------|------------|
-| **1. Live** | `rooms`, `workshops`, `registrations` | Current operational state. Volatile; can be updated at any time. | Entity (JPA) |
-| **2. History** | `room_histories`, `workshop_histories` | Immutable audit log of all changes. Stores JSONB payloads capturing what changed, when, and by whom. | Separate Entity + Repository |
+| **1. Live** | `rooms`, `workshops`, `registrations`, `attendance_records` | Current operational state. Volatile; can be updated at any time. | Entity (JPA) |
+| **2. History** | `room_histories`, `workshop_histories`, `attendance_entries` | Immutable audit log of all changes. `room_histories`/`workshop_histories` store JSONB payloads; `attendance_entries` is the append-only Decision Ledger (ADR 0019). | Separate Entity + Repository |
 | **3. Snapshot** | `workshop_snapshots` | Frozen record of post-completion state. Created once when a workshop completes. Includes `actual_attendance`, `feedback_score`. | Separate Entity + Repository |
 
 ### Key Rules
@@ -245,6 +301,9 @@ All inter-module references use **logical UUIDs** — no physical foreign keys e
 | Room History | Room | `room_histories.room_id` | None (logical UUID) |
 | Workshop History | Workshop | `workshop_histories.workshop_id` | Physical FK → `workshops(id)` ON DELETE CASCADE (same module) |
 | Workshop Snapshot | Workshop | `workshop_snapshots.workshop_id` | Physical FK → `workshops(id)` ON DELETE CASCADE (same module) |
+| Attendance | Workshop | `attendance_records.workshop_id` | None (logical UUID) |
+| Attendance | User | `attendance_records.student_id` | None (logical UUID) |
+| Attendance Entry | Attendance Record | `attendance_entries.record_id` | Physical FK → `attendance_records(id)` ON DELETE RESTRICT (same module) |
 
 This approach respects Spring Modulith's module boundaries. Each module owns and manages its own tables independently.
 

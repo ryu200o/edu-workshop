@@ -22,7 +22,8 @@ MUST follow when working in this repository. Read it before making changes.
 
 - NO large/long-lived feature branches. Apply **Short-lived branches**.
 - Slice features finely following the order: **Domain -> DB Adapter -> Expose API**.
-- Open **small, continuous PRs** into `main`; merge frequently.
+- **Each slice = one commit** on the same feature branch (no small per-slice PRs). Every commit must leave the build/tests green before the next one.
+- **Open a PR only when the feature task that the branch represents is complete** (all slices done) → merge that single PR into `main`.
 
 ## Package Rules
 
@@ -140,6 +141,16 @@ Consult these before designing or coding. They are the source of truth:
   Occupancy Window `[startTime - bufferBefore, endTime]`; overlap via existing
   `loadPublishedAndPlannedOverlappingWithLock` superset + in-memory filter; storage ceiling =
   DB `CHECK (buffer_before_minutes BETWEEN 0 AND 300)`.
+- `docs/architecture/adr/0019-attendance-record-append-only-ledger.md` — **Accepted (REVISED v2)**:
+  Attendance Record = append-only Decision Ledger. **4 semantics cốt lõi**: (1) `Workshop.state` là
+  authority cho Attendance lifecycle (không suy diễn từ `startTime`/`endTime`); (2)
+  `WorkshopCompleted.completedAt` là temporal anchor cho Reconciliation Window; (3) Student Appeal
+  **không** đổi `currentResult` (chỉ request/evidence — chỉ `auditorAdjust()` là authoritative
+  mutation); (4) Reconciliation Window là **Operational Setting** (default 24h), không phải Domain
+  constant. Master `attendance_records` (`current_result` = materialized current state, `version` cho
+  optimistic lock → 409) + Ledger `attendance_entries` (append-only, FK RESTRICT, khóa hợp phần
+  `(record_id, entry_number)`). `beginReconciliation(completedAt)` qua `WorkshopCompletedIntegrationEvent`
+  (outbox ADR 0011); role từ authenticated principal (không `X-Actor-Role`), state matrix §9.
 - `docs/architecture/diagrams/` — sequence/flow diagrams (Mermaid).
 - `docs/db/database.md` — authoritative database schema & design rules.
 - `.llm/progress_log.md` — running history of completed work (local, git-ignored).
