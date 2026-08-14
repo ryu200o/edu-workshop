@@ -1,5 +1,6 @@
 package io.github.ryu200o.eduworkshop.workshop;
 
+import io.github.ryu200o.eduworkshop.workshop.contract.AttendanceStatusContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRegistrationContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopSchedulingContract;
@@ -43,4 +44,16 @@ public interface WorkshopExposeAPI {
      * (ADR 0019 §4, OQ-10). Empty when the workshop does not exist.
      */
     Optional<WorkshopSchedulingContract> getScheduling(UUID workshopId);
+
+    /**
+     * Evaluates a QR self check-in (Epic 3B): decides, as the Attendance Policy Owner
+     * (ADR 0019 §13.1), whether a learner's check-in at {@code checkedInAt} counts as
+     * {@code ATTENDED} or {@code LATE}. Read-only (no lock), computed at the Application edge via
+     * {@code WorkshopReader} against the workshop's {@code startTime} and the Workshop-side
+     * operational setting {@code app.workshop.checkin.late-after-minutes} (OQ-3B-5). The Attendance
+     * module only consumes the result — it never owns the policy. Empty when the workshop does not
+     * exist. The {@code IN_PROGRESS} gate is <em>not</em> part of this evaluation: it is enforced by
+     * the Attendance handler through {@link #getScheduling} (state authority, ADR 0019 §3).
+     */
+    Optional<AttendanceStatusContract> evaluateCheckIn(UUID workshopId, Instant checkedInAt);
 }
