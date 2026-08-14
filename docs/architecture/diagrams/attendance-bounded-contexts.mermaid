@@ -1,0 +1,39 @@
+sequenceDiagram
+    participant S as Student
+    participant R as Registration (verify vé + roster)
+    participant W as Workshop (Attendance Policy Owner)
+    participant A as Attendance (AttendanceRecord + Ledger)
+    participant T as Trainer
+    participant Au as Auditor
+
+    %% Bounded Context: Registration = "Student có quyền tham dự?", Workshop = "ATTENDED hay LATE?",
+    %% Attendance = "Ghi nhận kết quả & quản lý Attendance Record". Attendance không sở hữu
+    %% Attendance Policy, không quản lý roster, không verify vé.
+
+    Note over R: Roster thuộc Registration (không phải Attendance)
+
+    %% Epic 3A — Trainer-driven (đã thi công)
+    T->>R: Đọc roster (học viên có quyền tham dự)
+    R-->>T: Danh sách học viên (VERIFIED)
+    T->>W: Workshop.state == IN_PROGRESS? (authority, không suy luận time)
+    W-->>T: Yes (IN_PROGRESS)
+    T->>A: MarkAttendanceCommand (Batch of Attendance Modifications)
+    A->>R: isVerified(ws, stu) — verify ALL modified students (fail-fast, atomic)
+    R-->>A: OK (tất cả đều VERIFIED)
+    A->>A: markAttendance() → append MARK entry, flip currentResult
+    A-->>T: processedCount
+
+    %% Epic 3B — QR Self Check-in (tương lai, không đổi Aggregate)
+    S->>S: Scan QR
+    S->>R: QR verify vé
+    R-->>S: Hợp lệ (VERIFIED)
+    S->>W: check-in request (Workshop evaluate)
+    W->>W: evaluateCheckIn() → ATTENDED | LATE (Attendance Policy Owner)
+    W-->>A: AttendanceStatus (ATTENDED/LATE)
+    A->>A: markAttendance() → append MARK entry (cùng entry như Epic 3A)
+
+    %% Reconciliation
+    S->>A: submitAppeal(reason, evidence) — KHÔNG đổi currentResult
+    Au->>A: auditorAdjust() — authoritative, flip currentResult
+    A->>A: WorkshopCompletedIntegrationEvent → beginReconciliation(completedAt)
+    A->>A: Window hết hạn → finalizeRecord() → FINALIZED (locked)

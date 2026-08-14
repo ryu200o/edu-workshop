@@ -1,7 +1,7 @@
 # ADR 0019: Attendance Record Aggregate & Append-Only Decision Ledger
 
-- **Trạng thái**: Accepted — REVISED v2 (phán quyết 13 OQ, ngày 13/08/2026, Kỹ sư trưởng)
-- **Ngày chốt**: 12/08/2026 (v2: 13/08/2026)
+- **Trạng thái**: Accepted — REVISED v2 (phán quyết 13 OQ, ngày 13/08/2026, Kỹ sư trưởng) + **làm rõ ranh giới Bounded Context** (Domain Discovery Round 2, ngày 14/08/2026 — Business–BA–SA)
+- **Ngày chốt**: 12/08/2026 (v2: 13/08/2026; Round 2: 14/08/2026)
 - **Tác giả**: Solution Architect & Kỹ sư trưởng
 - **Ngữ cảnh**: Epic 3 - Attendance & Reconciliation Management
 
@@ -41,7 +41,18 @@ Nghiệp vụ điểm danh (Attendance) yêu cầu ghi nhận sự có mặt c�
 
 ## 3. Quyền Sở Hữu Lifecycle — Workshop State Authority
 
-> `Attendance` **không tự suy diễn Workshop lifecycle từ `startTime` / `endTime`**.
+> `Attendance` **không tự suy luận Workshop lifecycle từ thời gian**. Business xác nhận (Round 2):
+
+```
+Attendance KHÔNG được suy luận:
+
+    now >= startTime
+    now <= endTime
+```
+
+Attendance chỉ dựa vào **`Workshop.state`** (`IN_PROGRESS` → `COMPLETED`) làm authority. Riêng
+Reconciliation Window vẫn được anchor bằng **`WorkshopCompleted.completedAt`** (mục 4) — đúng thiết kế
+hiện tại, không đổi.
 
 Nguồn sự thật duy nhất cho phase của Attendance là lifecycle **state/event từ Workshop**:
 
@@ -154,11 +165,16 @@ who · when · what · why · evidence · result
 
 > **Appeal KHÔNG phải Attendance Adjustment** — chỉ là request/evidence chờ Auditor.
 
+> **Nguồn tạo Attendance (Round 2):** Trainer KHÔNG còn là actor duy nhất tạo Attendance. Theo Business,
+> `TRAINER` = **manual attendance management**, `STUDENT` = **QR self check-in** (use case mới — Epic 3B),
+> `AUDITOR` = **reconciliation adjustment**. State Matrix trên vẫn giữ nguyên về *authorization theo phase*;
+> sự xuất hiện của QR check-in chỉ bổ sung một *nguồn MARK* mới, không thay đổi Aggregate (mục 13, 14).
+
 ---
 
 ## 10. Hợp Đồng Hành Vi (Behavior Contract — v2 hiệu chỉnh)
 
-- `markAttendance()`: Trainer ghi nhận/sửa kết quả **khi workshop đang IN_PROGRESS** (state OPEN). Append MARK entry, flip `currentResult`.
+- `markAttendance()`: ghi nhận/sửa kết quả **khi workshop đang IN_PROGRESS** (state OPEN). Append MARK entry, flip `currentResult`. Nguồn MARK có thể là Trainer (manual, Epic 3A) hoặc QR self check-in (Epic 3B) — entry giống nhau, aggregate không phân biệt nguồn.
 - `submitAppeal()`: Student nộp khiếu nại kèm bằng chứng **trong Reconciliation Window** (state RECONCILING). Append APPEAL entry, **KHÔNG đổi `currentResult`**; chuyển/cập nhật trạng thái cho Auditor.
 - `auditorAdjust()`: Auditor chốt điều chỉnh (bắt buộc kèm reason). Append AUDITOR_ADJUST entry → **chỉ đây mới đổi `currentResult`**.
 - `finalizeRecord()`: System đóng sổ **sau khi deadline hết hạn**. Append FINALIZE entry → state FINALIZED, khóa mọi mutation thông thường.
@@ -187,3 +203,90 @@ who · when · what · why · evidence · result
 - `attendance_entries` phình to theo thời gian (chấp nhận; partition theo `created_at` ở tương lai).
 - Collaboration mới: Workshop phải phát hành `WorkshopCompletedIntegrationEvent` (thêm contract + publish case trong `WorkshopDomainEventListener`).
 - Reconciliation Window là operational setting → thay đổi ảnh hưởng deadline nhưng không đụng domain (consistent với ADR 0018 guardrail).
+
+---
+
+## 13. Bounded Context Responsibilities (làm rõ Round 2)
+
+Business–BA–SA chốt ranh giới trách nhiệm giữa 3 module. Attendance KHÔNG đảm nhiệm trách nhiệm của
+2 module kia:
+
+```
+Registration   → "Student có quyền tham dự?"  (verify vé, quản lý roster)
+Workshop       → "Check-in lúc này là ATTENDED hay LATE?"  (Attendance Policy)
+Attendance     → "Ghi nhận kết quả và quản lý Attendance Record"
+```
+
+### 13.1. Attendance không sở hữu bất kỳ Attendance Policy nào
+
+> **Late là quy định của từng Workshop (Planner cấu hình), không phải quy định chung của hệ thống
+> Attendance.**
+
+Attendance **không sở hữu** `Late Threshold`, `Percentage`, `Grace Rule`, v.v. **Workshop là Policy
+Owner.** Attendance chỉ *lưu kết quả đã được Workshop xác định* (ATTENDED / LATE …) vào
+`AttendanceRecord`. Nếu sau này cần phán quyết thời điểm check-in, trách nhiệm thuộc về Workshop
+(`evaluateCheckIn()` — mục 15.1), không thuộc Attendance.
+
+### 13.2. Attendance không quản lý roster
+
+Roster (danh sách học viên của workshop) **thuộc Registration**. Attendance KHÔNG sở hữu danh sách
+học viên. Luồng vận hành đúng:
+
+```
+Registration → Roster → Trainer UI → Trainer chỉnh sửa → Attendance Command
+```
+
+Attendance chỉ quản lý **Attendance Record** (một record cho mỗi học viên được ghi nhận).
+
+### 13.3. Attendance không verify vé
+
+> **Attendance không verify vé. Registration là source of truth.**
+
+Chỉ học viên đã Verify vé (`Registration.VERIFIED`) mới được hệ thống Attendance ghi nhận (mục 14).
+Attendance chỉ **đọc** trạng thái verify qua `RegistrationExposeAPI.isVerified(...)` — không có bất kỳ
+logic verify nào trong Attendance.
+
+---
+
+## 14. Registration VERIFIED Gate
+
+- Chỉ học viên có vé **`VERIFIED`** (Registration) mới được Attendance ghi nhận. Đúng theo business;
+  **không thay đổi** so với OQ-14.
+- Attendance không verify vé — **Registration là source of truth**; Attendance chỉ đọc qua
+  `RegistrationExposeAPI.isVerified(workshopId, studentId)` (read-only, không write).
+- Gate là **global rule** → Application orchestration (ADR 0005), aggregate `AttendanceRecord` thuần —
+  không biết về Registration.
+- Fail-fast, atomic cả batch: nếu bất kỳ student nào trong batch chưa VERIFIED → reject toàn bộ.
+
+---
+
+## 15. Future Evolution (QR Self Check-in — không đổi Aggregate)
+
+Business xác nhận Trainer **không còn là actor duy nhất** tạo Attendance. Workflow tương lai:
+
+```
+Student → Scan QR → Registration verify → Workshop evaluate → Attendance ghi nhận
+→ Trainer chỉnh sửa nếu cần → Auditor đối soát → Finalize
+```
+
+- **Epic 3A** — Trainer-driven attendance (hiện tại, đã thi công).
+- **Epic 3B** — QR Self Check-in (use case mới, chưa thi công).
+- **KHÔNG thay đổi Aggregate.** KHÔNG refactor `AttendanceRecord`. Chỉ bổ sung use case mới phía trên
+  nguồn MARK đã có.
+- **KHÔNG cần**: Event Sourcing, QR Aggregate, Attendance Session Aggregate. `AttendanceRecord` vẫn là
+  aggregate duy nhất.
+
+### 15.1. Future Integration Workshop ↔ Attendance
+
+```
+Future Work — TODO (chưa triển khai):
+
+WorkshopExposeAPI
+    └── evaluateAttendance()
+    └── evaluateCheckIn()
+        └── AttendanceStatus → ATTENDED | LATE
+```
+
+Đây là task tương lai: Workshop sở hữu Attendance Policy và cung cấp quyết định ATTENDED/LATE cho
+Attendance ghi nhận. Hiện tại chưa triển khai; khi làm Epic 3B, Workshop cung cấp evaluation qua
+ExposeAPI, Attendance chỉ ghi kết quả đã được Workshop xác định.
