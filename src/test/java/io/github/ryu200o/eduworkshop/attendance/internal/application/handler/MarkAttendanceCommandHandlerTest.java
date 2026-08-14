@@ -143,6 +143,23 @@ class MarkAttendanceCommandHandlerTest {
     }
 
     @Test
+    void persistenceFailureMidBatch_abortsWholeBatchWithoutPublishing() {
+        when(workshopExposeApi.getScheduling(WORKSHOP_ID)).thenReturn(Optional.of(inProgressWorkshop()));
+        when(registrationExposeApi.isVerified(WORKSHOP_ID, STUDENT_1)).thenReturn(true);
+        when(registrationExposeApi.isVerified(WORKSHOP_ID, STUDENT_2)).thenReturn(true);
+        when(attendanceRecordRepository.loadByWorkshopAndStudent(WORKSHOP_ID, STUDENT_1))
+                .thenReturn(Optional.empty());
+        when(attendanceRecordRepository.save(any()))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("boom"));
+
+        assertThatThrownBy(() -> handler().handle(command(TRAINER)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+        // Nothing was published — the whole batch rolled back (ADR 0019 §4 atomicity).
+        verify(attendanceDomainEventPublisher, never()).publish(any());
+    }
+
+    @Test
     void rejectsWhenWorkshopNotFound() {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID)).thenReturn(Optional.empty());
 

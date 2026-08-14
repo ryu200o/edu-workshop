@@ -34,8 +34,19 @@ public interface AttendanceRecordRepository {
     Optional<AttendanceRecord> loadByWorkshopAndStudent(UUID workshopId, UUID studentId);
 
     /**
-     * Loads every non-finalized record of a workshop — the completion-event handler needs exactly
-     * these to open the Reconciliation Window (ADR 0019 §4).
+     * Loads only the {@code OPEN} records of a workshop — exactly the set the completion-event
+     * handler needs to open the Reconciliation Window ({@code OPEN → RECONCILING}, ADR 0019 §4).
+     * Narrower than {@link #loadNonFinalizedByWorkshop}: records already {@code RECONCILING} would
+     * no-op in {@code beginReconciliation}, so this query matches the domain intent. Replay-safe:
+     * after the first delivery every record is {@code RECONCILING}, so a re-delivered event loads
+     * nothing.
+     */
+    List<AttendanceRecord> loadOpenByWorkshop(UUID workshopId);
+
+    /**
+     * Loads every non-finalized ({@code OPEN} or {@code RECONCILING}) record of a workshop — used by
+     * the roster-finalization handler, which needs both states: {@code RECONCILING} to finalize and
+     * {@code OPEN} as the recovery path (lost completion event).
      */
     List<AttendanceRecord> loadNonFinalizedByWorkshop(UUID workshopId);
 

@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.attendance.internal.adapter.inbound.http;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.RegistrationNotVerifiedException;
+import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotCompletedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotInSessionException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceDomainException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowExceededException;
@@ -38,6 +39,12 @@ class AttendanceExceptionAdvice {
     @ExceptionHandler(WorkshopNotInSessionException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     ProblemDetail handleNotInSession(WorkshopNotInSessionException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(WorkshopNotCompletedException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ProblemDetail handleNotCompleted(WorkshopNotCompletedException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 

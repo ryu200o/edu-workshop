@@ -15,6 +15,7 @@ import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Attendance
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceState;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.StudentId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AttendanceAppealSubmitted;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.MissingReconciliationAnchorException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowExceededException;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -101,8 +103,39 @@ class SubmitAppealCommandHandlerTest {
         clock = Clock.fixed(late, ZoneOffset.UTC);
 
         assertThatThrownBy(() -> handler().handle(
-                new SubmitAppealCommand(RECORD_ID, "late appeal", null, STUDENT)))
+                new SubmitAppealCommand(RECORD_ID, "late appeal", "evidence://img-2", STUDENT)))
                 .isInstanceOf(ReconciliationWindowExceededException.class);
+
+        verify(attendanceRecordRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsMissingEvidenceReference() {
+        AttendanceRecord record = reconcilingRecord(NOW.minusSeconds(3600));
+        when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
+
+        assertThatThrownBy(() -> handler().handle(
+                new SubmitAppealCommand(RECORD_ID, "reason without evidence", null, STUDENT)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("evidenceReference");
+
+        verify(attendanceRecordRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsReconcilingRecordWithMissingAnchor() {
+        AttendanceRecord record = AttendanceRecord.reconstruct(
+                AttendanceRecordId.of(RECORD_ID), StudentId.of(STUDENT_ID), UUID.randomUUID(),
+                null, AttendanceResult.PRESENT, AttendanceState.RECONCILING,
+                List.of(new io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceEntry(
+                        1, NOW, STUDENT, io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceAction.MARK,
+                        AttendanceResult.PRESENT, null, null)),
+                NOW, NOW);
+        when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
+
+        assertThatThrownBy(() -> handler().handle(
+                new SubmitAppealCommand(RECORD_ID, "reason", "evidence://img-3", STUDENT)))
+                .isInstanceOf(MissingReconciliationAnchorException.class);
 
         verify(attendanceRecordRepository, never()).save(any());
     }

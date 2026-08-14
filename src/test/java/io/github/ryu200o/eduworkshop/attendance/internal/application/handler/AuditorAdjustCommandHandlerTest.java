@@ -78,7 +78,7 @@ class AuditorAdjustCommandHandlerTest {
 
         AuditorAdjustCommand.Result result = handler().handle(
                 new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "student marked absent per CCTV",
-                        null, AUDITOR));
+                        "evidence://cam-2", AUDITOR));
 
         assertThat(result.currentResult()).isEqualTo(AttendanceResult.ABSENT);
         assertThat(result.state()).isEqualTo(AttendanceState.RECONCILING.name());
@@ -96,6 +96,19 @@ class AuditorAdjustCommandHandlerTest {
         assertThatThrownBy(() -> handler().handle(
                 new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "  ", null, AUDITOR)))
                 .isInstanceOf(IllegalArgumentException.class);
+
+        verify(attendanceRecordRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsWhenEvidenceMissing() {
+        AttendanceRecord record = reconcilingRecord();
+        when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
+
+        assertThatThrownBy(() -> handler().handle(
+                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "reason", null, AUDITOR)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("evidenceReference");
 
         verify(attendanceRecordRepository, never()).save(any());
     }

@@ -13,6 +13,8 @@ interface AttendanceRecordJpaRepository extends JpaRepository<AttendanceRecordJp
 
     List<AttendanceRecordJpaEntity> findByWorkshopIdAndStudentId(UUID workshopId, UUID studentId);
 
+    List<AttendanceRecordJpaEntity> findByWorkshopIdAndState(UUID workshopId, String state);
+
     List<AttendanceRecordJpaEntity> findByWorkshopIdAndStateNot(UUID workshopId, String state);
 
     List<AttendanceRecordJpaEntity> findByWorkshopId(UUID workshopId);

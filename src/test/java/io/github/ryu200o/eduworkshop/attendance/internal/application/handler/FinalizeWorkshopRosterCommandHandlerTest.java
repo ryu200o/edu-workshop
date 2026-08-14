@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
+import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotCompletedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.FinalizeWorkshopRosterCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.parameter.AttendanceReconciliationParameters;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
@@ -9,12 +10,15 @@ import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbou
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceEntry;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceAction;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecordId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceResult;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceState;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.StudentId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AttendanceRecordFinalized;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.MissingReconciliationAnchorException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowNotElapsedException;
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopSchedulingContract;
@@ -144,6 +148,40 @@ class FinalizeWorkshopRosterCommandHandlerTest {
                 .isInstanceOf(ReferencedWorkshopNotFoundException.class);
 
         verifyNoInteractions(attendanceRecordRepository, attendanceDomainEventPublisher);
+    }
+
+    @Test
+    void rejectsWhenWorkshopNotCompleted() {
+        Instant scheduled = NOW.minusSeconds(7200);
+        when(workshopExposeApi.getScheduling(WORKSHOP_ID))
+                .thenReturn(Optional.of(new WorkshopSchedulingContract(
+                        WORKSHOP_ID, WorkshopStateContract.PUBLISHED, scheduled)));
+
+        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM)))
+                .isInstanceOf(WorkshopNotCompletedException.class)
+                .hasMessageContaining("not completed");
+
+        verifyNoInteractions(attendanceRecordRepository, attendanceDomainEventPublisher);
+    }
+
+    @Test
+    void rejectsReconcilingRecordWithMissingAnchor() {
+        Instant completedAt = NOW.minusSeconds(25 * 3600);
+        AttendanceRecord corrupted = AttendanceRecord.reconstruct(
+                AttendanceRecordId.of(UUID.randomUUID()), StudentId.of(UUID.randomUUID()), WORKSHOP_ID,
+                null, AttendanceResult.PRESENT, AttendanceState.RECONCILING,
+                List.of(new AttendanceEntry(1, completedAt, SYSTEM, AttendanceAction.MARK,
+                        AttendanceResult.PRESENT, null, null)),
+                completedAt, completedAt);
+        when(workshopExposeApi.getScheduling(WORKSHOP_ID))
+                .thenReturn(Optional.of(new WorkshopSchedulingContract(
+                        WORKSHOP_ID, WorkshopStateContract.COMPLETED, completedAt)));
+        when(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).thenReturn(List.of(corrupted));
+
+        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM)))
+                .isInstanceOf(MissingReconciliationAnchorException.class);
+
+        verify(attendanceRecordRepository, never()).saveAll(any());
     }
 
     @Test

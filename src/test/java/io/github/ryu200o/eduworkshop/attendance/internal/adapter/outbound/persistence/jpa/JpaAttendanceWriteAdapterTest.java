@@ -107,6 +107,26 @@ class JpaAttendanceWriteAdapterTest {
     }
 
     @Test
+    void loadOpenByWorkshop_returnsOnlyOpenRecords() {
+        AttendanceRecord open = newRecord(UUID.randomUUID());
+        attendanceRecordRepository.save(open);
+
+        AttendanceRecord reconciling = newRecord(UUID.randomUUID());
+        reconciling.beginReconciliation(NOW, NOW);
+        attendanceRecordRepository.save(reconciling);
+
+        AttendanceRecord finalized = newRecord(UUID.randomUUID());
+        finalized.beginReconciliation(NOW, NOW);
+        finalized.finalizeRecord(TEACHER, NOW.plusSeconds(7200), NOW.minusSeconds(1));
+        attendanceRecordRepository.save(finalized);
+
+        List<AttendanceRecord> openRecords = attendanceRecordRepository.loadOpenByWorkshop(WORKSHOP_ID);
+        assertThat(openRecords).hasSize(1);
+        assertThat(openRecords.getFirst().id()).isEqualTo(open.id());
+        assertThat(openRecords.getFirst().state()).isEqualTo(AttendanceState.OPEN);
+    }
+
+    @Test
     void loadNonFinalizedByWorkshop_excludesFinalizedOnly() {
         AttendanceRecord open = newRecord(UUID.randomUUID());
         attendanceRecordRepository.save(open);

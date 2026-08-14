@@ -92,6 +92,13 @@ class JpaAttendanceWriteAdapter implements AttendanceRecordRepository {
     }
 
     @Override
+    public List<AttendanceRecord> loadOpenByWorkshop(UUID workshopId) {
+        return repository.findByWorkshopIdAndState(workshopId, AttendanceState.OPEN.name()).stream()
+                .map(JpaAttendanceWriteAdapter::toAttendanceRecord)
+                .toList();
+    }
+
+    @Override
     public List<AttendanceRecord> loadNonFinalizedByWorkshop(UUID workshopId) {
         return repository.findByWorkshopIdAndStateNot(workshopId, AttendanceState.FINALIZED.name()).stream()
                 .map(JpaAttendanceWriteAdapter::toAttendanceRecord)

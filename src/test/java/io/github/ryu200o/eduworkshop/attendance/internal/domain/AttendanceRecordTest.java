@@ -194,7 +194,7 @@ class AttendanceRecordTest {
         AttendanceRecord record = reconcilingRecord(NOW, NOW);
         Instant deadline = NOW.plus(WINDOW);
 
-        assertThatThrownBy(() -> record.submitAppeal("appeal", null, STUDENT_ACTOR,
+        assertThatThrownBy(() -> record.submitAppeal("appeal", "evidence://img-1", STUDENT_ACTOR,
                 deadline, deadline.plusSeconds(1)))
                 .isInstanceOf(ReconciliationWindowExceededException.class);
     }
@@ -204,9 +204,22 @@ class AttendanceRecordTest {
         AttendanceRecord record = reconcilingRecord(NOW, NOW);
         Instant deadline = NOW.plus(WINDOW);
 
-        record.submitAppeal("appeal", null, STUDENT_ACTOR, deadline, deadline);
+        record.submitAppeal("appeal", "evidence://img-1", STUDENT_ACTOR, deadline, deadline);
 
         assertThat(record.entries()).hasSize(2);
+    }
+
+    @Test
+    void submitAppeal_requiresMandatoryEvidence() {
+        AttendanceRecord record = reconcilingRecord(NOW, NOW);
+        Instant deadline = NOW.plus(WINDOW);
+
+        assertThatThrownBy(() -> record.submitAppeal("appeal", null, STUDENT_ACTOR, deadline, NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("evidenceReference");
+        assertThatThrownBy(() -> record.submitAppeal("appeal", "   ", STUDENT_ACTOR, deadline, NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("evidenceReference");
     }
 
     // ----------------------------------------------------------------
@@ -237,8 +250,22 @@ class AttendanceRecordTest {
         AttendanceRecord record = reconcilingRecord(NOW, NOW);
 
         assertThatThrownBy(() -> record.auditorAdjust(AttendanceResult.PRESENT, "  ",
-                null, AUDITOR, NOW))
+                "photo://entry-cam-42", AUDITOR, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void auditorAdjust_requiresMandatoryEvidence() {
+        AttendanceRecord record = reconcilingRecord(NOW, NOW);
+
+        assertThatThrownBy(() -> record.auditorAdjust(AttendanceResult.PRESENT, "reason", null,
+                AUDITOR, NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("evidenceReference");
+        assertThatThrownBy(() -> record.auditorAdjust(AttendanceResult.PRESENT, "reason", "   ",
+                AUDITOR, NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("evidenceReference");
     }
 
     @Test
@@ -385,9 +412,14 @@ class AttendanceRecordTest {
                                 AttendanceResult.LATE, "correction", null)),
                 NOW, NOW);
 
+        // Rehydration must NOT replay history as domain events — only the single NEW event
+        // produced by the subsequent markAttendance is recorded (ADR 0019 §6 / reviewer req.).
+        assertThat(rehydrated.recordedEvents()).isEmpty();
+
         rehydrated.markAttendance(AttendanceResult.ABSENT, null, TRAINER, NOW.plusSeconds(1));
 
         assertThat(rehydrated.entries()).hasSize(3);
         assertThat(rehydrated.entries().get(2).entryNumber()).isEqualTo(3);
+        assertThat(rehydrated.recordedEvents()).hasSize(1);
     }
 }

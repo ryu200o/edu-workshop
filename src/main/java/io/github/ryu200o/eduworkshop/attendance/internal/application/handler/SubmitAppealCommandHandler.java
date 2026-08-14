@@ -9,7 +9,9 @@ import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbou
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecordId;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceState;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AttendanceDomainEvent;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.MissingReconciliationAnchorException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 
 import org.springframework.stereotype.Component;
@@ -61,9 +63,16 @@ class SubmitAppealCommandHandler implements CommandHandler<SubmitAppealCommand, 
                 .orElseThrow(() -> new AttendanceNotFoundException(command.recordId()));
 
         // The deadline is only meaningful once the window is open (reconciliationStartedAt set).
-        // For a record still OPEN the domain raises AttendanceStateException (409) before any
-        // deadline arithmetic is reached.
+        // A RECONCILING record must carry the anchor — beginReconciliation always snapshots
+        // WorkshopCompleted.completedAt (ADR 0019 §4), so a null anchor is corrupted state and we
+        // fail fast with a clear invariant exception instead of passing a null deadline downstream.
+        // (An OPEN record has no anchor yet; the domain raises AttendanceStateException for it.)
+        AttendanceRecordId id = record.id();
+        AttendanceState state = record.state();
         Instant startedAt = record.reconciliationStartedAt();
+        if (state == AttendanceState.RECONCILING && startedAt == null) {
+            throw new MissingReconciliationAnchorException(id);
+        }
         Instant deadline = startedAt != null
                 ? startedAt.plus(Duration.ofMinutes(reconciliationParameters.windowMinutes()))
                 : null;

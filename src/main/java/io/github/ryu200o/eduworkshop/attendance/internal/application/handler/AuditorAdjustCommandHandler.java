@@ -23,8 +23,8 @@ import java.util.List;
  * authoritative mutation of {@code currentResult} in that window (ADR 0019 §5).
  *
  * <p>Application-layer flow (ADR 0005): load the record (404 when missing) → authorize the actor as
- * {@code AUDITOR} → delegate {@code auditorAdjust} (justification is mandatory → 400) → persist and
- * publish.</p>
+ * {@code AUDITOR} → delegate {@code auditorAdjust} (reason + evidenceReference both mandatory → 400)
+ * → persist and publish.</p>
  */
 @Component
 class AuditorAdjustCommandHandler implements CommandHandler<AuditorAdjustCommand, AuditorAdjustCommand.Result> {

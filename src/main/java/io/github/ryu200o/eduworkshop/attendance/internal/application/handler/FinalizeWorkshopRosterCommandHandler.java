@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
+import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotCompletedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.FinalizeWorkshopRosterCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.parameter.AttendanceReconciliationParameters;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
@@ -10,6 +11,7 @@ import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceState;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AttendanceDomainEvent;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.MissingReconciliationAnchorException;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopSchedulingContract;
@@ -69,7 +71,15 @@ class FinalizeWorkshopRosterCommandHandler
 
         WorkshopSchedulingContract workshop = workshopExposeApi.getScheduling(workshopId)
                 .orElseThrow(() -> new ReferencedWorkshopNotFoundException(workshopId));
-        Instant completedAt = workshop.state() == WorkshopStateContract.COMPLETED ? workshop.completedAt() : null;
+
+        // Fail fast: this system-initiated flow must only run once the workshop is COMPLETED. The
+        // Reconciliation Window is anchored to WorkshopCompleted.completedAt (ADR 0019 §4), so a
+        // non-COMPLETED workshop is a scheduling/ordering error — an explicit guard avoids an OPEN
+        // record blowing up inside the domain with a confusing state error.
+        if (workshop.state() != WorkshopStateContract.COMPLETED) {
+            throw new WorkshopNotCompletedException(workshopId, workshop.state().name());
+        }
+        Instant completedAt = workshop.completedAt();
 
         List<AttendanceRecord> records = attendanceRecordRepository.loadNonFinalizedByWorkshop(workshopId);
 
@@ -78,14 +88,18 @@ class FinalizeWorkshopRosterCommandHandler
         for (AttendanceRecord record : records) {
             // Recovery: an OPEN record whose workshop is COMPLETED was never reconciled (event lost).
             // Anchor the window to the authoritative completedAt — never `now` (OQ-4 / OQ-10).
-            if (record.state() == AttendanceState.OPEN && completedAt != null) {
+            if (record.state() == AttendanceState.OPEN) {
                 record.beginReconciliation(completedAt, now);
             }
 
+            // Invariant (ADR 0019 §4): a RECONCILING record must carry the anchor, since
+            // beginReconciliation always snapshots completedAt. A null anchor is corrupted state —
+            // fail fast with a clear exception instead of silently passing a null deadline.
             Instant startedAt = record.reconciliationStartedAt();
-            Instant deadline = startedAt != null
-                    ? startedAt.plus(Duration.ofMinutes(reconciliationParameters.windowMinutes()))
-                    : null;
+            if (record.state() == AttendanceState.RECONCILING && startedAt == null) {
+                throw new MissingReconciliationAnchorException(record.id());
+            }
+            Instant deadline = startedAt.plus(Duration.ofMinutes(reconciliationParameters.windowMinutes()));
             record.finalizeRecord(command.actor(), now, deadline);
             finalized++;
 

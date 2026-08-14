@@ -7,9 +7,10 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 import java.util.UUID;
 
 /**
- * Auditor-initiated adjustment of an attendance record during the Reconciliation Window — the only
- * authoritative mutation of {@code currentResult} in that window (ADR 0019 §5). A justification is
- * mandatory.
+ * Auditor-initiated authoritative adjustment of an attendance record during the Reconciliation Window
+ * — the only mutation of {@code currentResult} in that window (ADR 0019 §5). This is not a generic
+ * edit: it always carries a {@code reason} (justification) and an {@code evidenceReference}
+ * (supporting evidence), both mandatory. Violation → {@link IllegalArgumentException} → HTTP 400.
  */
 public record AuditorAdjustCommand(
         UUID recordId,

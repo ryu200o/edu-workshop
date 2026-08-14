@@ -20,13 +20,15 @@ import java.util.List;
 
 /**
  * Consumes {@link WorkshopCompletedIntegrationEvent} (delivered via the transactional outbox) and
- * opens the Reconciliation Window on every non-finalized attendance record of the completed
- * workshop ({@code OPEN → RECONCILING}), anchoring {@code reconciliationStartedAt} to the event's
+ * opens the Reconciliation Window on every {@code OPEN} attendance record of the completed workshop
+ * ({@code OPEN → RECONCILING}), anchoring {@code reconciliationStartedAt} to the event's
  * authoritative {@code completedAt} (ADR 0019 §4).
  *
- * <p><strong>Idempotent (outbox replay-safe):</strong> {@code beginReconciliation} is a no-op on a
- * record already {@code RECONCILING} or {@code FINALIZED}, so a re-delivered event is safe (a
- * record finalized between the first and second delivery stays untouched).</p>
+ * <p><strong>Idempotent (outbox replay-safe):</strong> only {@code OPEN} records are loaded
+ * ({@link AttendanceRecordRepository#loadOpenByWorkshop}); after the first delivery every record is
+ * {@code RECONCILING}, so a re-delivered event loads nothing — the replay is a natural no-op. The
+ * aggregate's {@code beginReconciliation} (no-op on non-OPEN) and the optimistic lock remain the
+ * backstop for any race between load and mutation.</p>
  *
  * <p>Cross-module collaboration per ADR 0010 / ADR 0011: Attendance reacts to the Workshop module's
  * integration event — never a direct call. Runs {@code AFTER_COMMIT} in a new transaction
@@ -54,13 +56,13 @@ public class AttendanceWorkshopCompletedEventHandler {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(WorkshopCompletedIntegrationEvent event) {
         Instant now = Instant.now(clock);
-        List<AttendanceRecord> records = attendanceRecordRepository.loadNonFinalizedByWorkshop(event.workshopId());
+        List<AttendanceRecord> records = attendanceRecordRepository.loadOpenByWorkshop(event.workshopId());
 
         if (records.isEmpty()) {
             return;
         }
 
-        log.info("Workshop {} completed at {} — opening reconciliation on {} non-finalized record(s)",
+        log.info("Workshop {} completed at {} — opening reconciliation on {} OPEN record(s)",
                 event.workshopId(), event.completedAt(), records.size());
 
         // 1. Domain State Mutation & Event Collection (beginReconciliation records no event — the

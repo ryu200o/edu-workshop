@@ -163,6 +163,9 @@ public class AttendanceRecord {
         guardFinalized();
         requireState(AttendanceState.RECONCILING, "submit an appeal");
         requireNonNull(reason, "reason cannot be null");
+        if (evidenceReference == null || evidenceReference.isBlank()) {
+            throw new IllegalArgumentException("evidenceReference is mandatory for an appeal");
+        }
         requireNonNull(actor, "actor cannot be null");
         requireNonNull(reconciliationDeadline, "reconciliationDeadline cannot be null");
         requireNonNull(now, "now cannot be null");
@@ -178,10 +181,12 @@ public class AttendanceRecord {
     }
 
     /**
-     * The only authoritative mutation during Reconciliation: an auditor adjusts the outcome. Appends
-     * an {@code AUDITOR_ADJUST} entry and flips {@code currentResult}. A justification is mandatory.
+     * The only authoritative mutation during Reconciliation: an auditor-initiated adjustment of the
+     * outcome. Appends an {@code AUDITOR_ADJUST} entry and flips {@code currentResult}. This is not a
+     * generic edit — an auditor adjustment always carries a {@code reason} (justification) and an
+     * {@code evidenceReference} (supporting evidence), both mandatory.
      *
-     * @throws IllegalArgumentException if {@code reason} is blank
+     * @throws IllegalArgumentException if {@code reason} or {@code evidenceReference} is null/blank
      */
     public void auditorAdjust(AttendanceResult result,
                               String reason,
@@ -195,6 +200,9 @@ public class AttendanceRecord {
         requireNonNull(now, "now cannot be null");
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("reason is mandatory for an auditor adjustment");
+        }
+        if (evidenceReference == null || evidenceReference.isBlank()) {
+            throw new IllegalArgumentException("evidenceReference is mandatory for an auditor adjustment");
         }
 
         appendEntry(AttendanceAction.AUDITOR_ADJUST, result, reason, evidenceReference, actor, now);

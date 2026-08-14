@@ -182,6 +182,30 @@ class AttendanceCommandControllerE2ETest {
     }
 
     @Test
+    void mark_duplicateStudentIdInBatch_returnsBadRequest() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("DUPLISTU", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
+                """
+                {"items": [
+                    {"studentId": "%s", "status": "PRESENT", "note": null},
+                    {"studentId": "%s", "status": "LATE", "note": "contradicts previous"}
+                ]}
+                """.formatted(studentId, studentId),
+                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+
+        assertThat(response.statusCode()).as("duplicate studentId: %s", response.body())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(response.body()).contains("Duplicate studentId");
+        // Nothing was persisted — the command invariant failed before any mutation.
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM attendance_records WHERE workshop_id = ?", Integer.class, workshopId))
+                .isZero();
+    }
+
+    @Test
     void mark_workshopNotInProgress_returnsConflict() throws Exception {
         UUID workshopId = createAndPublishWorkshop("NOSTART", false);
         UUID studentId = UUID.randomUUID();

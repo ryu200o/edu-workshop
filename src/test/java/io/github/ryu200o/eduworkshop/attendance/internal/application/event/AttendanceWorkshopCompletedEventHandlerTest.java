@@ -73,11 +73,13 @@ class AttendanceWorkshopCompletedEventHandlerTest {
 
         handler.handle(new WorkshopCompletedIntegrationEvent(WORKSHOP_ID, COMPLETED_AT));
 
-        List<AttendanceRecord> records = attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID);
+        List<AttendanceRecord> records = attendanceRecordRepository.loadByWorkshopId(WORKSHOP_ID);
         assertThat(records)
                 .allMatch(r -> r.state() == AttendanceState.RECONCILING)
                 .allMatch(r -> r.reconciliationStartedAt().equals(COMPLETED_AT))
                 .hasSize(2);
+        // The query was narrow (OPEN only) — nothing remains OPEN for a replay to re-select.
+        assertThat(attendanceRecordRepository.loadOpenByWorkshop(WORKSHOP_ID)).isEmpty();
     }
 
     @Test
@@ -88,7 +90,7 @@ class AttendanceWorkshopCompletedEventHandlerTest {
         handler.handle(new WorkshopCompletedIntegrationEvent(WORKSHOP_ID, COMPLETED_AT));
         handler.handle(new WorkshopCompletedIntegrationEvent(WORKSHOP_ID, COMPLETED_AT));
 
-        List<AttendanceRecord> records = attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID);
+        List<AttendanceRecord> records = attendanceRecordRepository.loadByWorkshopId(WORKSHOP_ID);
         assertThat(records).allMatch(r -> r.state() == AttendanceState.RECONCILING);
         assertThat(records).allMatch(r -> r.reconciliationStartedAt().equals(COMPLETED_AT));
     }
@@ -97,6 +99,6 @@ class AttendanceWorkshopCompletedEventHandlerTest {
     void handle_doesNothingWhenWorkshopHasNoRecords() {
         handler.handle(new WorkshopCompletedIntegrationEvent(WORKSHOP_ID, COMPLETED_AT));
 
-        assertThat(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).isEmpty();
+        assertThat(attendanceRecordRepository.loadByWorkshopId(WORKSHOP_ID)).isEmpty();
     }
 }
