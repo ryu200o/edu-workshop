@@ -278,15 +278,20 @@ Student → Scan QR → Registration verify → Workshop evaluate → Attendance
 
 ### 15.1. Future Integration Workshop ↔ Attendance
 
-```
-Future Work — TODO (chưa triển khai):
+**Triển khai (Epic 3B — QR Self Check-in, Slice A):**
 
+```
 WorkshopExposeAPI
-    └── evaluateAttendance()
-    └── evaluateCheckIn()
-        └── AttendanceStatus → ATTENDED | LATE
+    └── evaluateCheckIn(UUID workshopId, Instant checkedInAt) → Optional<AttendanceStatusContract>
+        └── AttendanceStatusContract → ATTENDED | LATE
 ```
 
-Đây là task tương lai: Workshop sở hữu Attendance Policy và cung cấp quyết định ATTENDED/LATE cho
-Attendance ghi nhận. Hiện tại chưa triển khai; khi làm Epic 3B, Workshop cung cấp evaluation qua
-ExposeAPI, Attendance chỉ ghi kết quả đã được Workshop xác định.
+- **`evaluateCheckIn`** (read-only, không lock, qua `WorkshopReader`): Workshop quyết định `ATTENDED` vs
+  `LATE` theo policy của chính nó tại Application edge — **Workshop-side operational setting**
+  `app.workshop.checkin.late-after-minutes` (mặc định 15), nạp qua `WorkshopCheckInParameters`
+  (mẫu `WorkshopBufferParameters`, ADR 0018). Attendance **KHÔNG sở hữu policy** — chỉ consume kết quả.
+- `AttendanceStatusContract` (enum `ATTENDED | LATE`) nằm ở `workshop/contract/` (ADR 0010) —
+  contract dùng chung giữa Workshop và Attendance qua Module Facade, không thuộc `internal/`.
+- `evaluateAttendance()` (đánh giá tổng thể sau workshop) vẫn là **future work**, không thuộc 3B.
+- Attendance ghi nhận kết quả do Workshop xác định vào `AttendanceRecord`; QR check-in chỉ là nguồn
+  MARK bổ sung (role `STUDENT`), không phải authoritative decision (ADR 0019 §5).
