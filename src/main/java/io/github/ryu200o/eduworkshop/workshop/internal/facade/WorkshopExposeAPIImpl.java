@@ -1,10 +1,12 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.facade;
 
 import io.github.ryu200o.eduworkshop.workshop.WorkshopExposeAPI;
+import io.github.ryu200o.eduworkshop.workshop.contract.AttendanceStatusContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopImpactContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopRegistrationContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopSchedulingContract;
 import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopStateContract;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopCheckInParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.query.view.WorkshopDetailView;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopReader;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
@@ -14,6 +16,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopStat
 
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -29,10 +32,14 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
 
     private final WorkshopReader workshopReader;
     private final WorkshopRepository workshopRepository;
+    private final WorkshopCheckInParameters workshopCheckInParameters;
 
-    WorkshopExposeAPIImpl(WorkshopReader workshopReader, WorkshopRepository workshopRepository) {
+    WorkshopExposeAPIImpl(WorkshopReader workshopReader,
+                          WorkshopRepository workshopRepository,
+                          WorkshopCheckInParameters workshopCheckInParameters) {
         this.workshopReader = workshopReader;
         this.workshopRepository = workshopRepository;
+        this.workshopCheckInParameters = workshopCheckInParameters;
     }
 
     @Override
@@ -74,6 +81,18 @@ class WorkshopExposeAPIImpl implements WorkshopExposeAPI {
         // module's Reconciliation Window (ADR 0019 §4 / OQ-10) — never the consumer's clock.
         Instant completedAt = state == WorkshopStateContract.COMPLETED ? view.updatedAt() : null;
         return new WorkshopSchedulingContract(view.id(), state, completedAt);
+    }
+
+    @Override
+    public Optional<AttendanceStatusContract> evaluateCheckIn(UUID workshopId, Instant checkedInAt) {
+        return workshopReader.getById(workshopId)
+                .map(view -> {
+                    Instant lateThreshold = view.startTime()
+                            .plus(Duration.ofMinutes(workshopCheckInParameters.lateAfterMinutes()));
+                    return checkedInAt.isAfter(lateThreshold)
+                            ? AttendanceStatusContract.LATE
+                            : AttendanceStatusContract.ATTENDED;
+                });
     }
 
     private static WorkshopStateContract mapState(String state) {

@@ -144,6 +144,14 @@ class AttendanceCommandControllerE2ETest {
         return UUID.fromString(readField(roster.body(), "recordId"));
     }
 
+    private HttpResponse<String> checkIn(UUID workshopId, UUID studentId) throws Exception {
+        return post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
+                """
+                {"qrReference": "QR-REF-%s"}
+                """.formatted(UUID.randomUUID()),
+                Map.of("X-Actor-Role", "STUDENT", "X-User-Id", studentId.toString()));
+    }
+
     private static String readField(String body, String field) {
         int start = body.indexOf("\"" + field + "\"");
         int colon = body.indexOf(":", start);
@@ -282,5 +290,163 @@ class AttendanceCommandControllerE2ETest {
     void ledger_missingRecord_returnsNotFound() throws Exception {
         HttpResponse<String> response = get("/api/v1/attendance-records/" + UUID.randomUUID());
         assertThat(response.statusCode()).isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
+
+    @Test
+    void checkIn_verifiedRegistration_createsLateRecordWithStudentRoleInLedger() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKOK", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> response = checkIn(workshopId, studentId);
+
+        assertThat(response.statusCode()).as("check-in: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        // START is 5h before now and the late threshold is startTime + 15min → LATE.
+        assertThat(response.body()).contains("\"result\":\"LATE\"").contains("\"state\":\"OPEN\"");
+        String recordId = readField(response.body(), "recordId");
+
+        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
+        assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
+        assertThat(ledger.body()).contains("\"action\":\"MARK\"").contains("\"actorRole\":\"STUDENT\"");
+    }
+
+    @Test
+    void checkIn_nonVerifiedRegistration_returnsConflict() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKNOVER", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "REGISTERED");
+
+        HttpResponse<String> response = checkIn(workshopId, studentId);
+
+        assertThat(response.statusCode()).as("check-in non-verified: %s", response.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(response.body()).contains("not verified");
+    }
+
+    @Test
+    void checkIn_duplicateScan_isIdempotentNoOp_noNewEntryNoResultChange() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKDUPE", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> first = checkIn(workshopId, studentId);
+        assertThat(first.statusCode()).as("first check-in: %s", first.body()).isEqualTo(HttpStatus.OK.value());
+        String recordId = readField(first.body(), "recordId");
+
+        HttpResponse<String> second = checkIn(workshopId, studentId);
+        assertThat(second.statusCode()).as("second check-in: %s", second.body()).isEqualTo(HttpStatus.OK.value());
+        // OQ-3B-3 idempotent no-op: same record, same result, no new MARK entry appended.
+        assertThat(readField(second.body(), "recordId")).isEqualTo(recordId);
+
+        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
+        assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
+        assertThat(countOccurrences(ledger.body(), "\"action\":\"MARK\"")).isEqualTo(1);
+        assertThat(ledger.body()).contains("\"currentResult\":\"LATE\"");
+    }
+
+    @Test
+    void checkIn_workshopNotInProgress_returnsConflict() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKNOSTART", false);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> response = checkIn(workshopId, studentId);
+
+        assertThat(response.statusCode()).as("check-in not in progress: %s", response.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void checkIn_nonStudentRole_returnsForbidden() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKROLE", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
+                """
+                {"qrReference": "QR-REF-%s"}
+                """.formatted(UUID.randomUUID()),
+                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+
+        assertThat(response.statusCode()).as("check-in by trainer: %s", response.body())
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
+    }
+
+    @Test
+    void checkIn_blankQrReference_returnsBadRequest() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKBLANK", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
+                """
+                {"qrReference": "   "}
+                """,
+                Map.of("X-Actor-Role", "STUDENT", "X-User-Id", studentId.toString()));
+
+        assertThat(response.statusCode()).as("blank qr: %s", response.body())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    @Test
+    void interaction_trainerCorrection_afterQrCheckIn_appendsTrainerMark() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKCORR", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> scanned = checkIn(workshopId, studentId);
+        assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());
+        String recordId = readField(scanned.body(), "recordId");
+
+        // Trainer corrects the LATE scan to PRESENT — authoritative (append MARK, role TRAINER).
+        mark(workshopId, studentId);
+
+        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
+        assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
+        assertThat(countOccurrences(ledger.body(), "\"action\":\"MARK\"")).isEqualTo(2);
+        assertThat(ledger.body()).contains("\"currentResult\":\"PRESENT\"");
+        // The two MARK entries are ordered STUDENT (QR) then TRAINER (correction).
+        int studentIndex = ledger.body().indexOf("\"actorRole\":\"STUDENT\"");
+        int trainerIndex = ledger.body().indexOf("\"actorRole\":\"TRAINER\"");
+        assertThat(studentIndex).isPositive();
+        assertThat(trainerIndex).isGreaterThan(studentIndex);
+    }
+
+    @Test
+    void interaction_afterWorkshopCompleted_checkInRejectedButAuditorAdjustWorks() throws Exception {
+        UUID workshopId = createAndPublishWorkshop("CHKRECON", true);
+        UUID studentId = UUID.randomUUID();
+        seedRegistration(workshopId, studentId, "VERIFIED");
+
+        HttpResponse<String> scanned = checkIn(workshopId, studentId);
+        assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());
+        String recordId = readField(scanned.body(), "recordId");
+
+        HttpResponse<String> completed = post("/api/v1/workshops/" + workshopId + "/complete", null, Map.of());
+        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.OK.value());
+
+        // State gate (ADR 0019 §3): workshop is COMPLETED → check-in is rejected (record no longer OPEN).
+        HttpResponse<String> lateScan = checkIn(workshopId, studentId);
+        assertThat(lateScan.statusCode()).as("check-in after complete: %s", lateScan.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+
+        // Reconciliation is unaffected: auditor adjust still works in the RECONCILING window.
+        HttpResponse<String> adjusted = post("/api/v1/attendance-records/" + recordId + "/adjust",
+                """
+                {"newStatus": "PRESENT", "reason": "CCTV confirms presence", "evidenceReference": "evidence://cam-1"}
+                """,
+                Map.of("X-Actor-Role", "AUDITOR", "X-User-Id", UUID.randomUUID().toString()));
+        assertThat(adjusted.statusCode()).as("adjust: %s", adjusted.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(adjusted.body()).contains("PRESENT");
+    }
+
+    private static int countOccurrences(String text, String needle) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf(needle, idx)) >= 0) {
+            count++;
+            idx += needle.length();
+        }
+        return count;
     }
 }

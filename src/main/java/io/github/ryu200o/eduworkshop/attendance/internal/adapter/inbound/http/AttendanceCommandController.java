@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.attendance.internal.adapter.inbound.http;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.AuditorAdjustCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.FinalizeWorkshopRosterCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.MarkAttendanceCommand;
+import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.SelfCheckInCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.SubmitAppealCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
@@ -50,6 +51,19 @@ class AttendanceCommandController {
         return ResponseEntity.ok(commandBus.execute(command));
     }
 
+    @PostMapping("/workshops/{workshopId}/attendance/check-in")
+    ResponseEntity<SelfCheckInCommand.Result> selfCheckIn(@PathVariable UUID workshopId,
+                                                          @RequestHeader("X-Actor-Role") ActorRole role,
+                                                          @RequestHeader("X-User-Id") UUID userId,
+                                                          @RequestBody SelfCheckInRequest request) {
+        Actor actor = new Actor(ActorId.of(userId), role);
+        // Thin QR seam (Epic 3B, Slice A): the qrReference is opaque input captured here — real QR
+        // resolution is Slice B (OQ-3B-1/2, backlog). The workshop candidate is the path workshopId,
+        // the student comes from the authenticated principal; the handler never sees the QR itself.
+        var command = new SelfCheckInCommand(workshopId, request.qrReference(), actor);
+        return ResponseEntity.ok(commandBus.execute(command));
+    }
+
     @PostMapping("/attendance-records/{recordId}/appeal")
     ResponseEntity<SubmitAppealCommand.Result> submitAppeal(@PathVariable UUID recordId,
                                                             @RequestHeader("X-Actor-Role") ActorRole role,
@@ -88,5 +102,8 @@ class AttendanceCommandController {
     }
 
     record AuditorAdjustRequest(AttendanceResult newStatus, String reason, String evidenceReference) {
+    }
+
+    record SelfCheckInRequest(String qrReference) {
     }
 }
