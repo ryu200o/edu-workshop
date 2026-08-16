@@ -33,8 +33,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Workshops are driven through the real Workshop/Room HTTP APIs (plan → publish → start →
  * complete), so the {@code WorkshopCompletedIntegrationEvent} flows through the outbox
  * (ADR 0011) into {@code AttendanceWorkshopCompletedEventHandler}. The {@code VERIFIED}
- * registration gate (OQ-14) is exercised by seeding {@code VERIFIED} / plain {@code REGISTERED}
- * rows directly in the DB — no VERIFIED transition exists yet (SA directive contract tests).</p>
+ * registration gate (OQ-14) is exercised through the real Registration API: a student is registered
+ * and then verified via the verify endpoint (Epic 3C, thin QR seam) before the workshop starts —
+ * the Attendance module reads the verified seat through the Registration reader.</p>
  *
  * <p>The workshop lifecycle scheduler is disabled ({@code app.workshop.lifecycle.enabled=false})
  * so the tests drive state transitions manually and deterministically. A permit-all
@@ -102,7 +103,7 @@ class AttendanceCommandControllerE2ETest {
         return UUID.fromString(readField(response.body(), "id"));
     }
 
-    private UUID createAndPublishWorkshop(String building, boolean startNow) throws Exception {
+    private UUID createAndPublishWorkshop(String building) throws Exception {
         UUID roomId = createRoom(building);
         HttpResponse<String> created = post("/api/v1/workshops",
                 """
@@ -119,18 +120,35 @@ class AttendanceCommandControllerE2ETest {
         assertThat(planned.statusCode()).as("plan workshop: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
         assertThat(published.statusCode()).as("publish workshop: %s", published.body()).isEqualTo(HttpStatus.OK.value());
-        if (startNow) {
-            HttpResponse<String> started = post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
-            assertThat(started.statusCode()).as("start workshop: %s", started.body()).isEqualTo(HttpStatus.OK.value());
-        }
         return workshopId;
     }
 
-    private void seedRegistration(UUID workshopId, UUID studentId, String status) {
-        jdbcTemplate.update("""
-                INSERT INTO registrations (id, workshop_id, user_id, status, workshop_start_time, registered_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, UUID.randomUUID(), workshopId, studentId, status, START, NOW);
+    private void startWorkshop(UUID workshopId) throws Exception {
+        HttpResponse<String> started = post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+        assertThat(started.statusCode()).as("start workshop: %s", started.body()).isEqualTo(HttpStatus.OK.value());
+    }
+
+    private void registerStudent(UUID workshopId, UUID studentId) throws Exception {
+        HttpResponse<String> registered = post("/api/v1/registrations",
+                """
+                {"workshopId": "%s"}
+                """.formatted(workshopId),
+                Map.of("X-User-Id", studentId.toString()));
+        assertThat(registered.statusCode()).as("register: %s", registered.body())
+                .isEqualTo(HttpStatus.CREATED.value());
+    }
+
+    private void registerAndVerify(UUID workshopId, UUID studentId) throws Exception {
+        registerStudent(workshopId, studentId);
+        UUID registrationId = jdbcTemplate.queryForObject(
+                "SELECT id FROM registrations WHERE workshop_id = ? AND user_id = ?",
+                UUID.class, workshopId, studentId);
+        HttpResponse<String> verified = post("/api/v1/registrations/verify",
+                """
+                {"qrReference": "QR-REG-%s"}
+                """.formatted(registrationId),
+                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+        assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.OK.value());
     }
 
     private UUID mark(UUID workshopId, UUID studentId) throws Exception {
@@ -161,9 +179,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void mark_verifiedRegistration_happyPathAndRoster() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("VERIF", true);
+        UUID workshopId = createAndPublishWorkshop("VERIF");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         mark(workshopId, studentId);
 
@@ -174,9 +193,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void mark_nonVerifiedRegistration_returnsConflict() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("NOVER", true);
+        UUID workshopId = createAndPublishWorkshop("NOVER");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "REGISTERED");
+        registerStudent(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
@@ -191,9 +211,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void mark_duplicateStudentIdInBatch_returnsBadRequest() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("DUPLISTU", true);
+        UUID workshopId = createAndPublishWorkshop("DUPLISTU");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
@@ -215,9 +236,9 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void mark_workshopNotInProgress_returnsConflict() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("NOSTART", false);
+        UUID workshopId = createAndPublishWorkshop("NOSTART");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
@@ -231,9 +252,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void mark_nonTrainerRole_returnsForbidden() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("ROLE", true);
+        UUID workshopId = createAndPublishWorkshop("ROLE");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
@@ -247,9 +269,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void completeFlow_appealAndAdjustWithinReconciliationWindow() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("APPEAL", true);
+        UUID workshopId = createAndPublishWorkshop("APPEAL");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> marked = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
@@ -294,9 +317,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void checkIn_verifiedRegistration_createsLateRecordWithStudentRoleInLedger() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKOK", true);
+        UUID workshopId = createAndPublishWorkshop("CHKOK");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> response = checkIn(workshopId, studentId);
 
@@ -312,9 +336,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void checkIn_nonVerifiedRegistration_returnsConflict() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKNOVER", true);
+        UUID workshopId = createAndPublishWorkshop("CHKNOVER");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "REGISTERED");
+        registerStudent(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> response = checkIn(workshopId, studentId);
 
@@ -325,9 +350,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void checkIn_duplicateScan_isIdempotentNoOp_noNewEntryNoResultChange() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKDUPE", true);
+        UUID workshopId = createAndPublishWorkshop("CHKDUPE");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> first = checkIn(workshopId, studentId);
         assertThat(first.statusCode()).as("first check-in: %s", first.body()).isEqualTo(HttpStatus.OK.value());
@@ -346,9 +372,9 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void checkIn_workshopNotInProgress_returnsConflict() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKNOSTART", false);
+        UUID workshopId = createAndPublishWorkshop("CHKNOSTART");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
 
         HttpResponse<String> response = checkIn(workshopId, studentId);
 
@@ -358,9 +384,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void checkIn_nonStudentRole_returnsForbidden() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKROLE", true);
+        UUID workshopId = createAndPublishWorkshop("CHKROLE");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
                 """
@@ -374,9 +401,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void checkIn_blankQrReference_returnsBadRequest() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKBLANK", true);
+        UUID workshopId = createAndPublishWorkshop("CHKBLANK");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
                 """
@@ -390,9 +418,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void interaction_trainerCorrection_afterQrCheckIn_appendsTrainerMark() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKCORR", true);
+        UUID workshopId = createAndPublishWorkshop("CHKCORR");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> scanned = checkIn(workshopId, studentId);
         assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());
@@ -414,9 +443,10 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void interaction_afterWorkshopCompleted_checkInRejectedButAuditorAdjustWorks() throws Exception {
-        UUID workshopId = createAndPublishWorkshop("CHKRECON", true);
+        UUID workshopId = createAndPublishWorkshop("CHKRECON");
         UUID studentId = UUID.randomUUID();
-        seedRegistration(workshopId, studentId, "VERIFIED");
+        registerAndVerify(workshopId, studentId);
+        startWorkshop(workshopId);
 
         HttpResponse<String> scanned = checkIn(workshopId, studentId);
         assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());

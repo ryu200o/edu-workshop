@@ -83,9 +83,13 @@ Manages the lifecycle of workshops — from draft through scheduling, publishing
 | `room_location_snapshot` | `VARCHAR(255)` | `NULLABLE` | Decoupled snapshot of the room's location (building/floor). Filled/refreshed by `WorkshopRoomEventHandler` on `RoomRelocatedEvent`. |
 | `room_capacity_snapshot` | `INTEGER` | `NULLABLE` | Decoupled snapshot of the room's physical capacity. Filled at `plan()`, refreshed by `WorkshopRoomEventHandler` on `RoomCapacityChanged`. Added by V6 migration. |
 | `has_room_warning` | `BOOLEAN` | `NOT NULL DEFAULT FALSE` | Internal projection flag: `true` when the referenced room is in `MAINTENANCE` state. Set/cleared by `WorkshopRoomEventHandler` on `RoomStateChanged` events. Read-side renders a warning badge from this persisted field. Added by V6 migration. |
-| `start_time` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Scheduled start time (UTC). Null until `plan()`. |
-| `end_time` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Scheduled end time (UTC). Null until `plan()`. |
+| `is_room_evicted` | `BOOLEAN` | `NOT NULL DEFAULT FALSE` | Internal projection flag: `true` when a scheduled workshop had to be evicted (e.g. the room entered `MAINTENANCE` after planning). Set by `WorkshopRoomEventHandler` on `RoomStateChanged`. Added by V13. |
+| `room_evicted_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | When the room eviction was recorded (null until `is_room_evicted`). |
+| `start_time` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Scheduled start time (UTC). Required from `plan()` onwards (V5). |
+| `end_time` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Scheduled end time (UTC). Required from `plan()` onwards (V5). |
 | `capacity` | `INTEGER` | `NOT NULL`, `CHECK (capacity > 0)` | Business registration capacity limit (can differ from room capacity). |
+| `occupancy_start` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Occupancy Window start = `start_time − buffer_before_minutes` (ADR 0018); a pure function computed by the Application layer at create/plan. |
+| `late_threshold_seconds` | `INTEGER` | `NOT NULL DEFAULT 900`, `CHECK (late_threshold_seconds BETWEEN 0 AND 86400)` | Workshop-owned attendance late-policy threshold (ADR 0019 §13.1, Epic 3C OQ-3C-7). Seeded at create from `app.workshop.checkin.late-after-minutes`; mutable while `DRAFT`/`PLANNED`/`PUBLISHED`, frozen from `IN_PROGRESS`. Evaluated live at check-in time (OQ-3C-10). Added by V20 (backfill to 900). |
 | `state` | `VARCHAR(50)` | `NOT NULL`, `DEFAULT 'DRAFT'` | Workshop lifecycle state: `DRAFT`, `PLANNED`, `PUBLISHED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`. Width 50 leaves room for future reactive states (`ROOM_DEACTIVATED_PENDING`, `OVER_CAPACITY_PENDING`) without an `ALTER`. |
 | `version` | `BIGINT` | `NOT NULL DEFAULT 0` | Optimistic-locking version (ADR 0015 Strategy B). Persistence concern only — incremented by Hibernate on each write and matched in the `WHERE` clause (`version = ?`); mapped to HTTP 409 on conflict. Never part of the domain aggregate. Added by V14. |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
@@ -93,10 +97,13 @@ Manages the lifecycle of workshops — from draft through scheduling, publishing
 
 **Indexes & Constraints**:
 *   `chk_workshop_time`: CHECK constraint to ensure `end_time > start_time` (nullable-aware: passes when either side is null, so `DRAFT` with no schedule is valid).
+*   `chk_workshop_capacity`: CHECK constraint `capacity > 0`.
+*   `chk_workshops_late_threshold`: CHECK constraint `late_threshold_seconds BETWEEN 0 AND 86400` — storage ceiling for the attendance late-policy threshold (Epic 3C OQ-3C-7).
 *   `idx_workshop_room_id`: Index on `room_id` for room utilization queries.
 *   `idx_workshop_state`: Index on `state` for lifecycle filtering.
 *   `idx_workshop_start_time`: Index on `start_time` for time-range queries.
-*   `idx_workshop_room_time`: composite index on `(room_id, start_time, end_time)` — serves the overlap scan during schedule/publish/reschedule. A **partial** index (`WHERE room_id IS NOT NULL AND state != 'CANCELLED'`) is preferred on PostgreSQL, but the DDL uses a plain index for portability (H2 test DB does not support filtered indexes); the same query predicate still benefits from the leading columns.
+*   `idx_workshops_room_occupancy`: composite index on `(room_id, occupancy_start, end_time)` — serves the Occupancy Window overlap scan during schedule/publish/reschedule (ADR 0018).
+*   `idx_workshops_evicted`: index on `is_room_evicted` for the eviction re-planning query.
 
 **Architectural Notes (Module Boundary & Decoupling — ADR 0001)**:
 *   `room_id` is a **logical UUID only** — no physical foreign key to the `rooms` table (respects Spring Modulith boundaries). Room physical info is reached via `RoomExposeAPI`, never by JOIN.
@@ -159,28 +166,33 @@ Immutable report created once when a workshop transitions to `COMPLETED`. Captur
 
 ### 6. `registrations` Table (Registration Module)
 
-Records user ticket bookings for workshops, including check-in tracking.
+Records user ticket bookings for workshops, one row per `(workshop_id, user_id)` (ADR 0012). Cancel
+flips `status` to `CANCELLED`, re-register flips it back to `REGISTERED`; a verify ticket flow
+(Epic 3C) advances `REGISTERED → VERIFIED` at the venue.
 
 | Column Name | Data Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
 | `id` | `UUID` | `PRIMARY KEY` | Unique identifier for the registration. |
 | `workshop_id` | `UUID` | `NOT NULL` | Logical reference to the registered workshop (no physical FK). |
 | `user_id` | `UUID` | `NOT NULL` | Logical reference to the registering user (no physical FK). |
-| `status` | `VARCHAR(50)` | `NOT NULL` | Registration status: `CONFIRMED`, `CANCELLED`, `ATTENDED`, `NO_SHOW`. |
+| `status` | `VARCHAR(20)` | `NOT NULL`, `CHECK IN ('REGISTERED','CANCELLED','REFUNDED','VERIFIED')` | Registration lifecycle status. `VERIFIED` (Epic 3C) proves the seat at the venue; `REFUNDED` reserved for ADR 0014 system-initiated refunds. Constraint widened by V18. |
+| `workshop_start_time` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Selective snapshot of the workshop's `start_time` (ADR 0007/0012) — refreshed on reschedule/cancel flips. |
+| `workshop_title_snapshot` | `VARCHAR(200)` | `NULLABLE` | Selective snapshot of the workshop title. |
+| `workshop_end_time_snapshot` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Selective snapshot of the workshop end time. |
+| `workshop_room_name_snapshot` | `VARCHAR(255)` | `NULLABLE` | Selective snapshot of the room display name. |
+| `registered_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Timestamp when the booking was made. |
+| `cancelled_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp when the seat was cancelled. |
+| `verified_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp when the seat was verified at the venue (Epic 3C, verify ticket flow). Idempotent — re-verify does not advance it. Added by V19. |
+| `grace_period_until` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | End of the 12-hour urgent-cancellation grace window on workshop reschedule (ADR 0014). |
 | `version` | `BIGINT` | `NOT NULL DEFAULT 0` | Optimistic-locking version (ADR 0015 Strategy B). Persistence concern only — incremented by Hibernate on each write and matched in the `WHERE` clause (`version = ?`); mapped to HTTP 409 on conflict. Never part of the domain aggregate. Added by V14. |
-| `registration_time` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Timestamp when the booking was made. |
-| `checked_in` | `BOOLEAN` | `DEFAULT FALSE` | Whether the user has checked in to the workshop. |
-| `checked_in_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Timestamp when check-in occurred. |
-| `checked_in_by` | `UUID` | `NULLABLE` | Logical reference to the user who performed the check-in. |
 | `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
 | `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
 
 **Indexes & Constraints**:
-*   `uk_registrations_workshop_user`: Unique constraint on `(workshop_id, user_id)` to prevent double booking.
+*   `uk_registrations_workshop_user`: Unique constraint on `(workshop_id, user_id)` — race-proof backstop for the one-row-per-pair rule (ADR 0012; portable across H2/PostgreSQL).
 *   `idx_registrations_workshop_id`: Index on `workshop_id` for workshop-specific queries.
 *   `idx_registrations_user_id`: Index on `user_id` for user registration history.
 *   `idx_registrations_status`: Index on `status` for filtering by registration status.
-*   `idx_registrations_checked_in`: Index on `checked_in` for check-in queries.
 
 ---
 
