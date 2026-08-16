@@ -17,6 +17,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
@@ -94,14 +95,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
     }
 
     private Workshop createPublishedWorkshop() {
-        Workshop workshop = Workshop.create(
-                WorkshopId.of(WORKSHOP_ID),
-                WorkshopTitle.of("Test Workshop"),
-                WorkshopDescription.of("Description"),
-                START, END,
-                START.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(30),
-                NOW);
+        Workshop workshop = Workshop.create(WorkshopId.of(WORKSHOP_ID), WorkshopTitle.of("Test Workshop"), WorkshopDescription.of("Description"), START, END, START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), NOW);
         workshop.plan(RoomReference.of(OLD_ROOM_ID, "Room 201", "Building A/2", 50), false,
                 START.minus(Duration.ofMinutes(15)), NOW);
         workshop.publish(NOW, 50);
@@ -109,14 +103,7 @@ class ChangeWorkshopRoomCommandHandlerTest {
     }
 
     private Workshop createPlannedWorkshop(UUID id, UUID roomId, int roomCapacity, Instant start, Instant end) {
-        Workshop workshop = Workshop.create(
-                WorkshopId.of(id),
-                WorkshopTitle.of("Other Workshop"),
-                WorkshopDescription.of("Description"),
-                start, end,
-                start.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(20),
-                NOW);
+        Workshop workshop = Workshop.create(WorkshopId.of(id), WorkshopTitle.of("Other Workshop"), WorkshopDescription.of("Description"), start, end, start.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(20), WorkshopLateThreshold.of(900), NOW);
         workshop.plan(RoomReference.of(roomId, "Room 302", "Building B/3", roomCapacity), false,
                 start.minus(Duration.ofMinutes(15)), NOW);
         return workshop;

@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CreateWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopBufferParameters;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.parameter.WorkshopCheckInParameters;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.outbound.WorkshopRepository;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.WorkshopDomainException;
@@ -38,7 +39,8 @@ class CreateWorkshopCommandHandlerTest {
     }
 
     private CreateWorkshopCommandHandler handler() {
-        return new CreateWorkshopCommandHandler(workshopRepository, new WorkshopBufferParameters(15), clock);
+        return new CreateWorkshopCommandHandler(workshopRepository, new WorkshopBufferParameters(15),
+                new WorkshopCheckInParameters(15), clock);
     }
 
     @Test

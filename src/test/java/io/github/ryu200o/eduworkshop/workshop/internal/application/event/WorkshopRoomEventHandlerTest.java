@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -78,11 +79,7 @@ class WorkshopRoomEventHandlerTest {
 
     private WorkshopId savePlannedWorkshop(UUID roomId, Instant start, Instant end) {
         WorkshopId id = WorkshopId.generate();
-        Workshop workshop = Workshop.create(
-                id,
-                WorkshopTitle.of("Intro to AI"),
-                WorkshopDescription.of("A beginner workshop"),
-                start, end, start.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), Instant.parse("2026-08-01T00:00:00Z"));
+        Workshop workshop = Workshop.create(id, WorkshopTitle.of("Intro to AI"), WorkshopDescription.of("A beginner workshop"), start, end, start.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), Instant.parse("2026-08-01T00:00:00Z"));
         workshop.plan(RoomReference.of(roomId, "Room A", "Floor 1", 50), false,
                 workshop.occupancyStart(), Instant.parse("2026-08-01T00:00:01Z"));
         save(workshop);
@@ -91,11 +88,7 @@ class WorkshopRoomEventHandlerTest {
 
     private Workshop publishedWorkshop(UUID roomId, Instant start, Instant end) {
         WorkshopId id = WorkshopId.generate();
-        Workshop workshop = Workshop.create(
-                id,
-                WorkshopTitle.of("Intro to AI"),
-                WorkshopDescription.of("A beginner workshop"),
-                start, end, start.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), Instant.parse("2026-08-01T00:00:00Z"));
+        Workshop workshop = Workshop.create(id, WorkshopTitle.of("Intro to AI"), WorkshopDescription.of("A beginner workshop"), start, end, start.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), Instant.parse("2026-08-01T00:00:00Z"));
         workshop.plan(RoomReference.of(roomId, "Room A", "Floor 1", 50), false,
                 workshop.occupancyStart(), Instant.parse("2026-08-01T00:00:01Z"));
         workshop.publish(Instant.parse("2026-08-01T00:00:02Z"), 50);
@@ -177,11 +170,7 @@ class WorkshopRoomEventHandlerTest {
     @Test
     void handle_plannedWorkshop_isNotFlagged() {
         WorkshopId id = WorkshopId.generate();
-        Workshop planned = Workshop.create(
-                id,
-                WorkshopTitle.of("Intro to AI"),
-                WorkshopDescription.of("A beginner workshop"),
-                WS_START, WS_END, WS_START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), Instant.parse("2026-08-01T00:00:00Z"));
+        Workshop planned = Workshop.create(id, WorkshopTitle.of("Intro to AI"), WorkshopDescription.of("A beginner workshop"), WS_START, WS_END, WS_START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), Instant.parse("2026-08-01T00:00:00Z"));
         planned.plan(RoomReference.of(ROOM_A, "Room A", "Floor 1", 50), false,
                 planned.occupancyStart(), Instant.parse("2026-08-01T00:00:01Z"));
         save(planned);
@@ -211,11 +200,7 @@ class WorkshopRoomEventHandlerTest {
     @Test
     void handleRenamed_skipsWorkshopsWithoutRoomReference() {
         WorkshopId id = WorkshopId.generate();
-        Workshop draft = Workshop.create(
-                id,
-                WorkshopTitle.of("Intro to AI"),
-                WorkshopDescription.of("A beginner workshop"),
-                WS_START, WS_END, WS_START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), Instant.parse("2026-08-01T00:00:00Z"));
+        Workshop draft = Workshop.create(id, WorkshopTitle.of("Intro to AI"), WorkshopDescription.of("A beginner workshop"), WS_START, WS_END, WS_START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), Instant.parse("2026-08-01T00:00:00Z"));
         save(draft);
 
         handler.handleIntegrationEvent(new RoomRenamedIntegrationEvent(

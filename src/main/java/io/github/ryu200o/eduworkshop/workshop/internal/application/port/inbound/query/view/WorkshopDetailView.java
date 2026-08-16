@@ -17,6 +17,7 @@ public record WorkshopDetailView(
         Instant startTime,
         Instant endTime,
         int capacity,
+        int lateThresholdSeconds,
         String state,
         Instant createdAt,
         Instant updatedAt

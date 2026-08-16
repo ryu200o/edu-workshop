@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
@@ -67,15 +68,7 @@ class RescheduleWorkshopCommandHandlerTest {
     }
 
     private Workshop createPublishedWorkshop() {
-        Workshop workshop = Workshop.create(
-                WorkshopId.of(WORKSHOP_ID),
-                WorkshopTitle.of("Published Workshop"),
-                WorkshopDescription.of("Description"),
-                START, END,
-                START.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(30),
-                NOW
-        );
+        Workshop workshop = Workshop.create(WorkshopId.of(WORKSHOP_ID), WorkshopTitle.of("Published Workshop"), WorkshopDescription.of("Description"), START, END, START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), NOW);
         workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
                 workshop.occupancyStart(), NOW);
         workshop.publish(NOW, 50);
@@ -112,15 +105,7 @@ class RescheduleWorkshopCommandHandlerTest {
     @Test
     void reschedule_evictsOverlappingPlannedInSameRoom() {
         Workshop workshop = createPublishedWorkshop();
-        Workshop planned = Workshop.create(
-                WorkshopId.generate(),
-                WorkshopTitle.of("Planned"),
-                WorkshopDescription.of("Description"),
-                NEW_START, NEW_END,
-                NEW_START.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(20),
-                NOW
-        );
+        Workshop planned = Workshop.create(WorkshopId.generate(), WorkshopTitle.of("Planned"), WorkshopDescription.of("Description"), NEW_START, NEW_END, NEW_START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(20), WorkshopLateThreshold.of(900), NOW);
         planned.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
                 planned.occupancyStart(), NOW);
 
@@ -141,15 +126,7 @@ class RescheduleWorkshopCommandHandlerTest {
     @Test
     void reschedule_rejectsWhenAnotherPublishedOverlaps() {
         Workshop workshop = createPublishedWorkshop();
-        Workshop otherPublished = Workshop.create(
-                WorkshopId.generate(),
-                WorkshopTitle.of("Other"),
-                WorkshopDescription.of("Description"),
-                NEW_START, NEW_END,
-                NEW_START.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(20),
-                NOW
-        );
+        Workshop otherPublished = Workshop.create(WorkshopId.generate(), WorkshopTitle.of("Other"), WorkshopDescription.of("Description"), NEW_START, NEW_END, NEW_START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(20), WorkshopLateThreshold.of(900), NOW);
         otherPublished.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
                 otherPublished.occupancyStart(), NOW);
         otherPublished.publish(NOW, 50);

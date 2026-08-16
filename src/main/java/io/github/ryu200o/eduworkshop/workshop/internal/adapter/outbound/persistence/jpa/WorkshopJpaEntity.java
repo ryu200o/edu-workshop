@@ -63,6 +63,14 @@ class WorkshopJpaEntity {
     @Column(nullable = false)
     private int capacity;
 
+    /**
+     * Attendance late-policy threshold in seconds (ADR 0019 §13.1, Epic 3C) — the Workshop-owned
+     * persisted policy, mutable until {@code IN_PROGRESS}. A learner checking in no later than
+     * {@code startTime + lateThresholdSeconds} is {@code ATTENDED}, otherwise {@code LATE}.
+     */
+    @Column(name = "late_threshold_seconds", nullable = false)
+    private int lateThresholdSeconds;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private WorkshopState state;
@@ -195,6 +203,14 @@ class WorkshopJpaEntity {
 
     void setCapacity(int capacity) {
         this.capacity = capacity;
+    }
+
+    public int getLateThresholdSeconds() {
+        return lateThresholdSeconds;
+    }
+
+    void setLateThresholdSeconds(int lateThresholdSeconds) {
+        this.lateThresholdSeconds = lateThresholdSeconds;
     }
 
     public WorkshopState getState() {

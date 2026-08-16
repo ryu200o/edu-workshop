@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.StartWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UnplanWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopInfoCommand;
+import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopLatePolicyCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopScheduleCommand;
 
 import org.springframework.http.HttpStatus;
@@ -128,6 +129,14 @@ class WorkshopCommandController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/{id}/late-policy")
+    ResponseEntity<UpdateWorkshopLatePolicyCommand.Result> updateLatePolicy(@PathVariable UUID id,
+                                                                                   @RequestBody UpdateWorkshopLatePolicyRequest request) {
+        var command = new UpdateWorkshopLatePolicyCommand(id, request.lateThreshold());
+        UpdateWorkshopLatePolicyCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
     @DeleteMapping("/{id}/plan")
     ResponseEntity<UnplanWorkshopCommand.Result> unplan(@PathVariable UUID id) {
         UnplanWorkshopCommand.Result result = commandBus.execute(new UnplanWorkshopCommand(id));
@@ -159,5 +168,8 @@ class WorkshopCommandController {
     }
 
     record UpdateWorkshopScheduleRequest(Instant newStartTime, Instant newEndTime) {
+    }
+
+    record UpdateWorkshopLatePolicyRequest(String lateThreshold) {
     }
 }

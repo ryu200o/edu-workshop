@@ -5,6 +5,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
 import org.junit.jupiter.api.Test;
@@ -39,15 +40,7 @@ class JpaWorkshopWriteAdapterVersionTest {
     void save_thenUpdate_keepsAndIncrementsOptimisticVersion() {
         WorkshopId id = transactionTemplate.execute(status -> {
             Instant start = Instant.parse("2026-09-01T09:00:00Z");
-            Workshop workshop = Workshop.create(
-                    WorkshopId.generate(),
-                    WorkshopTitle.of("Test Workshop"),
-                    WorkshopDescription.of("Test description"),
-                    start,
-                    Instant.parse("2026-09-01T11:00:00Z"),
-                    start.minus(Duration.ofMinutes(15)),
-                    WorkshopCapacity.of(25),
-                    Instant.now());
+            Workshop workshop = Workshop.create(WorkshopId.generate(), WorkshopTitle.of("Test Workshop"), WorkshopDescription.of("Test description"), start, Instant.parse("2026-09-01T11:00:00Z"), start.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(25), WorkshopLateThreshold.of(900), Instant.now());
             workshopRepository.save(workshop);
             return workshop.id();
         });

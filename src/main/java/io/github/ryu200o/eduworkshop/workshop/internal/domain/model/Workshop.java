@@ -6,6 +6,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCreated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopInformationUpdated;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopLatePolicyUpdated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPlanned;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopPublished;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRescheduled;
@@ -69,6 +70,7 @@ public class Workshop {
     private Instant endTime;
     private Instant occupancyStart;
     private WorkshopCapacity capacity;
+    private WorkshopLateThreshold lateThreshold;
     private boolean hasRoomWarning;
     private boolean isRoomEvicted;
     private Instant roomEvictedAt;
@@ -86,6 +88,7 @@ public class Workshop {
                      Instant endTime,
                      Instant occupancyStart,
                      WorkshopCapacity capacity,
+                     WorkshopLateThreshold lateThreshold,
                      boolean hasRoomWarning,
                      boolean isRoomEvicted,
                      Instant roomEvictedAt,
@@ -100,6 +103,7 @@ public class Workshop {
         this.endTime = requireNonNull(endTime, "endTime cannot be null");
         this.occupancyStart = requireNonNull(occupancyStart, "occupancyStart cannot be null");
         this.capacity = requireNonNull(capacity, "capacity cannot be null");
+        this.lateThreshold = requireNonNull(lateThreshold, "lateThreshold cannot be null");
         this.hasRoomWarning = hasRoomWarning;
         this.isRoomEvicted = isRoomEvicted;
         this.roomEvictedAt = roomEvictedAt;
@@ -115,25 +119,30 @@ public class Workshop {
      * after {@code startTime}); the room is not yet assigned (that is {@link #plan}). Records a
      * {@link WorkshopCreated} domain event.</p>
      *
-     * @param id          the aggregate identifier
-     * @param title       the workshop title (self-validating VO)
-     * @param description the workshop description (self-validating VO)
-     * @param startTime   planned start instant
-     * @param endTime     planned end instant; must be after {@code startTime}
-     * @param capacity    maximum participant capacity (self-validating VO)
-     * @param now         the current instant, used for {@code createdAt}/{@code updatedAt}
+     * @param id             the aggregate identifier
+     * @param title          the workshop title (self-validating VO)
+     * @param description    the workshop description (self-validating VO)
+     * @param startTime      planned start instant
+     * @param endTime        planned end instant; must be after {@code startTime}
+     * @param occupancyStart the Occupancy Window start ({@code startTime − currentConfigBuffer},
+     *                       ADR 0018 pure function, computed by the Application layer)
+     * @param capacity       maximum participant capacity (self-validating VO)
+     * @param lateThreshold  the attendance late-policy threshold — Workshop-owned persisted policy
+     *                       (ADR 0019 §13.1); seeded at creation from the Application config default
+     *                       (Epic 3C, OQ-3C-9)
+     * @param now            the current instant, used for {@code createdAt}/{@code updatedAt}
      * @return the newly created aggregate
      * @throws InvalidWorkshopTimeRangeException if {@code endTime} is not after {@code startTime}
      */
     public static Workshop create(WorkshopId id, WorkshopTitle title, WorkshopDescription description,
                                    Instant startTime, Instant endTime, Instant occupancyStart,
-                                   WorkshopCapacity capacity, Instant now) {
+                                   WorkshopCapacity capacity, WorkshopLateThreshold lateThreshold, Instant now) {
         if (!endTime.isAfter(startTime)) {
             throw new InvalidWorkshopTimeRangeException("endTime must be after startTime");
         }
         Workshop workshop = new Workshop(
                 id, title, description,
-                null, startTime, endTime, occupancyStart, capacity,
+                null, startTime, endTime, occupancyStart, capacity, lateThreshold,
                 false, false, null, WorkshopState.DRAFT, now, now);
         workshop.record(new WorkshopCreated(id.value(), id, startTime, endTime, capacity, now));
         return workshop;
@@ -154,6 +163,7 @@ public class Workshop {
                                        Instant endTime,
                                        Instant occupancyStart,
                                        WorkshopCapacity capacity,
+                                       WorkshopLateThreshold lateThreshold,
                                        boolean hasRoomWarning,
                                        boolean isRoomEvicted,
                                        Instant roomEvictedAt,
@@ -161,7 +171,7 @@ public class Workshop {
                                        Instant createdAt,
                                        Instant updatedAt) {
         return new Workshop(id, title, description, roomReference, startTime, endTime,
-                occupancyStart, capacity, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
+                occupancyStart, capacity, lateThreshold, hasRoomWarning, isRoomEvicted, roomEvictedAt, state, createdAt, updatedAt);
     }
 
     /**
@@ -616,6 +626,44 @@ public class Workshop {
     }
 
     /**
+     * Updates the attendance late-policy threshold (Epic 3C — the Workshop owns the attendance
+     * policy, ADR 0019 §13.1).
+     *
+     * <p><strong>Negative guard (Epic 3C §4 lifecycle):</strong> the policy is mutable only in
+     * {@code DRAFT}/{@code PLANNED}/{@code PUBLISHED}; from {@code IN_PROGRESS}/{@code COMPLETED}/
+     * {@code CANCELLED} it is frozen and the mutation is rejected with
+     * {@link InvalidWorkshopStateException} (HTTP 409). A change to the same value is a no-op
+     * (no event, mirroring {@link #updateInformation}). The threshold is evaluated <em>live</em> at
+     * check-in time (OQ-3C-10) — no snapshot flows to the Attendance module.</p>
+     *
+     * @param newThreshold the new self-validating threshold (0..86400 seconds, {@code WorkshopLateThreshold})
+     * @param now          the current instant, used for {@code updatedAt}
+     * @throws InvalidWorkshopStateException if the workshop is {@code IN_PROGRESS}/{@code COMPLETED}/{@code CANCELLED}
+     */
+    public void updateLatePolicy(WorkshopLateThreshold newThreshold, Instant now) {
+        requireNonNull(newThreshold, "newThreshold cannot be null");
+        requireNonNull(now, "now cannot be null");
+
+        if (state == WorkshopState.IN_PROGRESS
+                || state == WorkshopState.COMPLETED
+                || state == WorkshopState.CANCELLED) {
+            throw new InvalidWorkshopStateException(
+                    id, state, null,
+                    "Cannot update the late policy of a workshop in state " + state + ".");
+        }
+
+        // No-Op Guard: same value → no spurious event
+        if (this.lateThreshold.equals(newThreshold)) {
+            return;
+        }
+
+        this.lateThreshold = newThreshold;
+        this.touch(now);
+
+        record(new WorkshopLatePolicyUpdated(id, newThreshold.seconds(), updatedAt));
+    }
+
+    /**
      * Updates the time window of a pre-publish workshop.
      *
      * <p>Only allowed in {@code DRAFT} and {@code PLANNED} states. Post-publish
@@ -738,6 +786,15 @@ public class Workshop {
 
     public WorkshopCapacity capacity() {
         return capacity;
+    }
+
+    /**
+     * Attendance late-policy threshold — the Workshop-owned persisted policy (ADR 0019 §13.1,
+     * Epic 3C). A learner checking in no later than {@code startTime + lateThreshold.seconds()} is
+     * {@code ATTENDED}, otherwise {@code LATE}.
+     */
+    public WorkshopLateThreshold lateThreshold() {
+        return lateThreshold;
     }
 
     /**
