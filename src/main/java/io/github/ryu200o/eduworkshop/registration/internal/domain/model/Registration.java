@@ -6,6 +6,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.Re
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationGracePeriodGranted;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationReactivated;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationRefunded;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationVerified;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.CancellationDeadlineExceededException;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.InvalidRegistrationStateException;
 
@@ -52,6 +53,7 @@ public class Registration {
     private RegistrationState state;
     private Instant registeredAt;
     private Instant cancelledAt;
+    private Instant verifiedAt;
     private final Instant createdAt;
     private Instant updatedAt;
     private Instant gracePeriodUntil;
@@ -64,6 +66,7 @@ public class Registration {
                          RegistrationState state,
                          Instant registeredAt,
                          Instant cancelledAt,
+                         Instant verifiedAt,
                          Instant createdAt,
                          Instant updatedAt,
                          Instant gracePeriodUntil) {
@@ -73,6 +76,7 @@ public class Registration {
         this.state = requireNonNull(state, "state cannot be null");
         this.registeredAt = requireNonNull(registeredAt, "registeredAt cannot be null");
         this.cancelledAt = cancelledAt;
+        this.verifiedAt = verifiedAt;
         this.createdAt = requireNonNull(createdAt, "createdAt cannot be null");
         this.updatedAt = requireNonNull(updatedAt, "updatedAt cannot be null");
         this.gracePeriodUntil = gracePeriodUntil;
@@ -91,7 +95,7 @@ public class Registration {
         requireNonNull(now, "now cannot be null");
 
         Registration registration = new Registration(id, studentId, workshopReference,
-                RegistrationState.REGISTERED, now, null, now, now, null);
+                RegistrationState.REGISTERED, now, null, null, now, now, null);
         registration.record(new RegistrationCreated(id, workshopReference.workshopId(), studentId,
                 workshopReference.startTime(), now));
         return registration;
@@ -107,11 +111,12 @@ public class Registration {
                                            RegistrationState state,
                                            Instant registeredAt,
                                            Instant cancelledAt,
+                                           Instant verifiedAt,
                                            Instant createdAt,
                                            Instant updatedAt,
                                            Instant gracePeriodUntil) {
         return new Registration(id, studentId, workshopReference, state, registeredAt, cancelledAt,
-                createdAt, updatedAt, gracePeriodUntil);
+                verifiedAt, createdAt, updatedAt, gracePeriodUntil);
     }
 
     /**
@@ -228,6 +233,34 @@ public class Registration {
      }
 
     /**
+     * Verifies the ticket at the door (REGISTERED → VERIFIED, Epic 3C).
+     *
+     * <p><strong>Idempotent no-op (OQ-3C-3):</strong> verifying an already {@code VERIFIED} seat
+     * returns silently — no state change, no {@code verifiedAt} update, no event (the controller
+     * re-scan returns the current status). From {@code CANCELLED} / {@code REFUNDED} the verify is
+     * rejected ({@link InvalidRegistrationStateException}, OQ-3C-4) — a void seat cannot be
+     * verified. The Workshop state gate (only {@code PUBLISHED} | {@code IN_PROGRESS}) is a
+     * cross-module rule orchestrated by the Application handler (ADR 0005), never here.</p>
+     *
+     * @param now the current instant, used for {@code verifiedAt} and {@code updatedAt}
+     */
+    public void verify(Instant now) {
+        requireNonNull(now, "now cannot be null");
+
+        if (state == RegistrationState.VERIFIED) {
+            return;
+        }
+
+        requireState(RegistrationState.REGISTERED, "verify");
+
+        this.state = RegistrationState.VERIFIED;
+        this.verifiedAt = now;
+        this.touch(now);
+
+        record(new RegistrationVerified(id, workshopReference.workshopId(), studentId, verifiedAt));
+    }
+
+    /**
      * Re-activates a previously cancelled registration (CANCELLED → REGISTERED) on the same row.
      * Refreshes the {@link WorkshopReference} snapshot (e.g. an updated start time after a
      * reschedule) and resets the cancellation timestamp.
@@ -241,6 +274,7 @@ public class Registration {
         this.state = RegistrationState.REGISTERED;
         this.registeredAt = now;
         this.cancelledAt = null;
+        this.verifiedAt = null;
         this.touch(now);
 
         record(new RegistrationReactivated(id, workshopReference.workshopId(), studentId,
@@ -296,6 +330,10 @@ public class Registration {
 
     public Instant cancelledAt() {
         return cancelledAt;
+    }
+
+    public Instant verifiedAt() {
+        return verifiedAt;
     }
 
     public Instant createdAt() {

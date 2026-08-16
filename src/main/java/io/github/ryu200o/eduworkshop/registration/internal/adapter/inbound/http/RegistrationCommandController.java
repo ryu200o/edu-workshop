@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.registration.internal.adapter.inbound.http
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.CancelRegistrationCommand;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.RegisterWorkshopCommand;
+import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.VerifyRegistrationCommand;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 
 import org.springframework.http.HttpStatus;
@@ -27,9 +28,11 @@ import java.util.UUID;
 class RegistrationCommandController {
 
     private final CommandBus commandBus;
+    private final RegistrationQrResolver qrResolver;
 
-    RegistrationCommandController(CommandBus commandBus) {
+    RegistrationCommandController(CommandBus commandBus, RegistrationQrResolver qrResolver) {
         this.commandBus = commandBus;
+        this.qrResolver = qrResolver;
     }
 
     @PostMapping
@@ -48,6 +51,21 @@ class RegistrationCommandController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/verify")
+    ResponseEntity<VerifyRegistrationCommand.Result> verify(@RequestHeader("X-Actor-Role") String role,
+                                                            @RequestHeader("X-User-Id") UUID userId,
+                                                            @RequestBody VerifyRegistrationRequest request) {
+        // Thin QR seam (Epic 3C, Slice A — fixture): the qrReference is opaque input resolved here to
+        // a registrationId; the handler never sees the QR itself. Real resolver → Slice B (OQ-3C-6).
+        UUID registrationId = qrResolver.resolveRegistrationId(request.qrReference());
+        var command = new VerifyRegistrationCommand(registrationId, userId, role);
+        VerifyRegistrationCommand.Result result = commandBus.execute(command);
+        return ResponseEntity.ok(result);
+    }
+
     record RegisterWorkshopRequest(UUID workshopId) {
+    }
+
+    record VerifyRegistrationRequest(String qrReference) {
     }
 }

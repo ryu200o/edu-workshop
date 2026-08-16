@@ -8,5 +8,5 @@ package io.github.ryu200o.eduworkshop.registration.internal.domain.model.event;
  */
 public sealed interface RegistrationDomainEvent
         permits RegistrationCreated, RegistrationCancelled, RegistrationReactivated, RegistrationRefunded,
-                RegistrationGracePeriodGranted {
+                RegistrationGracePeriodGranted, RegistrationVerified {
 }
