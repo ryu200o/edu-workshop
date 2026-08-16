@@ -227,6 +227,15 @@ Owner.** Attendance chỉ *lưu kết quả đã được Workshop xác định*
 `AttendanceRecord`. Nếu sau này cần phán quyết thời điểm check-in, trách nhiệm thuộc về Workshop
 (`evaluateCheckIn()` — mục 15.1), không thuộc Attendance.
 
+**Epic 3C (hoàn thiện policy):** Late policy là **metadata thuộc Workshop** — persisted dưới dạng
+`late_threshold_seconds` (cột trên `workshops`, ownership = Workshop), được chuẩn hoá từ input
+`mm:ss` → **số giây** tại Application edge. Policy có **lifecycle governance**:
+- **Mutable** ở `DRAFT` / `PLANNED` / `PUBLISHED` (`Workshop.updateLatePolicy(...)`).
+- **Immutable từ `IN_PROGRESS` trở đi** (kể cả `COMPLETED`/`CANCELLED` — frozen); vi phạm →
+  `InvalidWorkshopStateException` (domain invariant, HTTP 409).
+- `evaluateCheckIn` đọc persisted value **live** tại thời điểm check-in (không snapshot sang
+  Attendance); đổi policy ở `PUBLISHED` sẽ ảnh hưởng các check-in sau đó.
+
 ### 13.2. Attendance không quản lý roster
 
 Roster (danh sách học viên của workshop) **thuộc Registration**. Attendance KHÔNG sở hữu danh sách
@@ -258,6 +267,15 @@ logic verify nào trong Attendance.
   không biết về Registration.
 - Fail-fast, atomic cả batch: nếu bất kỳ student nào trong batch chưa VERIFIED → reject toàn bộ.
 
+**Epic 3C (verification flow):** Registration sở hữu luồng `REGISTERED → VERIFIED` —
+`Registration.verify(now)` là **local invariant** (chỉ cho phép từ `REGISTERED`):
+- Verify tại cửa là nghiệp vụ của **staff/verifier** (role `VERIFIER` qua `X-Actor-Role`) — không phải
+  student self-serve. Thiếu/khác role → **403**.
+- Workshop state gate **bắt buộc**: chỉ verify khi workshop ở `PUBLISHED` | `IN_PROGRESS`; còn lại chặn.
+- Re-verify khi đã `VERIFIED` → **idempotent no-op** (trả trạng thái hiện tại, không append mới).
+- Verify từ `CANCELLED` / `REFUNDED` → **reject 409**.
+- QR/barcode là **thin input** ở adapter; core Registration thực hiện transition.
+
 ---
 
 ## 15. Future Evolution (QR Self Check-in — không đổi Aggregate)
@@ -287,11 +305,17 @@ WorkshopExposeAPI
 ```
 
 - **`evaluateCheckIn`** (read-only, không lock, qua `WorkshopReader`): Workshop quyết định `ATTENDED` vs
-  `LATE` theo policy của chính nó tại Application edge — **Workshop-side operational setting**
-  `app.workshop.checkin.late-after-minutes` (mặc định 15), nạp qua `WorkshopCheckInParameters`
-  (mẫu `WorkshopBufferParameters`, ADR 0018). Attendance **KHÔNG sở hữu policy** — chỉ consume kết quả.
+  `LATE` theo policy của chính nó tại Application edge. Attendance **KHÔNG sở hữu policy** — chỉ consume
+  kết quả.
 - `AttendanceStatusContract` (enum `ATTENDED | LATE`) nằm ở `workshop/contract/` (ADR 0010) —
   contract dùng chung giữa Workshop và Attendance qua Module Facade, không thuộc `internal/`.
-- `evaluateAttendance()` (đánh giá tổng thể sau workshop) vẫn là **future work**, không thuộc 3B.
+- `evaluateAttendance()` (đánh giá tổng thể sau workshop) vẫn là **future work**, không thuộc 3B/3C.
 - Attendance ghi nhận kết quả do Workshop xác định vào `AttendanceRecord`; QR check-in chỉ là nguồn
   MARK bổ sung (role `STUDENT`), không phải authoritative decision (ADR 0019 §5).
+
+**Epic 3C (policy hoàn thiện):** nguồn threshold chuyển từ **operational setting** thành **workshop-owned
+persisted value** — `evaluateCheckIn` đọc `WorkshopDetailView.lateThresholdSeconds` (cột
+`late_threshold_seconds`, seed create-time default từ `app.workshop.checkin.late-after-minutes` và
+backfill rows cũ theo default; đổi được qua `UpdateWorkshopLatePolicyCommand` ở
+`DRAFT`/`PLANNED`/`PUBLISHED`). `WorkshopCheckInParameters` rời khỏi facade `evaluateCheckIn` — threshold
+là policy thuộc Workshop (ADR 0019 §13.1), không còn là cấu hình app-global khi evaluate.
