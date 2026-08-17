@@ -5,6 +5,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
 import org.junit.jupiter.api.Test;
@@ -45,15 +46,7 @@ class WorkshopOptimisticLockIntegrationTest {
     private WorkshopId createPersistedWorkshop() {
         return transactionTemplate.execute(status -> {
             Instant start = Instant.parse("2026-09-01T09:00:00Z");
-            Workshop workshop = Workshop.create(
-                    WorkshopId.generate(),
-                    WorkshopTitle.of("Lock Test"),
-                    WorkshopDescription.of("desc"),
-                    start,
-                    Instant.parse("2026-09-01T11:00:00Z"),
-                    start.minus(Duration.ofMinutes(15)),
-                    WorkshopCapacity.of(20),
-                    Instant.now());
+            Workshop workshop = Workshop.create(WorkshopId.generate(), WorkshopTitle.of("Lock Test"), WorkshopDescription.of("desc"), start, Instant.parse("2026-09-01T11:00:00Z"), start.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(20), WorkshopLateThreshold.of(900), Instant.now());
             workshopRepository.save(workshop);
             return workshop.id();
         });

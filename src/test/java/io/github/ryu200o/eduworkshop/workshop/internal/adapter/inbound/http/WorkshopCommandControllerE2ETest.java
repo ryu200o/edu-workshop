@@ -576,4 +576,90 @@ class WorkshopCommandControllerE2ETest {
         assertThat(response.statusCode()).as("updateSchedule invalid range: %s", response.body())
                 .isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT.value());
     }
+
+    @Test
+    void updateLatePolicy_draft_returnsOkAndPersistsThreshold() throws Exception {
+        UUID workshopId = createWorkshop("WS", START, END, 30);
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
+                """
+                {"lateThresholdSeconds": 930}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateLatePolicy: %s", response.body())
+                .isEqualTo(HttpStatus.OK.value());
+        assertThat(response.body()).contains("\"lateThresholdSeconds\":930");
+
+        Integer persisted = jdbcTemplate.queryForObject(
+                "SELECT late_threshold_seconds FROM workshops WHERE id = ?",
+                Integer.class, workshopId);
+        assertThat(persisted).isEqualTo(930);
+    }
+
+    @Test
+    void updateLatePolicy_zero_returnsOk() throws Exception {
+        UUID workshopId = createWorkshop("WS", START, END, 30);
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
+                """
+                {"lateThresholdSeconds": 0}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateLatePolicy zero: %s", response.body())
+                .isEqualTo(HttpStatus.OK.value());
+        assertThat(response.body()).contains("\"lateThresholdSeconds\":0");
+    }
+
+    @Test
+    void updateLatePolicy_overCeiling_returnsBadRequest() throws Exception {
+        UUID workshopId = createWorkshop("WS", START, END, 30);
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
+                """
+                {"lateThresholdSeconds": 86401}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateLatePolicy over ceiling: %s", response.body())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    @Test
+    void updateLatePolicy_negative_returnsBadRequest() throws Exception {
+        UUID workshopId = createWorkshop("WS", START, END, 30);
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
+                """
+                {"lateThresholdSeconds": -5}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateLatePolicy negative: %s", response.body())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    @Test
+    void updateLatePolicy_frozenState_returnsConflict() throws Exception {
+        UUID roomId = createRoom("LAT2", 50);
+        UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
+        post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of());
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
+                """
+                {"lateThresholdSeconds": 900}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateLatePolicy cancelled: %s", response.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void updateLatePolicy_unknownWorkshop_returnsNotFound() throws Exception {
+        HttpResponse<String> response = post("/api/v1/workshops/"
+                        + UUID.randomUUID() + "/late-policy",
+                """
+                {"lateThresholdSeconds": 900}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateLatePolicy not found: %s", response.body())
+                .isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
 }

@@ -6,6 +6,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
 import org.springframework.stereotype.Component;
@@ -106,6 +107,7 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
         entity.setEndTime(workshop.endTime());
         entity.setOccupancyStart(workshop.occupancyStart());
         entity.setCapacity(workshop.capacity().value());
+        entity.setLateThresholdSeconds(workshop.lateThreshold().seconds());
         entity.setState(workshop.state());
         entity.setCreatedAt(workshop.createdAt());
         entity.setUpdatedAt(workshop.updatedAt());
@@ -128,6 +130,7 @@ class JpaWorkshopWriteAdapter implements WorkshopRepository {
                 entity.getEndTime(),
                 entity.getOccupancyStart(),
                 WorkshopCapacity.of(entity.getCapacity()),
+                WorkshopLateThreshold.of(entity.getLateThresholdSeconds()),
                 entity.isHasRoomWarning(),
                 entity.isRoomEvicted(),
                 entity.getRoomEvictedAt(),

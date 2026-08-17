@@ -43,6 +43,7 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                         WORKSHOPS.START_TIME,
                         WORKSHOPS.END_TIME,
                         WORKSHOPS.CAPACITY,
+                        WORKSHOPS.LATE_THRESHOLD_SECONDS,
                         WORKSHOPS.STATE,
                         WORKSHOPS.CREATED_AT,
                         WORKSHOPS.UPDATED_AT)
@@ -145,6 +146,7 @@ class JooqWorkshopReadAdapter implements WorkshopReader {
                 toInstant(record.get(WORKSHOPS.START_TIME)),
                 toInstant(record.get(WORKSHOPS.END_TIME)),
                 record.get(WORKSHOPS.CAPACITY),
+                record.get(WORKSHOPS.LATE_THRESHOLD_SECONDS),
                 record.get(WORKSHOPS.STATE),
                 toInstant(record.get(WORKSHOPS.CREATED_AT)),
                 toInstant(record.get(WORKSHOPS.UPDATED_AT))

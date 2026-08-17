@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 
@@ -60,9 +61,7 @@ class JooqWorkshopReadAdapterTest {
         WorkshopTitle title = WorkshopTitle.of("Intro to AI");
         WorkshopDescription description = WorkshopDescription.of("A beginner workshop");
         WorkshopCapacity capacity = WorkshopCapacity.of(30);
-        return Workshop.create(id, title, description, start, end,
-                start.minus(Duration.ofMinutes(15)), capacity,
-                Instant.parse("2026-09-15T00:00:00Z"));
+        return Workshop.create(id, title, description, start, end, start.minus(Duration.ofMinutes(15)), capacity, WorkshopLateThreshold.of(900), Instant.parse("2026-09-15T00:00:00Z"));
     }
 
     @Test

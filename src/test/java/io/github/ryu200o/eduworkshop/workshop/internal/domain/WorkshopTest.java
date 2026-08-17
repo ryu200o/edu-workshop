@@ -4,6 +4,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.RoomReference;
@@ -19,6 +20,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.Worksh
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopRoomEvicted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopStarted;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopCompleted;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopLatePolicyUpdated;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopStateException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.RescheduleDeadlineExceededException;
@@ -62,7 +64,7 @@ class WorkshopTest {
     }
 
     private Workshop createDraft() {
-        return Workshop.create(newId(), title(), description(), START, END, OCCUPANCY_START, CAPACITY, NOW);
+        return Workshop.create(newId(), title(), description(), START, END, OCCUPANCY_START, CAPACITY, WorkshopLateThreshold.of(900), NOW);
     }
 
     // ----------------------------------------------------------------
@@ -72,7 +74,7 @@ class WorkshopTest {
     @Test
     void create_producesDraftWithCreatedEvent() {
         WorkshopId id = newId();
-        Workshop workshop = Workshop.create(id, title(), description(), START, END, OCCUPANCY_START, CAPACITY, NOW);
+        Workshop workshop = Workshop.create(id, title(), description(), START, END, OCCUPANCY_START, CAPACITY, WorkshopLateThreshold.of(900), NOW);
 
         assertThat(workshop.id()).isEqualTo(id);
         assertThat(workshop.state()).isEqualTo(WorkshopState.DRAFT);
@@ -95,13 +97,13 @@ class WorkshopTest {
 
     @Test
     void create_rejectsBlankTitle() {
-        assertThatThrownBy(() -> Workshop.create(newId(), WorkshopTitle.of("   "), description(), START, END, OCCUPANCY_START, CAPACITY, NOW))
+        assertThatThrownBy(() -> Workshop.create(newId(), WorkshopTitle.of("   "), description(), START, END, OCCUPANCY_START, CAPACITY, WorkshopLateThreshold.of(900), NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void create_rejectsEndNotAfterStart() {
-        assertThatThrownBy(() -> Workshop.create(newId(), title(), description(), START, END_BEFORE_START, OCCUPANCY_START, CAPACITY, NOW))
+        assertThatThrownBy(() -> Workshop.create(newId(), title(), description(), START, END_BEFORE_START, OCCUPANCY_START, CAPACITY, WorkshopLateThreshold.of(900), NOW))
                 .isInstanceOf(WorkshopDomainException.class)
                 .hasMessageContaining("after startTime");
     }
@@ -139,7 +141,7 @@ class WorkshopTest {
         // ADR 0008: PLANNED is planning-only. Two workshops may share a room + overlap.
         // This test asserts the aggregate does NOT reject such a plan (conflict is a publish-time concern).
         Workshop a = createDraft();
-        Workshop b = Workshop.create(newId(), WorkshopTitle.of("Other WS"), description(), START, END, OCCUPANCY_START, CAPACITY, NOW);
+        Workshop b = Workshop.create(newId(), WorkshopTitle.of("Other WS"), description(), START, END, OCCUPANCY_START, CAPACITY, WorkshopLateThreshold.of(900), NOW);
         RoomReference sameRoom = RoomReference.of(ROOM.roomId(), "Room 201", "Floor 2", 50);
 
         a.plan(sameRoom, false, OCCUPANCY_START, NOW);
@@ -1104,5 +1106,92 @@ class WorkshopTest {
 
         workshop.clearDomainEvents();
         assertThat(workshop.recordedEvents()).isEmpty();
+    }
+
+    // ----------------------------------------------------------------
+    // updateLatePolicy (Epic 3C — Workshop owns the attendance policy)
+    // ----------------------------------------------------------------
+
+    @Test
+    void updateLatePolicy_draft_allowsChangeAndEmitsEvent() {
+        Workshop workshop = createDraft();
+        workshop.clearDomainEvents();
+        Instant updatedAt = NOW.plusSeconds(1);
+
+        workshop.updateLatePolicy(WorkshopLateThreshold.of(600), updatedAt);
+
+        assertThat(workshop.lateThreshold().seconds()).isEqualTo(600);
+        assertThat(workshop.updatedAt()).isEqualTo(updatedAt);
+        assertThat(workshop.recordedEvents())
+                .hasSize(1)
+                .hasExactlyElementsOfTypes(WorkshopLatePolicyUpdated.class);
+        WorkshopLatePolicyUpdated event = (WorkshopLatePolicyUpdated) workshop.recordedEvents().get(0);
+        assertThat(event.lateThresholdSeconds()).isEqualTo(600);
+    }
+
+    @Test
+    void updateLatePolicy_published_allowsChange() {
+        Workshop workshop = createPublished();
+
+        workshop.updateLatePolicy(WorkshopLateThreshold.of(1800), NOW.plusSeconds(1));
+
+        assertThat(workshop.lateThreshold().seconds()).isEqualTo(1800);
+    }
+
+    @Test
+    void updateLatePolicy_sameValue_isNoOp() {
+        Workshop workshop = createDraft();
+        workshop.clearDomainEvents();
+        Instant before = workshop.updatedAt();
+
+        workshop.updateLatePolicy(WorkshopLateThreshold.of(900), NOW);
+
+        assertThat(workshop.lateThreshold().seconds()).isEqualTo(900);
+        assertThat(workshop.updatedAt()).isEqualTo(before);
+        assertThat(workshop.recordedEvents()).isEmpty();
+    }
+
+    @Test
+    void updateLatePolicy_cancelled_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.cancel(NOW.plusSeconds(1));
+
+        assertThatThrownBy(() -> workshop.updateLatePolicy(WorkshopLateThreshold.of(600), NOW))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    @Test
+    void updateLatePolicy_inProgress_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+
+        assertThatThrownBy(() -> workshop.updateLatePolicy(WorkshopLateThreshold.of(600), START))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    @Test
+    void updateLatePolicy_completed_isRejected() {
+        Workshop workshop = createPublished();
+        workshop.start(START);
+        workshop.complete(END);
+
+        assertThatThrownBy(() -> workshop.updateLatePolicy(WorkshopLateThreshold.of(600), END))
+                .isInstanceOf(InvalidWorkshopStateException.class);
+    }
+
+    @Test
+    void updateLatePolicy_rejectsNullThreshold() {
+        Workshop workshop = createDraft();
+
+        assertThatThrownBy(() -> workshop.updateLatePolicy(null, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateLatePolicy_rejectsNullNow() {
+        Workshop workshop = createDraft();
+
+        assertThatThrownBy(() -> workshop.updateLatePolicy(WorkshopLateThreshold.of(600), null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

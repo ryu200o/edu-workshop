@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * End-to-end HTTP test for the Registration write side, exercising the full stack against a real
@@ -224,6 +225,169 @@ class RegistrationCommandControllerE2ETest {
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
                 Map.of("X-User-Id", userId.toString()));
         assertThat(cancelled.statusCode()).as("cancel past deadline: %s", cancelled.body())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    // ----------------------------------------------------------------
+    // verify (Epic 3C — REGISTERED → VERIFIED via thin QR seam)
+    // ----------------------------------------------------------------
+
+    private HttpResponse<String> verify(String qrReference, Map<String, String> headers) throws Exception {
+        return post("/api/v1/registrations/verify",
+                """
+                {"qrReference": "%s"}
+                """.formatted(qrReference), headers);
+    }
+
+    private HttpResponse<String> startWorkshop(UUID workshopId) throws Exception {
+        return post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
+    }
+
+    @Test
+    void verify_verifierHappyPath_marksSeatVerified() throws Exception {
+        UUID roomId = createRoom("VERIFY-OK");
+        UUID workshopId = publishWorkshop(roomId);
+        UUID studentId = UUID.randomUUID();
+        UUID verifierId = UUID.randomUUID();
+
+        HttpResponse<String> registered = register(workshopId, studentId);
+        assertThat(registered.statusCode()).as("register: %s", registered.body())
+                .isEqualTo(HttpStatus.CREATED.value());
+        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
+                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", verifierId.toString()));
+        assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(verified.body()).contains("\"registrationId\":\"" + registrationId + "\"");
+        assertThat(readField(verified, "verifiedAt")).isNotBlank();
+    }
+
+    @Test
+    void verify_allowsWorkshopInProgress() throws Exception {
+        UUID roomId = createRoom("VERIFY-INPROG");
+        Instant pastStart = Instant.now().minus(Duration.ofHours(1));
+        UUID workshopId = createWorkshop("WS-" + UUID.randomUUID(), pastStart, pastStart.plus(Duration.ofHours(2)));
+        HttpResponse<String> planned = post("/api/v1/workshops/" + workshopId + "/plan",
+                """
+                {"roomId": "%s"}
+                """.formatted(roomId), Map.of());
+        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
+        HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
+        assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.OK.value());
+        UUID studentId = UUID.randomUUID();
+        UUID verifierId = UUID.randomUUID();
+
+        HttpResponse<String> registered = register(workshopId, studentId);
+        assertThat(registered.statusCode()).as("register: %s", registered.body())
+                .isEqualTo(HttpStatus.CREATED.value());
+        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+
+        assertThat(startWorkshop(workshopId).statusCode()).isEqualTo(HttpStatus.OK.value());
+
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
+                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", verifierId.toString()));
+        assertThat(verified.statusCode()).as("verify IN_PROGRESS: %s", verified.body())
+                .isEqualTo(HttpStatus.OK.value());
+    }
+
+    @Test
+    void verify_idempotent_whenAlreadyVerified() throws Exception {
+        UUID roomId = createRoom("VERIFY-IDEM");
+        UUID workshopId = publishWorkshop(roomId);
+        UUID studentId = UUID.randomUUID();
+        UUID verifierId = UUID.randomUUID();
+
+        HttpResponse<String> registered = register(workshopId, studentId);
+        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        Map<String, String> headers = Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", verifierId.toString());
+
+        HttpResponse<String> first = verify("QR-REG-" + registrationId, headers);
+        assertThat(first.statusCode()).isEqualTo(HttpStatus.OK.value());
+        String firstVerifiedAt = readField(first, "verifiedAt");
+
+        HttpResponse<String> second = verify("QR-REG-" + registrationId, headers);
+        assertThat(second.statusCode()).as("re-verify: %s", second.body()).isEqualTo(HttpStatus.OK.value());
+        // Re-verify must not advance verifiedAt: the first response is read from the in-memory
+        // aggregate (nanos), the second is re-loaded from the DB (rounded to micros) — compare within
+        // a 1µs tolerance to absorb the storage rounding (H2/PostgreSQL TIMESTAMPTZ).
+        assertThat(Instant.parse(readField(second, "verifiedAt")))
+                .isCloseTo(Instant.parse(firstVerifiedAt), within(Duration.ofNanos(1000)));
+    }
+
+    @Test
+    void verify_nonVerifierRole_returnsForbidden() throws Exception {
+        UUID roomId = createRoom("VERIFY-ROLE");
+        UUID workshopId = publishWorkshop(roomId);
+        UUID studentId = UUID.randomUUID();
+
+        HttpResponse<String> registered = register(workshopId, studentId);
+        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
+                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", UUID.randomUUID().toString()));
+        assertThat(verified.statusCode()).as("non-verifier: %s", verified.body())
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
+    }
+
+    @Test
+    void verify_unknownQrReference_returnsNotFound() throws Exception {
+        HttpResponse<String> verified = verify("QR-REG-" + UUID.randomUUID(),
+                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+        assertThat(verified.statusCode()).as("unknown QR: %s", verified.body())
+                .isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
+
+    @Test
+    void verify_cancelledWorkshop_returnsConflict() throws Exception {
+        UUID roomId = createRoom("VERIFY-WSX");
+        UUID workshopId = publishWorkshop(roomId);
+        UUID studentId = UUID.randomUUID();
+
+        HttpResponse<String> registered = register(workshopId, studentId);
+        assertThat(registered.statusCode()).as("register: %s", registered.body())
+                .isEqualTo(HttpStatus.CREATED.value());
+        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+
+        HttpResponse<String> cancelled = post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of());
+        assertThat(cancelled.statusCode()).as("cancel workshop: %s", cancelled.body())
+                .isEqualTo(HttpStatus.OK.value());
+
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
+                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+        assertThat(verified.statusCode()).as("verify cancelled workshop: %s", verified.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void verify_cancelledRegistration_returnsConflict() throws Exception {
+        UUID roomId = createRoom("VERIFY-CANCEL");
+        UUID workshopId = publishWorkshop(roomId);
+        UUID studentId = UUID.randomUUID();
+
+        HttpResponse<String> registered = register(workshopId, studentId);
+        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
+                Map.of("X-User-Id", studentId.toString()));
+        assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.OK.value());
+
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
+                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+        assertThat(verified.statusCode()).as("verify cancelled: %s", verified.body())
+                .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void verify_missingRoleHeader_returnsBadRequest() throws Exception {
+        UUID roomId = createRoom("VERIFY-HDR");
+        UUID workshopId = publishWorkshop(roomId);
+        UUID studentId = UUID.randomUUID();
+
+        HttpResponse<String> registered = register(workshopId, studentId);
+        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
+                Map.of("X-User-Id", UUID.randomUUID().toString()));
+        assertThat(verified.statusCode()).as("missing role header: %s", verified.body())
                 .isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 }

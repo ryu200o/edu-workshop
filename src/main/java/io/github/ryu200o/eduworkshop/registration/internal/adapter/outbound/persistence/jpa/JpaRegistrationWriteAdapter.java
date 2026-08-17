@@ -107,6 +107,7 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
         entity.setWorkshopRoomNameSnapshot(registration.workshopReference().roomName());
         entity.setRegisteredAt(registration.registeredAt());
         entity.setCancelledAt(registration.cancelledAt());
+        entity.setVerifiedAt(registration.verifiedAt());
         entity.setGracePeriodUntil(registration.gracePeriodUntil());
         entity.setCreatedAt(registration.createdAt());
         entity.setUpdatedAt(registration.updatedAt());
@@ -126,6 +127,7 @@ class JpaRegistrationWriteAdapter implements RegistrationRepository {
                 RegistrationState.valueOf(entity.getStatus()),
                 entity.getRegisteredAt(),
                 entity.getCancelledAt(),
+                entity.getVerifiedAt(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
                 entity.getGracePeriodUntil()

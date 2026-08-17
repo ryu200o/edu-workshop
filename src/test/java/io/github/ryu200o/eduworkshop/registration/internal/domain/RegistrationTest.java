@@ -10,7 +10,9 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.Re
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationGracePeriodGranted;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationReactivated;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationRefunded;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.event.RegistrationVerified;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.CancellationDeadlineExceededException;
+import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.InvalidRegistrationStateException;
 import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exception.RegistrationDomainException;
 
 import org.junit.jupiter.api.Test;
@@ -250,6 +252,70 @@ class RegistrationTest {
     }
 
     // ----------------------------------------------------------------
+    // verify (Epic 3C — REGISTERED → VERIFIED)
+    // ----------------------------------------------------------------
+
+    @Test
+    void verify_REGISTERED_to_VERIFIED_recordsTimestampAndEvent() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+
+        registration.verify(NOW.plusSeconds(300));
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.VERIFIED);
+        assertThat(registration.verifiedAt()).isEqualTo(NOW.plusSeconds(300));
+        assertThat(registration.cancelledAt()).isNull();
+
+        assertThat(registration.recordedEvents())
+                .hasSize(2)
+                .hasExactlyElementsOfTypes(RegistrationCreated.class, RegistrationVerified.class);
+
+        RegistrationVerified event = (RegistrationVerified) registration.recordedEvents().get(1);
+        assertThat(event.workshopId()).isEqualTo(WORKSHOP_ID);
+        assertThat(event.studentId()).isEqualTo(STUDENT);
+        assertThat(event.verifiedAt()).isEqualTo(NOW.plusSeconds(300));
+    }
+
+    @Test
+    void verify_idempotent_whenAlreadyVerified() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        registration.verify(NOW.plusSeconds(60));
+        registration.clearDomainEvents();
+        Instant originalVerifiedAt = registration.verifiedAt();
+
+        registration.verify(NOW.plusSeconds(1800));
+
+        assertThat(registration.state()).isEqualTo(RegistrationState.VERIFIED);
+        assertThat(registration.verifiedAt()).isEqualTo(originalVerifiedAt);
+        assertThat(registration.recordedEvents()).isEmpty();
+    }
+
+    @Test
+    void verify_rejectsCancelledSeat() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        registration.cancel(DEADLINE.minusSeconds(1));
+
+        assertThatThrownBy(() -> registration.verify(NOW))
+                .isInstanceOf(InvalidRegistrationStateException.class);
+    }
+
+    @Test
+    void verify_rejectsRefundedSeat() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+        registration.refundBySystem(NOW);
+
+        assertThatThrownBy(() -> registration.verify(NOW))
+                .isInstanceOf(InvalidRegistrationStateException.class);
+    }
+
+    @Test
+    void verify_rejectsNullNow() {
+        Registration registration = Registration.create(RegistrationId.generate(), STUDENT, workshop(), NOW);
+
+        assertThatThrownBy(() -> registration.verify(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------
     // reactivate
     // ----------------------------------------------------------------
 
@@ -417,7 +483,7 @@ class RegistrationTest {
     void reconstruct_bypassesInvariants() {
         Registration registration = Registration.reconstruct(
                 RegistrationId.generate(), STUDENT, workshop(),
-                RegistrationState.CANCELLED, NOW, DEADLINE, NOW, DEADLINE, null);
+                RegistrationState.CANCELLED, NOW, DEADLINE, null, NOW, DEADLINE, null);
 
         assertThat(registration.state()).isEqualTo(RegistrationState.CANCELLED);
         assertThat(registration.cancelledAt()).isEqualTo(DEADLINE);

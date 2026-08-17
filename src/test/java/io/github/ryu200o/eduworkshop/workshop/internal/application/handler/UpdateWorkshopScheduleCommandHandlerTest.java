@@ -10,6 +10,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.exception.InvalidWorkshopTimeRangeException;
@@ -61,14 +62,7 @@ class UpdateWorkshopScheduleCommandHandlerTest {
     }
 
     private Workshop createDraftWorkshop() {
-        return Workshop.create(
-                WorkshopId.of(WORKSHOP_ID),
-                WorkshopTitle.of("Test Workshop"),
-                WorkshopDescription.of("Description"),
-                START, END,
-                START.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(30),
-                NOW);
+        return Workshop.create(WorkshopId.of(WORKSHOP_ID), WorkshopTitle.of("Test Workshop"), WorkshopDescription.of("Description"), START, END, START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), NOW);
     }
 
     private Workshop createPlannedWorkshop() {

@@ -9,6 +9,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.Workshop;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopCapacity;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopDescription;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopId;
+import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopLateThreshold;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopState;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopTitle;
 import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.event.WorkshopDomainEvent;
@@ -66,14 +67,7 @@ class StartWorkshopCommandHandlerTest {
     }
 
     private Workshop createPublishedWorkshop() {
-        Workshop workshop = Workshop.create(
-                WorkshopId.of(WORKSHOP_ID),
-                WorkshopTitle.of("Test Workshop"),
-                WorkshopDescription.of("Description"),
-                START, END,
-                START.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(30),
-                Instant.parse("2026-07-01T00:00:00Z"));
+        Workshop workshop = Workshop.create(WorkshopId.of(WORKSHOP_ID), WorkshopTitle.of("Test Workshop"), WorkshopDescription.of("Description"), START, END, START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), Instant.parse("2026-07-01T00:00:00Z"));
         workshop.plan(RoomReference.of(ROOM_ID, "Room 201", "Building A/2", 50), false,
                 workshop.occupancyStart(), Instant.parse("2026-07-02T00:00:00Z"));
         workshop.publish(Instant.parse("2026-07-03T00:00:00Z"), 50);
@@ -110,14 +104,7 @@ class StartWorkshopCommandHandlerTest {
 
     @Test
     void start_throwsWhenWorkshopNotPublished() {
-        Workshop workshop = Workshop.create(
-                WorkshopId.of(WORKSHOP_ID),
-                WorkshopTitle.of("Test Workshop"),
-                WorkshopDescription.of("Description"),
-                START, END,
-                START.minus(Duration.ofMinutes(15)),
-                WorkshopCapacity.of(30),
-                NOW);
+        Workshop workshop = Workshop.create(WorkshopId.of(WORKSHOP_ID), WorkshopTitle.of("Test Workshop"), WorkshopDescription.of("Description"), START, END, START.minus(Duration.ofMinutes(15)), WorkshopCapacity.of(30), WorkshopLateThreshold.of(900), NOW);
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
