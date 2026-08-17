@@ -282,6 +282,105 @@ Postgres-only `USING hash` index) so the same DDL runs on H2 (tests) and Postgre
 
 ---
 
+### 9. IAM Tables (IAM Module)
+
+Single identity source for the platform (ADR 0020): the `User` aggregate holds **both** credentials
+and profile; every other module references a user by opaque `userId` (UUID) with **no physical FK**.
+Global RBAC roles (`USER`, `ADMIN`, `PLANNER`, `AUDITOR`, `VERIFIER`) live in `iam_user_roles`;
+contextual roles (`TRAINER`, `STUDENT`) are **never persisted here** — they are evaluated at
+runtime by the consuming modules (ADR 0020 §1.2). Implemented by Flyway
+`V21__create_iam_tables.sql`.
+
+#### 9.1 `iam_users` (aggregate root `User`)
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `PRIMARY KEY` | Unique identifier of the user (the opaque `userId` exposed to other modules). |
+| `email` | `VARCHAR(255)` | `NOT NULL`, `CHECK (email = LOWER(email))`, unique via `uk_iam_users_email_lower` | Login identity, normalized to lowercase at the domain layer (ADR 0020 §1.1). |
+| `password_hash` | `VARCHAR(255)` | `NOT NULL` | BCrypt (strength 12) hash of the password. |
+| `status` | `VARCHAR(32)` | `NOT NULL DEFAULT 'PENDING_VERIFICATION'`, `CHECK IN ('PENDING_VERIFICATION','ACTIVE','LOCKED','DISABLED')` | Account lifecycle. Admin-created accounts start `ACTIVE` (OQ-4). |
+| `full_name` | `VARCHAR(100)` | `NOT NULL` | Display name (required; sole required profile field). |
+| `phone_number` | `VARCHAR(20)` | `NULLABLE` | Optional contact number. |
+| `student_code` | `VARCHAR(30)` | `NULLABLE`, `UNIQUE` | Optional learner code. |
+| `avatar_url` | `VARCHAR(255)` | `NULLABLE` | Optional avatar URL. |
+| `must_change_password` | `BOOLEAN` | `NOT NULL DEFAULT FALSE` | If `true`, the JWT filter gates all business APIs (403 `MUST_CHANGE_PASSWORD_FIRST`) except change-password/logout (ADR 0020 §1.3). |
+| `failed_login_attempts` | `INT` | `NOT NULL DEFAULT 0` | Consecutive failed logins (lockout trigger at 5). |
+| `lockout_count` | `INT` | `NOT NULL DEFAULT 0` | Escalation stage: 1 → 15 min lockout, ≥2 → 60 min (ADR 0020 §1.5). |
+| `locked_until` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | End of the current lockout window. |
+| `last_locked_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | When the last lockout started. |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record creation timestamp. |
+| `updated_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Record last update timestamp. |
+| `version` | `BIGINT` | `NOT NULL DEFAULT 0` | Optimistic-locking version (ADR 0015 Strategy B); OOLF → 409. |
+
+**Indexes & Constraints**:
+*   `uk_iam_users_email_lower`: **Plain UNIQUE index on `email`** — race-proof, case-insensitive email uniqueness. Case-insensitivity is guaranteed by `chk_iam_users_email_lowercase` (`CHECK email = LOWER(email)`) which forces lowercase storage on both H2 and PostgreSQL; the functional `LOWER(email)` index is intentionally **not** used because H2 (test DB) cannot parse functional indexes — portable equivalent, same spirit as the ADR 0011 V7 tweaks (ADR 0020 §1.1, ADR 0005 backstop).
+*   `uk_iam_users_student_code`: Unique constraint on `student_code`.
+*   `chk_iam_users_email_lowercase`: CHECK `email = LOWER(email)`.
+*   `idx_iam_users_status`: Index on `status` for admin list/filter.
+*   `chk_iam_users_status`: CHECK on `status`.
+
+#### 9.2 `iam_user_roles` (global RBAC)
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `user_id` | `UUID` | `NOT NULL`, `FK → iam_users(id) ON DELETE CASCADE` | Owning user. |
+| `role` | `VARCHAR(32)` | `NOT NULL`, `PK (user_id, role)`, `CHECK IN ('USER','ADMIN','PLANNER','AUDITOR','VERIFIER')` | Global role. `USER` is the mandatory base role (ADR 0020 §1.2). |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL DEFAULT CURRENT_TIMESTAMP` | Grant timestamp. |
+
+**Indexes & Constraints**:
+*   `pk_iam_user_roles`: Composite PK `(user_id, role)`.
+*   `fk_iam_user_roles_user`: FK `ON DELETE CASCADE` — roles die with the user.
+*   `idx_iam_user_roles_role`: Index on `role` for role-scoped queries.
+
+#### 9.3 `iam_refresh_tokens` (stateful refresh session, RTR)
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `PRIMARY KEY` | Token row identifier (never the raw token). |
+| `user_id` | `UUID` | `NOT NULL`, `FK → iam_users(id) ON DELETE CASCADE` | Owning user. |
+| `token_hash` | `VARCHAR(255)` | `NOT NULL`, `UNIQUE` | **SHA-256 hash** of the opaque refresh token (raw token never stored — ADR 0020 §1.4). |
+| `expires_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | 7-day expiry. |
+| `revoked_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Rotation/revocation marker; non-null triggers the RTR family-revoke (OQ-3, RFC 6819). |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Creation timestamp. |
+
+**Indexes & Constraints**:
+*   `uk_iam_refresh_tokens_hash`: Unique on `token_hash` for lookup.
+*   `idx_iam_refresh_tokens_user_id`: Index on `user_id` for revoke-all (`logout-all`, password change).
+*   `idx_iam_refresh_tokens_lookup`: Composite `(token_hash, revoked_at, expires_at)` for the refresh check.
+*   `fk_iam_refresh_tokens_user`: FK `ON DELETE CASCADE`.
+
+#### 9.4 `iam_password_reset_tokens` (shared one-time action token)
+
+Single-use token store shared by **both** the `verify-email` and `forgot-password`/`reset-password`
+flows (OQ-1: reuse, no separate verification-token table). Raw token is never persisted — only its
+hash.
+
+| Column Name | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `PRIMARY KEY` | Token row identifier (the `tokenId` carried on outbox events — ADR 0020 §1.6). |
+| `user_id` | `UUID` | `NOT NULL`, `FK → iam_users(id) ON DELETE CASCADE` | Owning user. |
+| `token_hash` | `VARCHAR(255)` | `NOT NULL`, `UNIQUE` | SHA-256 hash of the one-time token. |
+| `expires_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Expiry (e.g. 24h). |
+| `used_at` | `TIMESTAMP WITH TIME ZONE` | `NULLABLE` | Single-use marker; non-null = consumed. |
+| `created_at` | `TIMESTAMP WITH TIME ZONE` | `NOT NULL` | Creation timestamp. |
+
+**Indexes & Constraints**:
+*   `uk_iam_reset_tokens_hash`: Unique on `token_hash` for lookup.
+*   `idx_iam_reset_tokens_lookup`: Composite `(token_hash, used_at, expires_at)` for the consumption check.
+*   `fk_iam_reset_tokens_user`: FK `ON DELETE CASCADE`.
+
+**Seed (bootstrap admin)**: `admin@eduworkshop.local` (`ACTIVE`, roles `USER`+`ADMIN`,
+`must_change_password = TRUE`). Initial password is distributed out-of-band and must be changed on
+first login (V21 §5).
+
+**Cross-module rules (IAM is the identity source):**
+*   `registrations.user_id`, `attendance_records.student_id`, `attendance_entries.actor_id` are
+    **logical UUIDs** — no FK to `iam_users` (ADR 0020 §1.1, Cross-Module Reference Strategy).
+*   Consumers resolve display data via `IamExposeAPI.getUserSummary(UUID)`; unknown/historical IDs
+    fall back to `UserSummarySnapshot.fallback(UUID)` (`"Người dùng cũ"`, `email = "N/A"`, `status = "UNKNOWN"`).
+
+---
+
 ## Audit History — 3-Step Data Strategy
 
 Each module follows a **3-step data lifecycle** for auditing and traceability:
@@ -309,12 +408,13 @@ All inter-module references use **logical UUIDs** — no physical foreign keys e
 |---------------|---------------|--------|---------------|
 | Workshop | Room | `workshops.room_id` | None (logical UUID) |
 | Registration | Workshop | `registrations.workshop_id` | None (logical UUID) |
-| Registration | User | `registrations.user_id` | None (logical UUID) |
+| Registration | IAM | `registrations.user_id` | None (logical UUID) |
 | Room History | Room | `room_histories.room_id` | None (logical UUID) |
 | Workshop History | Workshop | `workshop_histories.workshop_id` | Physical FK → `workshops(id)` ON DELETE CASCADE (same module) |
 | Workshop Snapshot | Workshop | `workshop_snapshots.workshop_id` | Physical FK → `workshops(id)` ON DELETE CASCADE (same module) |
 | Attendance | Workshop | `attendance_records.workshop_id` | None (logical UUID) |
-| Attendance | User | `attendance_records.student_id` | None (logical UUID) |
+| Attendance | IAM | `attendance_records.student_id` | None (logical UUID) |
+| Attendance Entry | IAM | `attendance_entries.actor_id` | None (logical UUID) |
 | Attendance Entry | Attendance Record | `attendance_entries.record_id` | Physical FK → `attendance_records(id)` ON DELETE RESTRICT (same module) |
 
 This approach respects Spring Modulith's module boundaries. Each module owns and manages its own tables independently.
