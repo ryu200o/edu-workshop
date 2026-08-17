@@ -228,8 +228,8 @@ Owner.** Attendance chỉ *lưu kết quả đã được Workshop xác định*
 (`evaluateCheckIn()` — mục 15.1), không thuộc Attendance.
 
 **Epic 3C (hoàn thiện policy):** Late policy là **metadata thuộc Workshop** — persisted dưới dạng
-`late_threshold_seconds` (cột trên `workshops`, ownership = Workshop), được chuẩn hoá từ input
-`mm:ss` → **số giây** tại Application edge. Policy có **lifecycle governance**:
+`late_threshold_seconds` (cột trên `workshops`, ownership = Workshop), input chuẩn hoá trực tiếp
+bằng **số giây** (0..86400, không dùng format `mm:ss`). Policy có **lifecycle governance**:
 - **Mutable** ở `DRAFT` / `PLANNED` / `PUBLISHED` (`Workshop.updateLatePolicy(...)`).
 - **Immutable từ `IN_PROGRESS` trở đi** (kể cả `COMPLETED`/`CANCELLED` — frozen); vi phạm →
   `InvalidWorkshopStateException` (domain invariant, HTTP 409).

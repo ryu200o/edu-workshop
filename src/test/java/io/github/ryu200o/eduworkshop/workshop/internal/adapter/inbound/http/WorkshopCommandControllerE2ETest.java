@@ -579,12 +579,11 @@ class WorkshopCommandControllerE2ETest {
 
     @Test
     void updateLatePolicy_draft_returnsOkAndPersistsThreshold() throws Exception {
-        UUID roomId = createRoom("LAT1", 50);
         UUID workshopId = createWorkshop("WS", START, END, 30);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
                 """
-                {"lateThreshold": "15:30"}
+                {"lateThresholdSeconds": 930}
                 """, Map.of());
 
         assertThat(response.statusCode()).as("updateLatePolicy: %s", response.body())
@@ -598,29 +597,42 @@ class WorkshopCommandControllerE2ETest {
     }
 
     @Test
-    void updateLatePolicy_bareMinutes_returnsOk() throws Exception {
+    void updateLatePolicy_zero_returnsOk() throws Exception {
         UUID workshopId = createWorkshop("WS", START, END, 30);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
                 """
-                {"lateThreshold": "10"}
+                {"lateThresholdSeconds": 0}
                 """, Map.of());
 
-        assertThat(response.statusCode()).as("updateLatePolicy bare minutes: %s", response.body())
+        assertThat(response.statusCode()).as("updateLatePolicy zero: %s", response.body())
                 .isEqualTo(HttpStatus.OK.value());
-        assertThat(response.body()).contains("\"lateThresholdSeconds\":600");
+        assertThat(response.body()).contains("\"lateThresholdSeconds\":0");
     }
 
     @Test
-    void updateLatePolicy_malformedFormat_returnsBadRequest() throws Exception {
+    void updateLatePolicy_overCeiling_returnsBadRequest() throws Exception {
         UUID workshopId = createWorkshop("WS", START, END, 30);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
                 """
-                {"lateThreshold": "15:60"}
+                {"lateThresholdSeconds": 86401}
                 """, Map.of());
 
-        assertThat(response.statusCode()).as("updateLatePolicy malformed: %s", response.body())
+        assertThat(response.statusCode()).as("updateLatePolicy over ceiling: %s", response.body())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    @Test
+    void updateLatePolicy_negative_returnsBadRequest() throws Exception {
+        UUID workshopId = createWorkshop("WS", START, END, 30);
+
+        HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
+                """
+                {"lateThresholdSeconds": -5}
+                """, Map.of());
+
+        assertThat(response.statusCode()).as("updateLatePolicy negative: %s", response.body())
                 .isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
@@ -632,7 +644,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/late-policy",
                 """
-                {"lateThreshold": "15:00"}
+                {"lateThresholdSeconds": 900}
                 """, Map.of());
 
         assertThat(response.statusCode()).as("updateLatePolicy cancelled: %s", response.body())
@@ -644,7 +656,7 @@ class WorkshopCommandControllerE2ETest {
         HttpResponse<String> response = post("/api/v1/workshops/"
                         + UUID.randomUUID() + "/late-policy",
                 """
-                {"lateThreshold": "15:00"}
+                {"lateThresholdSeconds": 900}
                 """, Map.of());
 
         assertThat(response.statusCode()).as("updateLatePolicy not found: %s", response.body())

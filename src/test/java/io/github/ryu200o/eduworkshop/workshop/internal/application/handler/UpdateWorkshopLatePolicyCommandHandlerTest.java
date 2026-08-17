@@ -74,7 +74,7 @@ class UpdateWorkshopLatePolicyCommandHandlerTest {
         when(workshopRepository.loadById(WorkshopId.of(id))).thenReturn(Optional.of(workshop));
 
         UpdateWorkshopLatePolicyCommand.Result result =
-                handler().handle(new UpdateWorkshopLatePolicyCommand(id, "15:30"));
+                handler().handle(new UpdateWorkshopLatePolicyCommand(id, 930));
 
         assertThat(result.workshopId()).isEqualTo(id);
         assertThat(result.lateThresholdSeconds()).isEqualTo(930);
@@ -86,25 +86,13 @@ class UpdateWorkshopLatePolicyCommandHandlerTest {
     }
 
     @Test
-    void bareMinutes_equalsMinutesSeconds() {
-        UUID id = UUID.randomUUID();
-        Workshop workshop = publishedWorkshop(id);
-        when(workshopRepository.loadById(WorkshopId.of(id))).thenReturn(Optional.of(workshop));
-
-        UpdateWorkshopLatePolicyCommand.Result result =
-                handler().handle(new UpdateWorkshopLatePolicyCommand(id, "15"));
-
-        assertThat(result.lateThresholdSeconds()).isEqualTo(900);
-    }
-
-    @Test
     void zero_allowed() {
         UUID id = UUID.randomUUID();
         Workshop workshop = publishedWorkshop(id);
         when(workshopRepository.loadById(WorkshopId.of(id))).thenReturn(Optional.of(workshop));
 
         UpdateWorkshopLatePolicyCommand.Result result =
-                handler().handle(new UpdateWorkshopLatePolicyCommand(id, "0"));
+                handler().handle(new UpdateWorkshopLatePolicyCommand(id, 0));
 
         assertThat(result.lateThresholdSeconds()).isZero();
     }
@@ -114,7 +102,7 @@ class UpdateWorkshopLatePolicyCommandHandlerTest {
         UUID id = UUID.randomUUID();
         when(workshopRepository.loadById(WorkshopId.of(id))).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "15:00")))
+        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, 900)))
                 .isInstanceOf(WorkshopNotFoundException.class);
 
         verifyNoInteractions(workshopDomainEventPublisher);
@@ -127,51 +115,22 @@ class UpdateWorkshopLatePolicyCommandHandlerTest {
         workshop.start(workshop.startTime());
         when(workshopRepository.loadById(WorkshopId.of(id))).thenReturn(Optional.of(workshop));
 
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "15:00")))
+        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, 900)))
                 .isInstanceOf(InvalidWorkshopStateException.class);
 
         verifyNoMoreInteractions(workshopDomainEventPublisher);
     }
 
     @Test
-    void malformedFormat_rejectedBeforeDomain() {
+    void overCeiling_rejectedBeforeDomain() {
         UUID id = UUID.randomUUID();
 
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "15:60")))
+        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, 86401)))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "1:2:3")))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "-5")))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "abc")))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "  ")))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, null)))
+        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, -1)))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(workshopRepository);
         verifyNoInteractions(workshopDomainEventPublisher);
-    }
-
-    @Test
-    void overCeiling_rejected() {
-        UUID id = UUID.randomUUID();
-
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "1441")))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> handler().handle(new UpdateWorkshopLatePolicyCommand(id, "1440:01")))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        verifyNoInteractions(workshopRepository);
-    }
-
-    @Test
-    void parseToSeconds_normalizesFormats() {
-        assertThat(UpdateWorkshopLatePolicyCommandHandler.parseToSeconds("0")).isZero();
-        assertThat(UpdateWorkshopLatePolicyCommandHandler.parseToSeconds("15")).isEqualTo(900);
-        assertThat(UpdateWorkshopLatePolicyCommandHandler.parseToSeconds("15:30")).isEqualTo(930);
-        assertThat(UpdateWorkshopLatePolicyCommandHandler.parseToSeconds(" 15 : 00 ")).isEqualTo(900);
-        assertThat(UpdateWorkshopLatePolicyCommandHandler.parseToSeconds("1440")).isEqualTo(86400);
     }
 }

@@ -6,19 +6,18 @@ import java.util.UUID;
 
 /**
  * Updates a workshop's attendance late-policy threshold (Epic 3C — Workshop owns the policy,
- * ADR 0019 §13.1). The threshold is supplied as a {@code "mm:ss"} string (chốt OQ-3C-8).
+ * ADR 0019 §13.1). The threshold is supplied directly as a number of seconds.
  *
- * <p>Format rules (validated at the Application edge, before the aggregate): {@code "mm"} alone is
- * allowed and equals {@code "mm:00"}; {@code mm:ss} normalizes to seconds; negative values, invalid
- * formats, {@code ss >= 60}, or values above the 24h ceiling (86400s) are rejected (HTTP 400). The
+ * <p>The self-validating {@code WorkshopLateThreshold} VO (range 0..86400) is built at the
+ * Application edge; negative values or values above the 24h ceiling are rejected (HTTP 400). The
  * domain then enforces the lifecycle gate (mutable only until {@code IN_PROGRESS}).</p>
  *
- * @param workshopId    the workshop to update
- * @param lateThreshold the new threshold as {@code "mm:ss"} (or {@code "mm"})
+ * @param workshopId           the workshop to update
+ * @param lateThresholdSeconds the new threshold in seconds (0..86400)
  */
 public record UpdateWorkshopLatePolicyCommand(
         UUID workshopId,
-        String lateThreshold
+        int lateThresholdSeconds
 ) implements Command<UpdateWorkshopLatePolicyCommand.Result> {
 
     public record Result(UUID workshopId, int lateThresholdSeconds) {

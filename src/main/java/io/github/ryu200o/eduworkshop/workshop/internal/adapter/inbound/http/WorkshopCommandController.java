@@ -132,7 +132,7 @@ class WorkshopCommandController {
     @PostMapping("/{id}/late-policy")
     ResponseEntity<UpdateWorkshopLatePolicyCommand.Result> updateLatePolicy(@PathVariable UUID id,
                                                                                    @RequestBody UpdateWorkshopLatePolicyRequest request) {
-        var command = new UpdateWorkshopLatePolicyCommand(id, request.lateThreshold());
+        var command = new UpdateWorkshopLatePolicyCommand(id, request.lateThresholdSeconds());
         UpdateWorkshopLatePolicyCommand.Result result = commandBus.execute(command);
         return ResponseEntity.ok(result);
     }
@@ -170,6 +170,6 @@ class WorkshopCommandController {
     record UpdateWorkshopScheduleRequest(Instant newStartTime, Instant newEndTime) {
     }
 
-    record UpdateWorkshopLatePolicyRequest(String lateThreshold) {
+    record UpdateWorkshopLatePolicyRequest(int lateThresholdSeconds) {
     }
 }
