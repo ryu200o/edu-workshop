@@ -1,8 +1,10 @@
 package io.github.ryu200o.eduworkshop.iam.internal.application.handler;
 
+import io.github.ryu200o.eduworkshop.iam.contract.events.PasswordResetRequestedIntegrationEvent;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.ForgotPasswordCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.parameter.IamSecurityParameters;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.OneTimeTokenRepository;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.UserIntegrationEventPublisher;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.UserRepository;
 import io.github.ryu200o.eduworkshop.iam.internal.domain.model.Email;
 import io.github.ryu200o.eduworkshop.iam.internal.domain.model.OneTimeToken;
@@ -29,15 +31,18 @@ class ForgotPasswordCommandHandler
 
     private final UserRepository userRepository;
     private final OneTimeTokenRepository oneTimeTokenRepository;
+    private final UserIntegrationEventPublisher userIntegrationEventPublisher;
     private final IamSecurityParameters parameters;
     private final Clock clock;
 
     ForgotPasswordCommandHandler(UserRepository userRepository,
                                  OneTimeTokenRepository oneTimeTokenRepository,
+                                 UserIntegrationEventPublisher userIntegrationEventPublisher,
                                  IamSecurityParameters parameters,
                                  Clock clock) {
         this.userRepository = userRepository;
         this.oneTimeTokenRepository = oneTimeTokenRepository;
+        this.userIntegrationEventPublisher = userIntegrationEventPublisher;
         this.parameters = parameters;
         this.clock = clock;
     }
@@ -61,6 +66,11 @@ class ForgotPasswordCommandHandler
                 now
         );
         oneTimeTokenRepository.save(resetToken);
+        userIntegrationEventPublisher.publish(new PasswordResetRequestedIntegrationEvent(
+                user.get().getId().value(),
+                email.value(),
+                resetToken.id()
+        ));
 
         return new ForgotPasswordCommand.Result(rawToken);
     }
