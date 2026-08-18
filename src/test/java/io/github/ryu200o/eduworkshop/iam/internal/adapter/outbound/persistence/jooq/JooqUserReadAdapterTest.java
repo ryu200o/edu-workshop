@@ -38,12 +38,14 @@ class JooqUserReadAdapterTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    private static final String ADMIN_EMAIL = "admin@eduworkshop.local";
+
     @BeforeEach
     void cleanSchema() {
         jdbcTemplate.update("DELETE FROM iam_refresh_tokens");
         jdbcTemplate.update("DELETE FROM iam_password_reset_tokens");
-        jdbcTemplate.update("DELETE FROM iam_user_roles");
-        jdbcTemplate.update("DELETE FROM iam_users");
+        jdbcTemplate.update("DELETE FROM iam_user_roles WHERE user_id <> '00000000-0000-0000-0000-000000000001'");
+        jdbcTemplate.update("DELETE FROM iam_users WHERE email <> '" + ADMIN_EMAIL + "'");
     }
 
     private static User newUser() {

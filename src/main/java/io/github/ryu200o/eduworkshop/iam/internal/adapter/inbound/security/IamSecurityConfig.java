@@ -13,12 +13,11 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * IAM security chain (plan §5). Scoped to {@code /api/v1/iam/**} via {@code securityMatcher}, so:
- * the 6 public auth APIs are {@code permitAll}, the future admin surface requires {@code ADMIN}, the
- * future self-service surface requires authentication, and — critically for this slice — business
- * routes match no chain and stay open (permitAll until IAM Slice 5, per plan §7 row 3). Because the
- * chain is scoped, the business E2E tests that contribute their own permit-all chain keep working
- * unchanged.
+ * IAM security chain (plan §5). The primary (default) chain for every request: the public auth APIs
+ * ({@code POST /api/v1/iam/auth/**}) are {@code permitAll}, the admin surface requires {@code ADMIN},
+ * the self-service surface requires authentication, and — since IAM Slice 5 — every business route
+ * falls through to {@code anyRequest().authenticated()} (the {@code X-User-Id}/{@code X-Actor-Role}
+ * headers and test permit-all chains are gone).
  *
  * <p>The chain (and its JWT filter) is gated by {@code app.iam.security.enabled} (default true) so a
  * deployment can fall back to fully-open security during migration. The {@code PasswordEncoder}
@@ -34,12 +33,11 @@ class IamSecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .securityMatcher("/api/v1/iam/**")
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/iam/auth/**").permitAll()
                         .requestMatchers("/api/v1/iam/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/iam/me/**").authenticated()
-                        .anyRequest().permitAll())
+                        .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

@@ -13,7 +13,7 @@ import java.util.UUID;
  * {@code CANCELLED} only (Epic 2 sign-off Q4): when {@code null} the full booking history is
  * returned, including system-issued {@code REFUNDED} rows.</p>
  *
- * @param userId the acting learner (logical reference from the {@code X-User-Id} header)
+ * @param userId the acting learner (from the {@code AuthenticatedPrincipal})
  * @param status optional status filter; {@code null} means "no filter — full history"
  */
 public record GetMyRegistrationsQuery(UUID userId, MyRegistrationStatus status)
