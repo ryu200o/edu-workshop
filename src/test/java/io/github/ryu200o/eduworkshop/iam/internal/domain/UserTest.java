@@ -151,6 +151,17 @@ class UserTest {
     }
 
     @Test
+    void assertNotLocked_adminInfiniteLock_isNeverAutoCleared() {
+        User user = createActive();
+        user.lock(NOW);
+        assertThat(user.getLockedUntil()).isNull();
+
+        assertThatThrownBy(() -> user.assertNotLocked(NOW.plusSeconds(3600)))
+                .isInstanceOf(UserLockedException.class);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.LOCKED);
+    }
+
+    @Test
     void recordFailedLogin_locksAfterMaxAttemptsWithFirstDuration() {
         User user = createActive();
 

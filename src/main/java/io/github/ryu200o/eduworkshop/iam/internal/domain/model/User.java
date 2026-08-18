@@ -207,14 +207,16 @@ public class User {
      * Guards authentication against brute-force lockout (ADR 0020 §1.5). Throws
      * {@link UserLockedException} while the account is locked; a lock whose window has elapsed is
      * silently cleared so the next attempt may proceed (escalation memory stays in
-     * {@code lockoutCount} until a successful login resets it).
+     * {@code lockoutCount} until a successful login resets it). An admin lock ({@link #lock}, no
+     * time-based window, {@code lockedUntil = null}) never elapses — it always blocks until an admin
+     * {@link #unlock}.
      */
     public void assertNotLocked(Instant now) {
         requireNonNull(now, "now");
         if (status != UserStatus.LOCKED) {
             return;
         }
-        if (lockedUntil != null && now.isBefore(lockedUntil)) {
+        if (lockedUntil == null || now.isBefore(lockedUntil)) {
             throw new UserLockedException(id, lockedUntil);
         }
         this.status = UserStatus.ACTIVE;

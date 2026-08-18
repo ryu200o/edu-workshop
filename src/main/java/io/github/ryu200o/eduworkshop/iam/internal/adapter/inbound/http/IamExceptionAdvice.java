@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * via {@code assignableTypes} so business-specific translations never leak into other modules
  * (Spring Modulith encapsulation).
  */
-@RestControllerAdvice(assignableTypes = IamAuthController.class)
+@RestControllerAdvice(assignableTypes = {IamAuthController.class, IamSelfController.class, IamAdminController.class})
 class IamExceptionAdvice {
 
     @ExceptionHandler(DuplicateEmailException.class)

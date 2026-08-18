@@ -2,6 +2,7 @@ package io.github.ryu200o.eduworkshop.iam.internal.adapter.inbound.http;
 
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.ForgotPasswordCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.LoginCommand;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.LogoutCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.RefreshCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.RegisterCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.ResetPasswordCommand;
@@ -52,6 +53,12 @@ class IamAuthController {
     @PostMapping("/refresh")
     ResponseEntity<RefreshCommand.Result> refresh(@RequestBody TokenRequest request) {
         RefreshCommand.Result result = commandBus.execute(new RefreshCommand(request.refreshToken()));
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/logout")
+    ResponseEntity<LogoutCommand.Result> logout(@RequestBody TokenRequest request) {
+        LogoutCommand.Result result = commandBus.execute(new LogoutCommand(request.refreshToken()));
         return ResponseEntity.ok(result);
     }
 

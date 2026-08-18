@@ -1,8 +1,11 @@
 package io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound;
 
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.query.view.MeView;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.query.view.UserDetailView;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.query.view.UserSummaryView;
 import io.github.ryu200o.eduworkshop.iam.internal.domain.model.UserId;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -14,7 +17,23 @@ import java.util.Optional;
 public interface UserReader {
 
     /**
-     * Looks up a user's summary projection by id (used by the Module Facade and self/admin queries).
+     * Looks up a user's summary projection by id (used by the Module Facade and directory listing).
      */
     Optional<UserSummaryView> getById(UserId id);
+
+    /**
+     * Looks up the authenticated caller's own profile projection by id (used by {@code GetMeQuery}).
+     */
+    Optional<MeView> getMe(UserId id);
+
+    /**
+     * Looks up the admin detail projection by id — self-profile fields plus the account-security
+     * counters (used by {@code GetUserDetailQuery}).
+     */
+    Optional<UserDetailView> getDetail(UserId id);
+
+    /**
+     * Lists every account as a summary projection, newest first (used by {@code ListUsersQuery}).
+     */
+    List<UserSummaryView> list();
 }
