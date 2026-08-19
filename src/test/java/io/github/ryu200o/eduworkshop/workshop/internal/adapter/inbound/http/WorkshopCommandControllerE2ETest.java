@@ -1,17 +1,17 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.http;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -19,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,9 +29,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * End-to-end HTTP test for the Workshop post-publish write side ({@code RANDOM_PORT}): HttpClient →
  * {@link WorkshopCommandController} → shared CommandBus → Application handlers → JPA/JOOQ adapters →
  * H2 (Flyway). Covers the Phase 2 use cases: cancel, change-room (with kick-out) and adjust-capacity.
+ *
+ * <p>Business calls are authenticated through the real IAM flow (register → login → Bearer, plan §7
+ * Slice 5); the removed permit-all test chain is gone. The helpers attach the operator's Bearer token
+ * by default; the {@code register} seat-seeding helper uses its own authenticated student.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(WorkshopCommandControllerE2ETest.PermitAllSecurity.class)
 class WorkshopCommandControllerE2ETest {
 
     @LocalServerPort
@@ -39,20 +43,25 @@ class WorkshopCommandControllerE2ETest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private final HttpClient client = HttpClient.newHttpClient();
 
     private static final Instant START = Instant.parse("2026-12-01T09:00:00Z");
     private static final Instant END = START.plus(Duration.ofHours(2));
 
-    @TestConfiguration
-    static class PermitAllSecurity {
-        @Bean
-        SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-            return http
-                    .csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                    .build();
-        }
+    private IamE2eTestSupport iam;
+    private String operatorBearer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam.seedAdmin(jdbcTemplate, passwordEncoder);
+        operatorBearer = iam.registerAndLogin().accessToken();
     }
 
     private HttpResponse<String> post(String path, String body, Map<String, String> headers) throws Exception {
@@ -60,7 +69,7 @@ class WorkshopCommandControllerE2ETest {
                 .header("Content-Type", "application/json")
                 .POST(body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body));
-        headers.forEach(builder::header);
+        withAuth(headers).forEach(builder::header);
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
@@ -68,7 +77,7 @@ class WorkshopCommandControllerE2ETest {
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
                 .DELETE();
-        headers.forEach(builder::header);
+        withAuth(headers).forEach(builder::header);
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
@@ -77,8 +86,17 @@ class WorkshopCommandControllerE2ETest {
                 .header("Content-Type", "application/json")
                 .method("PATCH", body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body));
-        headers.forEach(builder::header);
+        withAuth(headers).forEach(builder::header);
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private Map<String, String> withAuth(Map<String, String> headers) {
+        if (headers.containsKey("Authorization")) {
+            return headers;
+        }
+        Map<String, String> effective = new HashMap<>(headers);
+        effective.put("Authorization", "Bearer " + operatorBearer);
+        return effective;
     }
 
     private UUID createRoom(String building, int capacity) throws Exception {
@@ -120,11 +138,11 @@ class WorkshopCommandControllerE2ETest {
         assertThat(response.statusCode()).as("maintenance: %s", response.body()).isEqualTo(HttpStatus.OK.value());
     }
 
-    private void register(UUID workshopId, UUID userId) throws Exception {
+    private void register(UUID workshopId, IamE2eTestSupport.TestUser student) throws Exception {
         HttpResponse<String> response = post("/api/v1/registrations",
                 """
                 {"workshopId": "%s"}
-                """.formatted(workshopId), Map.of("X-User-Id", userId.toString()));
+                """.formatted(workshopId), student.bearer());
         assertThat(response.statusCode()).as("register: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
     }
 
@@ -157,8 +175,8 @@ class WorkshopCommandControllerE2ETest {
     void cancel_publishedWorkshopWithSeats_flipsAllSeatsToCancelled() throws Exception {
         UUID roomId = createRoom("CXL", 50);
         UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
-        register(workshopId, UUID.randomUUID());
-        register(workshopId, UUID.randomUUID());
+        register(workshopId, iam.registerAndLogin());
+        register(workshopId, iam.registerAndLogin());
         assertThat(activeRegistrations(workshopId)).isEqualTo(2);
 
         HttpResponse<String> cancelled = post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of());
@@ -433,8 +451,8 @@ class WorkshopCommandControllerE2ETest {
     void adjustCapacity_belowActiveRegistrations_returnsUnprocessable() throws Exception {
         UUID roomId = createRoom("CAP", 50);
         UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
-        register(workshopId, UUID.randomUUID());
-        register(workshopId, UUID.randomUUID());
+        register(workshopId, iam.registerAndLogin());
+        register(workshopId, iam.registerAndLogin());
 
         HttpResponse<String> adjusted = post("/api/v1/workshops/" + workshopId + "/adjust-capacity",
                 """
@@ -512,7 +530,7 @@ class WorkshopCommandControllerE2ETest {
     void updateInfo_published_withRegistrations_titleLocked_returnsUnprocessable() throws Exception {
         UUID roomId = createRoom("INF3", 50);
         UUID workshopId = publish(plan(createWorkshop("WS", START, END, 30), roomId));
-        register(workshopId, UUID.randomUUID());
+        register(workshopId, iam.registerAndLogin());
 
         HttpResponse<String> response = patch("/api/v1/workshops/" + workshopId + "/info",
                 """

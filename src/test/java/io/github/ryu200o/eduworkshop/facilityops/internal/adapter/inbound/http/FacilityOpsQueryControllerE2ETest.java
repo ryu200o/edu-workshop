@@ -1,15 +1,17 @@
 package io.github.ryu200o.eduworkshop.facilityops.internal.adapter.inbound.http;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -25,25 +27,35 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link FacilityOpsQueryController} → shared QueryBus → FacilityOps handler → public
  * {@code *ExposeAPI} of the Room/Workshop/Registration modules. Verifies the 200 OK contract and the
  * 404 NOT_FOUND (RFC 9457 {@code application/problem+json}) for an unknown room.
+ *
+ * <p>Calls are authenticated through the real IAM flow (register → login → Bearer, plan §7 Slice 5);
+ * the removed permit-all test chain is gone.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(FacilityOpsQueryControllerE2ETest.PermitAllSecurity.class)
 class FacilityOpsQueryControllerE2ETest {
 
     @LocalServerPort
     private int port;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private final HttpClient client = HttpClient.newHttpClient();
 
-    @TestConfiguration
-    static class PermitAllSecurity {
-        @Bean
-        SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-            return http
-                    .csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                    .build();
-        }
+    private IamE2eTestSupport iam;
+    private String bearer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam.seedAdmin(jdbcTemplate, passwordEncoder);
+        bearer = iam.registerAndLogin().accessToken();
     }
 
     @Test
@@ -79,6 +91,7 @@ class FacilityOpsQueryControllerE2ETest {
     private HttpResponse<String> createRoom(Map<String, Object> room) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/rooms"))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + bearer)
                 .POST(HttpRequest.BodyPublishers.ofString(
                         "{\"building\": \"%s\", \"floor\": %d, \"code\": %d, \"name\": \"%s\", \"capacity\": %d}"
                                 .formatted(room.get("building"), room.get("floor"), room.get("code"),
@@ -91,6 +104,7 @@ class FacilityOpsQueryControllerE2ETest {
         HttpRequest request = HttpRequest.newBuilder(URI.create(
                         "http://localhost:" + port + "/api/v1/facility-ops/rooms/" + roomId
                                 + "/maintenance-impact-preview?startTime=" + startTime + "&endTime=" + endTime))
+                .header("Authorization", "Bearer " + bearer)
                 .GET()
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());

@@ -1,18 +1,17 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.adapter.inbound.http;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,13 +38,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the Attendance module reads the verified seat through the Registration reader.</p>
  *
  * <p>The workshop lifecycle scheduler is disabled ({@code app.workshop.lifecycle.enabled=false})
- * so the tests drive state transitions manually and deterministically. A permit-all
- * {@link SecurityFilterChain} is contributed by this test only, because
- * {@code spring-boot-starter-security} is on the classpath without a real auth config.</p>
+ * so the tests drive state transitions manually and deterministically. All actors are real IAM
+ * users carrying Bearer tokens (register → login → Bearer, plan §7 Slice 5); contextual authority
+ * follows OQ-2 — {@code mark} needs a {@code PLANNER}/{@code ADMIN}, {@code adjust} needs
+ * {@code AUDITOR}, check-in/appeal map any principal to {@code STUDENT}. The removed permit-all
+ * test chain is gone.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"app.workshop.lifecycle.enabled=false"})
-@Import(AttendanceCommandControllerE2ETest.PermitAllSecurity.class)
 class AttendanceCommandControllerE2ETest {
 
     @LocalServerPort
@@ -53,26 +54,26 @@ class AttendanceCommandControllerE2ETest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private final HttpClient client = HttpClient.newHttpClient();
 
     private static final Instant NOW = Instant.now();
     private static final Instant START = NOW.minus(Duration.ofHours(5));
     private static final Instant END = START.plus(Duration.ofHours(2));
-    private static final UUID TRAINER = UUID.randomUUID();
 
-    @TestConfiguration
-    static class PermitAllSecurity {
-        @Bean
-        SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-            return http
-                    .csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                    .build();
-        }
-    }
+    private IamE2eTestSupport iam;
+    private String operatorBearer;
 
     @BeforeEach
-    void cleanSchema() {
+    void cleanSchema() throws Exception {
+        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam.seedAdmin(jdbcTemplate, passwordEncoder);
+        operatorBearer = iam.registerAndLogin().accessToken();
         jdbcTemplate.update("DELETE FROM attendance_entries");
         jdbcTemplate.update("DELETE FROM attendance_records");
         jdbcTemplate.update("DELETE FROM registrations");
@@ -83,15 +84,25 @@ class AttendanceCommandControllerE2ETest {
                 .header("Content-Type", "application/json")
                 .POST(body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body));
-        headers.forEach(builder::header);
+        withAuth(headers).forEach(builder::header);
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> get(String path) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Authorization", "Bearer " + operatorBearer)
                 .GET()
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private Map<String, String> withAuth(Map<String, String> headers) {
+        if (headers.containsKey("Authorization")) {
+            return headers;
+        }
+        Map<String, String> effective = new HashMap<>(headers);
+        effective.put("Authorization", "Bearer " + operatorBearer);
+        return effective;
     }
 
     private UUID createRoom(String building) throws Exception {
@@ -128,46 +139,48 @@ class AttendanceCommandControllerE2ETest {
         assertThat(started.statusCode()).as("start workshop: %s", started.body()).isEqualTo(HttpStatus.OK.value());
     }
 
-    private void registerStudent(UUID workshopId, UUID studentId) throws Exception {
+    private void registerStudent(UUID workshopId, IamE2eTestSupport.TestUser student) throws Exception {
         HttpResponse<String> registered = post("/api/v1/registrations",
                 """
                 {"workshopId": "%s"}
                 """.formatted(workshopId),
-                Map.of("X-User-Id", studentId.toString()));
+                student.bearer());
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
     }
 
-    private void registerAndVerify(UUID workshopId, UUID studentId) throws Exception {
-        registerStudent(workshopId, studentId);
+    private void registerAndVerify(UUID workshopId, IamE2eTestSupport.TestUser student,
+                                   IamE2eTestSupport.TestUser verifier) throws Exception {
+        registerStudent(workshopId, student);
         UUID registrationId = jdbcTemplate.queryForObject(
                 "SELECT id FROM registrations WHERE workshop_id = ? AND user_id = ?",
-                UUID.class, workshopId, studentId);
+                UUID.class, workshopId, student.userId());
         HttpResponse<String> verified = post("/api/v1/registrations/verify",
                 """
                 {"qrReference": "QR-REG-%s"}
                 """.formatted(registrationId),
-                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+                verifier.bearer());
         assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.OK.value());
     }
 
-    private UUID mark(UUID workshopId, UUID studentId) throws Exception {
+    private UUID mark(UUID workshopId, IamE2eTestSupport.TestUser student,
+                      IamE2eTestSupport.TestUser trainer) throws Exception {
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
                 {"items": [{"studentId": "%s", "status": "PRESENT", "note": null}]}
-                """.formatted(studentId),
-                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+                """.formatted(student.userId()),
+                trainer.bearer());
         assertThat(response.statusCode()).as("mark: %s", response.body()).isEqualTo(HttpStatus.OK.value());
         HttpResponse<String> roster = get("/api/v1/workshops/" + workshopId + "/attendance");
         return UUID.fromString(readField(roster.body(), "recordId"));
     }
 
-    private HttpResponse<String> checkIn(UUID workshopId, UUID studentId) throws Exception {
+    private HttpResponse<String> checkIn(UUID workshopId, IamE2eTestSupport.TestUser student) throws Exception {
         return post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
                 """
                 {"qrReference": "QR-REF-%s"}
                 """.formatted(UUID.randomUUID()),
-                Map.of("X-Actor-Role", "STUDENT", "X-User-Id", studentId.toString()));
+                student.bearer());
     }
 
     private static String readField(String body, String field) {
@@ -180,11 +193,13 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void mark_verifiedRegistration_happyPathAndRoster() throws Exception {
         UUID workshopId = createAndPublishWorkshop("VERIF");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
-        mark(workshopId, studentId);
+        mark(workshopId, student, trainer);
 
         HttpResponse<String> roster = get("/api/v1/workshops/" + workshopId + "/attendance");
         assertThat(roster.statusCode()).isEqualTo(HttpStatus.OK.value());
@@ -194,15 +209,16 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void mark_nonVerifiedRegistration_returnsConflict() throws Exception {
         UUID workshopId = createAndPublishWorkshop("NOVER");
-        UUID studentId = UUID.randomUUID();
-        registerStudent(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
+        registerStudent(workshopId, student);
         startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
                 {"items": [{"studentId": "%s", "status": "PRESENT", "note": null}]}
-                """.formatted(studentId),
-                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+                """.formatted(student.userId()),
+                trainer.bearer());
 
         assertThat(response.statusCode()).as("mark non-verified: %s", response.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
@@ -212,8 +228,10 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void mark_duplicateStudentIdInBatch_returnsBadRequest() throws Exception {
         UUID workshopId = createAndPublishWorkshop("DUPLISTU");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
@@ -222,8 +240,8 @@ class AttendanceCommandControllerE2ETest {
                     {"studentId": "%s", "status": "PRESENT", "note": null},
                     {"studentId": "%s", "status": "LATE", "note": "contradicts previous"}
                 ]}
-                """.formatted(studentId, studentId),
-                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+                """.formatted(student.userId(), student.userId()),
+                trainer.bearer());
 
         assertThat(response.statusCode()).as("duplicate studentId: %s", response.body())
                 .isEqualTo(HttpStatus.BAD_REQUEST.value());
@@ -237,14 +255,16 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void mark_workshopNotInProgress_returnsConflict() throws Exception {
         UUID workshopId = createAndPublishWorkshop("NOSTART");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
                 {"items": [{"studentId": "%s", "status": "PRESENT", "note": null}]}
-                """.formatted(studentId),
-                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+                """.formatted(student.userId()),
+                trainer.bearer());
 
         assertThat(response.statusCode()).as("mark not in progress: %s", response.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
@@ -253,15 +273,17 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void mark_nonTrainerRole_returnsForbidden() throws Exception {
         UUID workshopId = createAndPublishWorkshop("ROLE");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
+        // A USER-role principal has no PLANNER/ADMIN authority (OQ-2) → 403 before the handler.
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
                 {"items": [{"studentId": "%s", "status": "PRESENT", "note": null}]}
-                """.formatted(studentId),
-                Map.of("X-Actor-Role", "STUDENT", "X-User-Id", studentId.toString()));
+                """.formatted(student.userId()),
+                student.bearer());
 
         assertThat(response.statusCode()).as("mark by student: %s", response.body())
                 .isEqualTo(HttpStatus.FORBIDDEN.value());
@@ -270,15 +292,18 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void completeFlow_appealAndAdjustWithinReconciliationWindow() throws Exception {
         UUID workshopId = createAndPublishWorkshop("APPEAL");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        IamE2eTestSupport.TestUser auditor = iam.registerAndLoginWithRoles("AUDITOR");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
         HttpResponse<String> marked = post("/api/v1/workshops/" + workshopId + "/attendance/mark",
                 """
                 {"items": [{"studentId": "%s", "status": "PRESENT", "note": null}]}
-                """.formatted(studentId),
-                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+                """.formatted(student.userId()),
+                trainer.bearer());
         assertThat(marked.statusCode()).isEqualTo(HttpStatus.OK.value());
 
         HttpResponse<String> ledger = get("/api/v1/workshops/" + workshopId + "/attendance");
@@ -292,7 +317,7 @@ class AttendanceCommandControllerE2ETest {
                 """
                 {"reason": "I was present but marked late", "evidenceReference": "evidence://cam-1"}
                 """,
-                Map.of("X-Actor-Role", "STUDENT", "X-User-Id", studentId.toString()));
+                student.bearer());
         assertThat(appealed.statusCode()).as("appeal: %s", appealed.body()).isEqualTo(HttpStatus.OK.value());
         assertThat(appealed.body()).contains("current result unchanged");
 
@@ -300,7 +325,7 @@ class AttendanceCommandControllerE2ETest {
                 """
                 {"newStatus": "PRESENT", "reason": "CCTV confirms presence", "evidenceReference": "evidence://cam-1"}
                 """,
-                Map.of("X-Actor-Role", "AUDITOR", "X-User-Id", UUID.randomUUID().toString()));
+                auditor.bearer());
         assertThat(adjusted.statusCode()).as("adjust: %s", adjusted.body()).isEqualTo(HttpStatus.OK.value());
         assertThat(adjusted.body()).contains("PRESENT");
 
@@ -318,11 +343,12 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void checkIn_verifiedRegistration_createsLateRecordWithStudentRoleInLedger() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKOK");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
-        HttpResponse<String> response = checkIn(workshopId, studentId);
+        HttpResponse<String> response = checkIn(workshopId, student);
 
         assertThat(response.statusCode()).as("check-in: %s", response.body()).isEqualTo(HttpStatus.OK.value());
         // START is 5h before now and the late threshold is startTime + 15min → LATE.
@@ -337,11 +363,11 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void checkIn_nonVerifiedRegistration_returnsConflict() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKNOVER");
-        UUID studentId = UUID.randomUUID();
-        registerStudent(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        registerStudent(workshopId, student);
         startWorkshop(workshopId);
 
-        HttpResponse<String> response = checkIn(workshopId, studentId);
+        HttpResponse<String> response = checkIn(workshopId, student);
 
         assertThat(response.statusCode()).as("check-in non-verified: %s", response.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
@@ -351,15 +377,16 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void checkIn_duplicateScan_isIdempotentNoOp_noNewEntryNoResultChange() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKDUPE");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
-        HttpResponse<String> first = checkIn(workshopId, studentId);
+        HttpResponse<String> first = checkIn(workshopId, student);
         assertThat(first.statusCode()).as("first check-in: %s", first.body()).isEqualTo(HttpStatus.OK.value());
         String recordId = readField(first.body(), "recordId");
 
-        HttpResponse<String> second = checkIn(workshopId, studentId);
+        HttpResponse<String> second = checkIn(workshopId, student);
         assertThat(second.statusCode()).as("second check-in: %s", second.body()).isEqualTo(HttpStatus.OK.value());
         // OQ-3B-3 idempotent no-op: same record, same result, no new MARK entry appended.
         assertThat(readField(second.body(), "recordId")).isEqualTo(recordId);
@@ -373,44 +400,48 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void checkIn_workshopNotInProgress_returnsConflict() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKNOSTART");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
 
-        HttpResponse<String> response = checkIn(workshopId, studentId);
+        HttpResponse<String> response = checkIn(workshopId, student);
 
         assertThat(response.statusCode()).as("check-in not in progress: %s", response.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
     }
 
     @Test
-    void checkIn_nonStudentRole_returnsForbidden() throws Exception {
+    void checkIn_trainerWithoutVerifiedSeat_returnsConflict() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKROLE");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
         startWorkshop(workshopId);
 
+        // OQ-2: check-in maps any principal to STUDENT — eligibility is proven by ownership of a
+        // verified seat. A trainer holds none, so the VERIFIED gate (OQ-14) rejects the scan.
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
                 """
                 {"qrReference": "QR-REF-%s"}
                 """.formatted(UUID.randomUUID()),
-                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", TRAINER.toString()));
+                trainer.bearer());
 
         assertThat(response.statusCode()).as("check-in by trainer: %s", response.body())
-                .isEqualTo(HttpStatus.FORBIDDEN.value());
+                .isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(response.body()).contains("not verified");
     }
 
     @Test
     void checkIn_blankQrReference_returnsBadRequest() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKBLANK");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/attendance/check-in",
                 """
                 {"qrReference": "   "}
                 """,
-                Map.of("X-Actor-Role", "STUDENT", "X-User-Id", studentId.toString()));
+                student.bearer());
 
         assertThat(response.statusCode()).as("blank qr: %s", response.body())
                 .isEqualTo(HttpStatus.BAD_REQUEST.value());
@@ -419,16 +450,18 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void interaction_trainerCorrection_afterQrCheckIn_appendsTrainerMark() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKCORR");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
-        HttpResponse<String> scanned = checkIn(workshopId, studentId);
+        HttpResponse<String> scanned = checkIn(workshopId, student);
         assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());
         String recordId = readField(scanned.body(), "recordId");
 
         // Trainer corrects the LATE scan to PRESENT — authoritative (append MARK, role TRAINER).
-        mark(workshopId, studentId);
+        mark(workshopId, student, trainer);
 
         HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
         assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
@@ -444,11 +477,13 @@ class AttendanceCommandControllerE2ETest {
     @Test
     void interaction_afterWorkshopCompleted_checkInRejectedButAuditorAdjustWorks() throws Exception {
         UUID workshopId = createAndPublishWorkshop("CHKRECON");
-        UUID studentId = UUID.randomUUID();
-        registerAndVerify(workshopId, studentId);
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
+        IamE2eTestSupport.TestUser auditor = iam.registerAndLoginWithRoles("AUDITOR");
+        registerAndVerify(workshopId, student, verifier);
         startWorkshop(workshopId);
 
-        HttpResponse<String> scanned = checkIn(workshopId, studentId);
+        HttpResponse<String> scanned = checkIn(workshopId, student);
         assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());
         String recordId = readField(scanned.body(), "recordId");
 
@@ -456,7 +491,7 @@ class AttendanceCommandControllerE2ETest {
         assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.OK.value());
 
         // State gate (ADR 0019 §3): workshop is COMPLETED → check-in is rejected (record no longer OPEN).
-        HttpResponse<String> lateScan = checkIn(workshopId, studentId);
+        HttpResponse<String> lateScan = checkIn(workshopId, student);
         assertThat(lateScan.statusCode()).as("check-in after complete: %s", lateScan.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
 
@@ -465,7 +500,7 @@ class AttendanceCommandControllerE2ETest {
                 """
                 {"newStatus": "PRESENT", "reason": "CCTV confirms presence", "evidenceReference": "evidence://cam-1"}
                 """,
-                Map.of("X-Actor-Role", "AUDITOR", "X-User-Id", UUID.randomUUID().toString()));
+                auditor.bearer());
         assertThat(adjusted.statusCode()).as("adjust: %s", adjusted.body()).isEqualTo(HttpStatus.OK.value());
         assertThat(adjusted.body()).contains("PRESENT");
     }

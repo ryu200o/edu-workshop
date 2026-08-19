@@ -1,18 +1,18 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.application.handler;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -33,9 +33,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ({@code loadPublishedAndPlannedOverlappingWithLock}, lock-set-first) serializes the operations:
  * exactly one request wins ({@code 200}), the other is hard-blocked with a {@code RoomConflictException}
  * surfaced as {@code 409}. No double-booking is possible.
+ *
+ * <p>Calls are authenticated through the real IAM flow (register → login → Bearer, plan §7 Slice 5);
+ * the removed permit-all test chain is gone.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(PublishWorkshopConcurrencyIntegrationTest.PermitAllSecurity.class)
 class PublishWorkshopConcurrencyIntegrationTest {
 
     @LocalServerPort
@@ -44,18 +46,23 @@ class PublishWorkshopConcurrencyIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private final HttpClient client = HttpClient.newHttpClient();
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
-    @TestConfiguration
-    static class PermitAllSecurity {
-        @Bean
-        SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-            return http
-                    .csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                    .build();
-        }
+    private IamE2eTestSupport iam;
+    private String operatorBearer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam.seedAdmin(jdbcTemplate, passwordEncoder);
+        operatorBearer = iam.registerAndLogin().accessToken();
     }
 
     @AfterEach
@@ -66,6 +73,7 @@ class PublishWorkshopConcurrencyIntegrationTest {
     private HttpResponse<String> post(String path, String body) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + operatorBearer)
                 .POST(body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body))
                 .build();

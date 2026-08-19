@@ -1,15 +1,17 @@
 package io.github.ryu200o.eduworkshop.registration.internal.adapter.inbound.http;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -17,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -36,28 +39,38 @@ import static org.assertj.core.api.Assertions.assertThat;
  * two requests: exactly one wins the seat (201 CREATED) and the other is rejected with
  * 409 CONFLICT {@code WorkshopCapacityExceededException}. A retry loop absorbs scheduler contention so
  * the outcome is asserted on the final state, not on a fragile first-attempt 409.</p>
+ *
+ * <p>Each learner is a real IAM user carrying its own Bearer token (plan §7 Slice 5); the removed
+ * permit-all test chain is gone.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(RegistrationCapacityConcurrencyIntegrationTest.PermitAllSecurity.class)
 class RegistrationCapacityConcurrencyIntegrationTest {
 
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private final HttpClient client = HttpClient.newHttpClient();
 
     private static final Instant START = Instant.parse("2026-12-01T09:00:00Z");
     private static final Instant END = START.plus(Duration.ofHours(2));
 
-    @TestConfiguration
-    static class PermitAllSecurity {
-        @Bean
-        SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-            return http
-                    .csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                    .build();
-        }
+    private IamE2eTestSupport iam;
+    private String operatorBearer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam.seedAdmin(jdbcTemplate, passwordEncoder);
+        operatorBearer = iam.registerAndLogin().accessToken();
     }
 
     private HttpResponse<String> post(String path, String body, Map<String, String> headers) throws Exception {
@@ -65,8 +78,17 @@ class RegistrationCapacityConcurrencyIntegrationTest {
                 .header("Content-Type", "application/json")
                 .POST(body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body));
-        headers.forEach(builder::header);
+        withAuth(headers).forEach(builder::header);
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private Map<String, String> withAuth(Map<String, String> headers) {
+        if (headers.containsKey("Authorization")) {
+            return headers;
+        }
+        Map<String, String> effective = new HashMap<>(headers);
+        effective.put("Authorization", "Bearer " + operatorBearer);
+        return effective;
     }
 
     private UUID createRoom(String building) throws Exception {
@@ -103,17 +125,17 @@ class RegistrationCapacityConcurrencyIntegrationTest {
         return body.substring(begin, body.indexOf("\"", begin));
     }
 
-    private int register(UUID workshopId, UUID userId) throws Exception {
+    private int register(UUID workshopId, IamE2eTestSupport.TestUser learner) throws Exception {
         HttpResponse<String> response = post("/api/v1/registrations",
-                "{\"workshopId\":\"%s\"}".formatted(workshopId), Map.of("X-User-Id", userId.toString()));
+                "{\"workshopId\":\"%s\"}".formatted(workshopId), learner.bearer());
         return response.statusCode();
     }
 
     @Test
     void twoConcurrentRegistrationsForSingleSeat_onlyOneWins() throws Exception {
         UUID workshopId = publishSingleSeatWorkshop("CONC");
-        UUID learnerA = UUID.randomUUID();
-        UUID learnerB = UUID.randomUUID();
+        IamE2eTestSupport.TestUser learnerA = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser learnerB = iam.registerAndLogin();
 
         CountDownLatch startGate = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);

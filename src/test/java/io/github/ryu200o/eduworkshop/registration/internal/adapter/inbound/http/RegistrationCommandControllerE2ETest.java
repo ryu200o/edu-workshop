@@ -1,15 +1,17 @@
 package io.github.ryu200o.eduworkshop.registration.internal.adapter.inbound.http;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -17,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,30 +32,46 @@ import static org.assertj.core.api.Assertions.within;
  * shared CommandBus → Application handlers → JPA/JOOQ adapters → H2 (Flyway). A published workshop
  * is seeded through the Workshop/Room HTTP APIs (real use-case orchestration, not mocks).
  *
- * <p>A permit-all {@link SecurityFilterChain} is contributed by this test only, because
- * {@code spring-boot-starter-security} is on the classpath without a real auth config.</p>
+ * <p>Learners and verifiers are real IAM users carrying Bearer tokens (register → login → Bearer,
+ * plan §7 Slice 5); the acting user always comes from the authenticated principal and only a
+ * {@code VERIFIER} global role passes the verify gate (OQ-3C-1). The removed permit-all test chain
+ * is gone.</p>
+ *
+ * <p>The workshop lifecycle scheduler is disabled ({@code app.workshop.lifecycle.enabled=false})
+ * so a published workshop whose start time has already passed is not auto-started mid-test
+ * (mirroring {@code AttendanceCommandControllerE2ETest}); {@code verify_allowsWorkshopInProgress}
+ * deliberately publishes a past-start workshop and must reach {@code register} while still
+ * {@code PUBLISHED}.</p>
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(RegistrationCommandControllerE2ETest.PermitAllSecurity.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {"app.workshop.lifecycle.enabled=false"})
 class RegistrationCommandControllerE2ETest {
 
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private final HttpClient client = HttpClient.newHttpClient();
 
     private static final Instant START = Instant.parse("2026-12-01T09:00:00Z");
     private static final Instant END = START.plus(Duration.ofHours(2));
 
-    @TestConfiguration
-    static class PermitAllSecurity {
-        @Bean
-        SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-            return http
-                    .csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                    .build();
-        }
+    private IamE2eTestSupport iam;
+    private String operatorBearer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam.seedAdmin(jdbcTemplate, passwordEncoder);
+        operatorBearer = iam.registerAndLogin().accessToken();
     }
 
     private HttpResponse<String> post(String path, String body, Map<String, String> headers) throws Exception {
@@ -60,8 +79,17 @@ class RegistrationCommandControllerE2ETest {
                 .header("Content-Type", "application/json")
                 .POST(body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body));
-        headers.forEach(builder::header);
+        withAuth(headers).forEach(builder::header);
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private Map<String, String> withAuth(Map<String, String> headers) {
+        if (headers.containsKey("Authorization")) {
+            return headers;
+        }
+        Map<String, String> effective = new HashMap<>(headers);
+        effective.put("Authorization", "Bearer " + operatorBearer);
+        return effective;
     }
 
     private UUID createRoom(String building) throws Exception {
@@ -103,11 +131,11 @@ class RegistrationCommandControllerE2ETest {
         return workshopId;
     }
 
-    private HttpResponse<String> register(UUID workshopId, UUID userId) throws Exception {
+    private HttpResponse<String> register(UUID workshopId, IamE2eTestSupport.TestUser student) throws Exception {
         return post("/api/v1/registrations",
                 """
                 {"workshopId": "%s"}
-                """.formatted(workshopId), Map.of("X-User-Id", userId.toString()));
+                """.formatted(workshopId), student.bearer());
     }
 
     private static String readField(HttpResponse<String> response, String field) {
@@ -122,14 +150,14 @@ class RegistrationCommandControllerE2ETest {
     void registerAndCancel_happyPath() throws Exception {
         UUID roomId = createRoom("HAPPY");
         UUID workshopId = publishWorkshop(roomId);
-        UUID userId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
 
-        HttpResponse<String> registered = register(workshopId, userId);
+        HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body()).isEqualTo(HttpStatus.CREATED.value());
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
 
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
-                Map.of("X-User-Id", userId.toString()));
+                student.bearer());
         assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.OK.value());
         assertThat(cancelled.body()).contains(registrationId.toString());
     }
@@ -138,10 +166,10 @@ class RegistrationCommandControllerE2ETest {
     void register_duplicateActiveRegistration_returnsConflict() throws Exception {
         UUID roomId = createRoom("DUP");
         UUID workshopId = publishWorkshop(roomId);
-        UUID userId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
 
-        assertThat(register(workshopId, userId).statusCode()).isEqualTo(HttpStatus.CREATED.value());
-        HttpResponse<String> duplicate = register(workshopId, userId);
+        assertThat(register(workshopId, student).statusCode()).isEqualTo(HttpStatus.CREATED.value());
+        HttpResponse<String> duplicate = register(workshopId, student);
         assertThat(duplicate.statusCode()).as("duplicate register: %s", duplicate.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
     }
@@ -156,7 +184,7 @@ class RegistrationCommandControllerE2ETest {
                 """.formatted(roomId), Map.of());
         assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
 
-        HttpResponse<String> registered = register(workshopId, UUID.randomUUID());
+        HttpResponse<String> registered = register(workshopId, iam.registerAndLogin());
         assertThat(registered.statusCode()).as("register draft: %s", registered.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
     }
@@ -166,39 +194,48 @@ class RegistrationCommandControllerE2ETest {
         UUID roomId = createRoom("FULL");
         UUID workshopId = publishWorkshop(roomId, 1);
 
-        UUID firstUser = UUID.randomUUID();
-        assertThat(register(workshopId, firstUser).statusCode()).as("first seat: register").isEqualTo(HttpStatus.CREATED.value());
+        IamE2eTestSupport.TestUser firstStudent = iam.registerAndLogin();
+        assertThat(register(workshopId, firstStudent).statusCode()).as("first seat: register")
+                .isEqualTo(HttpStatus.CREATED.value());
 
-        HttpResponse<String> second = register(workshopId, UUID.randomUUID());
+        HttpResponse<String> second = register(workshopId, iam.registerAndLogin());
         assertThat(second.statusCode()).as("second seat beyond capacity").isEqualTo(HttpStatus.CONFLICT.value());
         assertThat(second.body()).contains("capacity=1");
     }
 
     @Test
-    void register_missingUserHeader_returnsBadRequest() throws Exception {
+    void unauthenticatedRegister_returnsForbidden() throws Exception {
         UUID roomId = createRoom("NOUSER");
         UUID workshopId = publishWorkshop(roomId);
 
-        HttpResponse<String> response = post("/api/v1/registrations",
+        HttpResponse<String> response = postUnauthenticated("/api/v1/registrations",
                 """
                 {"workshopId": "%s"}
-                """.formatted(workshopId), Map.of());
-        assertThat(response.statusCode()).as("register without header: %s", response.body())
-                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+                """.formatted(workshopId));
+        assertThat(response.statusCode()).as("register without token: %s", response.body())
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
+    }
+
+    private HttpResponse<String> postUnauthenticated(String path, String body) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "application/json")
+                .POST(body == null ? HttpRequest.BodyPublishers.noBody()
+                        : HttpRequest.BodyPublishers.ofString(body));
+        return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Test
     void cancel_notOwner_returnsForbidden() throws Exception {
         UUID roomId = createRoom("OWNER");
         UUID workshopId = publishWorkshop(roomId);
-        UUID owner = UUID.randomUUID();
-        UUID stranger = UUID.randomUUID();
+        IamE2eTestSupport.TestUser owner = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser stranger = iam.registerAndLogin();
 
         HttpResponse<String> registered = register(workshopId, owner);
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
 
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
-                Map.of("X-User-Id", stranger.toString()));
+                stranger.bearer());
         assertThat(cancelled.statusCode()).as("cancel by stranger: %s", cancelled.body())
                 .isEqualTo(HttpStatus.FORBIDDEN.value());
     }
@@ -215,15 +252,15 @@ class RegistrationCommandControllerE2ETest {
         assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
         assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.OK.value());
-        UUID userId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
 
-        HttpResponse<String> registered = register(workshopId, userId); // starts within 24h → past deadline
+        HttpResponse<String> registered = register(workshopId, student); // starts within 24h → past deadline
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
 
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
-                Map.of("X-User-Id", userId.toString()));
+                student.bearer());
         assertThat(cancelled.statusCode()).as("cancel past deadline: %s", cancelled.body())
                 .isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
@@ -247,16 +284,15 @@ class RegistrationCommandControllerE2ETest {
     void verify_verifierHappyPath_marksSeatVerified() throws Exception {
         UUID roomId = createRoom("VERIFY-OK");
         UUID workshopId = publishWorkshop(roomId);
-        UUID studentId = UUID.randomUUID();
-        UUID verifierId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
 
-        HttpResponse<String> registered = register(workshopId, studentId);
+        HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
 
-        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
-                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", verifierId.toString()));
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId, verifier.bearer());
         assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.OK.value());
         assertThat(verified.body()).contains("\"registrationId\":\"" + registrationId + "\"");
         assertThat(readField(verified, "verifiedAt")).isNotBlank();
@@ -274,18 +310,17 @@ class RegistrationCommandControllerE2ETest {
         assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
         assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.OK.value());
-        UUID studentId = UUID.randomUUID();
-        UUID verifierId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
 
-        HttpResponse<String> registered = register(workshopId, studentId);
+        HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
 
         assertThat(startWorkshop(workshopId).statusCode()).isEqualTo(HttpStatus.OK.value());
 
-        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
-                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", verifierId.toString()));
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId, verifier.bearer());
         assertThat(verified.statusCode()).as("verify IN_PROGRESS: %s", verified.body())
                 .isEqualTo(HttpStatus.OK.value());
     }
@@ -294,12 +329,12 @@ class RegistrationCommandControllerE2ETest {
     void verify_idempotent_whenAlreadyVerified() throws Exception {
         UUID roomId = createRoom("VERIFY-IDEM");
         UUID workshopId = publishWorkshop(roomId);
-        UUID studentId = UUID.randomUUID();
-        UUID verifierId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
 
-        HttpResponse<String> registered = register(workshopId, studentId);
+        HttpResponse<String> registered = register(workshopId, student);
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
-        Map<String, String> headers = Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", verifierId.toString());
+        Map<String, String> headers = verifier.bearer();
 
         HttpResponse<String> first = verify("QR-REG-" + registrationId, headers);
         assertThat(first.statusCode()).isEqualTo(HttpStatus.OK.value());
@@ -318,13 +353,13 @@ class RegistrationCommandControllerE2ETest {
     void verify_nonVerifierRole_returnsForbidden() throws Exception {
         UUID roomId = createRoom("VERIFY-ROLE");
         UUID workshopId = publishWorkshop(roomId);
-        UUID studentId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
 
-        HttpResponse<String> registered = register(workshopId, studentId);
+        HttpResponse<String> registered = register(workshopId, student);
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
 
-        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
-                Map.of("X-Actor-Role", "TRAINER", "X-User-Id", UUID.randomUUID().toString()));
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId, trainer.bearer());
         assertThat(verified.statusCode()).as("non-verifier: %s", verified.body())
                 .isEqualTo(HttpStatus.FORBIDDEN.value());
     }
@@ -332,7 +367,7 @@ class RegistrationCommandControllerE2ETest {
     @Test
     void verify_unknownQrReference_returnsNotFound() throws Exception {
         HttpResponse<String> verified = verify("QR-REG-" + UUID.randomUUID(),
-                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+                iam.registerAndLoginWithRoles("VERIFIER").bearer());
         assertThat(verified.statusCode()).as("unknown QR: %s", verified.body())
                 .isEqualTo(HttpStatus.NOT_FOUND.value());
     }
@@ -341,9 +376,9 @@ class RegistrationCommandControllerE2ETest {
     void verify_cancelledWorkshop_returnsConflict() throws Exception {
         UUID roomId = createRoom("VERIFY-WSX");
         UUID workshopId = publishWorkshop(roomId);
-        UUID studentId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
 
-        HttpResponse<String> registered = register(workshopId, studentId);
+        HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
@@ -353,7 +388,7 @@ class RegistrationCommandControllerE2ETest {
                 .isEqualTo(HttpStatus.OK.value());
 
         HttpResponse<String> verified = verify("QR-REG-" + registrationId,
-                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+                iam.registerAndLoginWithRoles("VERIFIER").bearer());
         assertThat(verified.statusCode()).as("verify cancelled workshop: %s", verified.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
     }
@@ -362,32 +397,17 @@ class RegistrationCommandControllerE2ETest {
     void verify_cancelledRegistration_returnsConflict() throws Exception {
         UUID roomId = createRoom("VERIFY-CANCEL");
         UUID workshopId = publishWorkshop(roomId);
-        UUID studentId = UUID.randomUUID();
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
 
-        HttpResponse<String> registered = register(workshopId, studentId);
+        HttpResponse<String> registered = register(workshopId, student);
         UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
-                Map.of("X-User-Id", studentId.toString()));
+                student.bearer());
         assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.OK.value());
 
-        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
-                Map.of("X-Actor-Role", "VERIFIER", "X-User-Id", UUID.randomUUID().toString()));
+        HttpResponse<String> verified = verify("QR-REG-" + registrationId, verifier.bearer());
         assertThat(verified.statusCode()).as("verify cancelled: %s", verified.body())
                 .isEqualTo(HttpStatus.CONFLICT.value());
-    }
-
-    @Test
-    void verify_missingRoleHeader_returnsBadRequest() throws Exception {
-        UUID roomId = createRoom("VERIFY-HDR");
-        UUID workshopId = publishWorkshop(roomId);
-        UUID studentId = UUID.randomUUID();
-
-        HttpResponse<String> registered = register(workshopId, studentId);
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
-
-        HttpResponse<String> verified = verify("QR-REG-" + registrationId,
-                Map.of("X-User-Id", UUID.randomUUID().toString()));
-        assertThat(verified.statusCode()).as("missing role header: %s", verified.body())
-                .isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 }

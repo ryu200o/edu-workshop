@@ -7,8 +7,7 @@ import java.util.UUID;
 
 /**
  * Books a seat for a student on a workshop. The student identity is a logical reference (no User
- * module — SA+PO decision) and comes from the authenticated context / {@code X-User-Id} header at
- * the HTTP boundary.
+ * module — SA+PO decision) and comes from the {@code AuthenticatedPrincipal} at the HTTP boundary.
  */
 public record RegisterWorkshopCommand(
         UUID workshopId,

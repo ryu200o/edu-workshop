@@ -1,0 +1,96 @@
+package io.github.ryu200o.eduworkshop.iam.internal.application.handler;
+
+import io.github.ryu200o.eduworkshop.iam.internal.application.exception.UserNotFoundException;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.AdminUpdateRolesCommand;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.UserDomainEventPublisher;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.UserRepository;
+import io.github.ryu200o.eduworkshop.iam.internal.domain.model.Email;
+import io.github.ryu200o.eduworkshop.iam.internal.domain.model.GlobalRole;
+import io.github.ryu200o.eduworkshop.iam.internal.domain.model.User;
+import io.github.ryu200o.eduworkshop.iam.internal.domain.model.UserId;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class AdminUpdateRolesCommandHandlerTest {
+
+    @Mock
+    private UserRepository userRepository;
+    @Mock
+    private UserDomainEventPublisher userDomainEventPublisher;
+
+    private final Clock clock = Clock.fixed(Instant.parse("2026-08-18T10:00:00Z"), ZoneOffset.UTC);
+
+    private AdminUpdateRolesCommandHandler handler() {
+        return new AdminUpdateRolesCommandHandler(userRepository, userDomainEventPublisher, clock);
+    }
+
+    private static User activeUser(Instant now) {
+        User user = User.create(UserId.generate(), Email.of("student@example.com"), "$2a$12$hash",
+                "Nguyen Van A", now);
+        user.verifyEmail(now);
+        return user;
+    }
+
+    @Test
+    void updateRoles_success_replacesRoleSet_andPublishes() {
+        User user = activeUser(Instant.now(clock));
+        when(userRepository.loadByIdWithLock(user.getId())).thenReturn(Optional.of(user));
+
+        handler().handle(new AdminUpdateRolesCommand(user.getId().value(), Set.of("USER", "PLANNER")));
+
+        assertThat(user.getRoles()).containsExactlyInAnyOrder(GlobalRole.USER, GlobalRole.PLANNER);
+        verify(userRepository).save(user);
+        verify(userDomainEventPublisher).publish(anyList());
+    }
+
+    @Test
+    void updateRoles_withoutBaseRole_throwsIllegalArgument() {
+        User user = activeUser(Instant.now(clock));
+        when(userRepository.loadByIdWithLock(user.getId())).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> handler().handle(new AdminUpdateRolesCommand(
+                user.getId().value(), Set.of("ADMIN"))))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    void updateRoles_invalidRoleName_throwsIllegalArgument() {
+        User user = activeUser(Instant.now(clock));
+        when(userRepository.loadByIdWithLock(user.getId())).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> handler().handle(new AdminUpdateRolesCommand(
+                user.getId().value(), Set.of("USER", "SUPERUSER"))))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    void updateRoles_unknownUser_throwsNotFound() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.loadByIdWithLock(UserId.of(userId))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> handler().handle(new AdminUpdateRolesCommand(
+                userId, Set.of("USER"))))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+}
