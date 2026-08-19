@@ -16,7 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class PlaceRoomUnderMaintenanceCommandHandler implements CommandHandler<PlaceRoomUnderMaintenanceCommand, PlaceRoomUnderMaintenanceCommand.Result> {
+class PlaceRoomUnderMaintenanceCommandHandler implements CommandHandler<PlaceRoomUnderMaintenanceCommand> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
@@ -31,7 +31,7 @@ class PlaceRoomUnderMaintenanceCommandHandler implements CommandHandler<PlaceRoo
 
     @Override
     @Transactional
-    public PlaceRoomUnderMaintenanceCommand.Result handle(PlaceRoomUnderMaintenanceCommand command) {
+    public void handle(PlaceRoomUnderMaintenanceCommand command) {
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
@@ -39,13 +39,10 @@ class PlaceRoomUnderMaintenanceCommandHandler implements CommandHandler<PlaceRoo
         Instant now = Instant.now(clock);
         room.placeUnderMaintenance(now);
         if (previous == room.state()) {
-            return new PlaceRoomUnderMaintenanceCommand.Result(
-                    room.id().value(), previous, room.state(), room.updatedAt());
+            return;
         }
-        Room saved = roomRepository.save(room);
+        roomRepository.save(room);
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-        return new PlaceRoomUnderMaintenanceCommand.Result(
-                saved.id().value(), previous, saved.state(), saved.updatedAt());
     }
 }

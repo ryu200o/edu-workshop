@@ -27,7 +27,7 @@ import java.time.Instant;
  */
 @Component
 class ScheduleRoomMaintenanceCommandHandler
-        implements CommandHandler<ScheduleRoomMaintenanceCommand, ScheduleRoomMaintenanceCommand.Result> {
+        implements CommandHandler<ScheduleRoomMaintenanceCommand> {
 
     private final RoomRepository roomRepository;
     private final MaintenanceScheduleRepository maintenanceScheduleRepository;
@@ -46,7 +46,7 @@ class ScheduleRoomMaintenanceCommandHandler
 
     @Override
     @Transactional
-    public ScheduleRoomMaintenanceCommand.Result handle(ScheduleRoomMaintenanceCommand command) {
+    public void handle(ScheduleRoomMaintenanceCommand command) {
         Instant now = Instant.now(clock);
         RoomId roomId = RoomId.of(command.roomId());
 
@@ -63,7 +63,7 @@ class ScheduleRoomMaintenanceCommandHandler
         }
 
         // Delegate to aggregate for local invariants
-        MaintenanceId maintenanceId = MaintenanceId.generate();
+        MaintenanceId maintenanceId = MaintenanceId.of(command.maintenanceId());
         MaintenanceSchedule schedule = room.scheduleMaintenance(
                 maintenanceId, command.startTime(), command.endTime(),
                 command.reason(), command.operator(), now);
@@ -74,12 +74,5 @@ class ScheduleRoomMaintenanceCommandHandler
         // Publish domain events
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-
-        return new ScheduleRoomMaintenanceCommand.Result(
-                schedule.id().value(),
-                room.id().value(),
-                schedule.startTime(),
-                schedule.endTime(),
-                schedule.createdAt());
     }
 }

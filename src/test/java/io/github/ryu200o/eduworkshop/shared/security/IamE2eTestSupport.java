@@ -3,14 +3,18 @@ package io.github.ryu200o.eduworkshop.shared.security;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +31,13 @@ import java.util.stream.Collectors;
  * value (via SQL, mirroring {@code IamAdminControllerE2ETest}) so tests can mint an admin token for
  * role grants. Public {@code /auth/register} creates accounts with {@code USER} role and
  * {@code must_change_password = false}, so self-registered users can immediately use business APIs.</p>
+ *
+ * <p>The register/forgot-password endpoints are strictly-void (201/204, no body), so the raw verify /
+ * reset token is never returned over HTTP (plan §2.2). The test seam therefore self-seeds the token:
+ * it looks up the persisted user by email via {@link JdbcTemplate} and inserts a known raw token +
+ * its SHA-256 digest directly into {@code iam_password_reset_tokens}, mirroring what the handlers
+ * would persist. Unit tests cover the handler-side generation/hashing; this support only consumes
+ * tokens over the same HTTP surface the handlers validate.</p>
  */
 public final class IamE2eTestSupport {
 
@@ -36,11 +47,13 @@ public final class IamE2eTestSupport {
     private final int port;
     private final HttpClient client;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
 
-    public IamE2eTestSupport(int port, HttpClient client, ObjectMapper objectMapper) {
+    public IamE2eTestSupport(int port, HttpClient client, ObjectMapper objectMapper, JdbcTemplate jdbcTemplate) {
         this.port = port;
         this.client = client;
         this.objectMapper = objectMapper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /** Re-seeds the bootstrap admin's password to {@link #ADMIN_PASSWORD} and lifts mcp. */
@@ -88,16 +101,33 @@ public final class IamE2eTestSupport {
         if (response.statusCode() != 201) {
             throw new IllegalStateException("register failed: %d %s".formatted(response.statusCode(), response.body()));
         }
-        JsonNode body = objectMapper.readTree(response.body());
-        String verifyToken = body.path("verifyToken").asText();
-        verifyEmail(verifyToken);
-        return UUID.fromString(body.path("userId").asText());
+        UUID userId = idFromLocation(response);
+        seedVerifyToken(userId, "verify-" + email);
+        verifyEmail("verify-" + email);
+        return userId;
+    }
+
+    /** Extracts the caller-generated id from a {@code 201 + Location} response (plan §1.3). */
+    public static UUID idFromLocation(HttpResponse<String> response) {
+        String location = response.headers().firstValue("Location")
+                .orElseThrow(() -> new IllegalStateException(
+                        "missing Location header: " + response.statusCode() + " " + response.body()));
+        return UUID.fromString(location.substring(location.lastIndexOf('/') + 1));
+    }
+
+    /** Inserts a known raw token + its SHA-256 digest for the given user (test seam, plan §2.2). */
+    private void seedVerifyToken(UUID userId, String rawToken) {
+        jdbcTemplate.update("""
+                INSERT INTO iam_password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
+                VALUES (?, ?, ?, ?, NULL, CURRENT_TIMESTAMP)
+                """,
+                UUID.randomUUID(), userId, sha256Hex(rawToken), Instant.now().plusSeconds(3600));
     }
 
     private void verifyEmail(String token) throws Exception {
         HttpResponse<String> response = request("POST", "/api/v1/iam/auth/verify-email",
                 "{\"token\":\"" + token + "\"}", null);
-        if (response.statusCode() != 200) {
+        if (response.statusCode() != 204) {
             throw new IllegalStateException("verify-email failed: %d %s"
                     .formatted(response.statusCode(), response.body()));
         }
@@ -123,9 +153,19 @@ public final class IamE2eTestSupport {
         HttpResponse<String> response = request("PUT",
                 "/api/v1/iam/admin/users/" + userId + "/roles",
                 "{\"roles\":[" + rolesJson + "]}", adminToken);
-        if (response.statusCode() != 200) {
+        if (response.statusCode() != 204) {
             throw new IllegalStateException("grant roles failed: %d %s"
                     .formatted(response.statusCode(), response.body()));
+        }
+    }
+
+    /** SHA-256 hex digest — replicates {@code TokenHash.sha256Hex} for the test-seam token seeding. */
+    private static String sha256Hex(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(rawToken.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
         }
     }
 

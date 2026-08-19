@@ -97,9 +97,8 @@ class MarkAttendanceCommandHandlerTest {
                 .thenReturn(Optional.empty());
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        MarkAttendanceCommand.Result result = handler().handle(command(TRAINER));
+        handler().handle(command(TRAINER));
 
-        assertThat(result.processedCount()).isEqualTo(2);
         verify(attendanceRecordRepository).save(argThat(r ->
                 r.state() == AttendanceState.OPEN && r.studentId().value().equals(STUDENT_1)));
         verify(attendanceRecordRepository).save(argThat(r ->

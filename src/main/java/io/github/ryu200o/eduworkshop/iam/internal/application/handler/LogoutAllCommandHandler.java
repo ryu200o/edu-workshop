@@ -16,7 +16,7 @@ import java.time.Instant;
  * in a single bulk UPDATE (RFC 6819 family protection) — used for "log out on all devices". Idempotent.
  */
 @Component
-class LogoutAllCommandHandler implements CommandHandler<LogoutAllCommand, LogoutAllCommand.Result> {
+class LogoutAllCommandHandler implements CommandHandler<LogoutAllCommand> {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final Clock clock;
@@ -28,8 +28,7 @@ class LogoutAllCommandHandler implements CommandHandler<LogoutAllCommand, Logout
 
     @Override
     @Transactional
-    public LogoutAllCommand.Result handle(LogoutAllCommand command) {
+    public void handle(LogoutAllCommand command) {
         refreshTokenRepository.revokeAllActiveByUserId(UserId.of(command.userId()), Instant.now(clock));
-        return new LogoutAllCommand.Result();
     }
 }

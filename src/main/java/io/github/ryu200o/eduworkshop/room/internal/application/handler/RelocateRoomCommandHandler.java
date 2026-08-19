@@ -18,7 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, RelocateRoomCommand.Result> {
+class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
@@ -33,14 +33,14 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
 
     @Override
     @Transactional
-    public RelocateRoomCommand.Result handle(RelocateRoomCommand command) {
+    public void handle(RelocateRoomCommand command) {
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         RoomLocation newLocation = RoomLocation.of(command.newBuilding(), command.newFloor());
 
         if (newLocation.equals(room.location())) {
-            return toResult(room, room.location());
+            return;
         }
 
         if (roomRepository.existsByCoordinate(newLocation, room.code())) {
@@ -50,20 +50,10 @@ class RelocateRoomCommandHandler implements CommandHandler<RelocateRoomCommand, 
             throw new DuplicateRoomNameException(newLocation, room.name());
         }
 
-        RoomLocation oldLocation = room.location();
         Instant now = Instant.now(clock);
         room.relocateTo(newLocation, now);
-        Room saved = roomRepository.save(room);
+        roomRepository.save(room);
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-        return toResult(saved, oldLocation);
-    }
-
-    private static RelocateRoomCommand.Result toResult(Room room, RoomLocation oldLocation) {
-        return new RelocateRoomCommand.Result(
-                room.id().value(),
-                new RelocateRoomCommand.LocationDto(oldLocation.building(), oldLocation.floor()),
-                new RelocateRoomCommand.LocationDto(room.location().building(), room.location().floor()),
-                room.updatedAt());
     }
 }

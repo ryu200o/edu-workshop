@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  */
 @Component
 class AdminUpdateRolesCommandHandler
-        implements CommandHandler<AdminUpdateRolesCommand, AdminUpdateRolesCommand.Result> {
+        implements CommandHandler<AdminUpdateRolesCommand> {
 
     private final UserRepository userRepository;
     private final UserDomainEventPublisher userDomainEventPublisher;
@@ -41,7 +41,7 @@ class AdminUpdateRolesCommandHandler
 
     @Override
     @Transactional
-    public AdminUpdateRolesCommand.Result handle(AdminUpdateRolesCommand command) {
+    public void handle(AdminUpdateRolesCommand command) {
         Instant now = Instant.now(clock);
         UserId userId = UserId.of(command.userId());
         User user = userRepository.loadByIdWithLock(userId)
@@ -51,7 +51,6 @@ class AdminUpdateRolesCommandHandler
         userRepository.save(user);
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-        return new AdminUpdateRolesCommand.Result();
     }
 
     private static Set<GlobalRole> parseRoles(Set<String> roleNames) {

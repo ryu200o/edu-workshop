@@ -25,6 +25,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class CreateRoomCommandHandlerTest {
@@ -47,7 +48,7 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void ramGuard_rejectsBlankName_withoutTouchingPorts() {
-        CreateRoomCommand badName = new CreateRoomCommand("F", 2, 1, "", 50);
+        CreateRoomCommand badName = new CreateRoomCommand(UUID.randomUUID(), "F", 2, 1, "", 50);
 
         assertThatThrownBy(() -> handler().handle(badName))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -57,7 +58,7 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void ramGuard_rejectsNonPositiveCode_withoutTouchingPorts() {
-        CreateRoomCommand badCode = new CreateRoomCommand("F", 2, 0, "F-201", 50);
+        CreateRoomCommand badCode = new CreateRoomCommand(UUID.randomUUID(), "F", 2, 0, "F-201", 50);
 
         assertThatThrownBy(() -> handler().handle(badCode))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -67,7 +68,7 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void ramGuard_rejectsNonPositiveFloor_withoutTouchingPorts() {
-        CreateRoomCommand badFloor = new CreateRoomCommand("F", 0, 1, "F-201", 50);
+        CreateRoomCommand badFloor = new CreateRoomCommand(UUID.randomUUID(), "F", 0, 1, "F-201", 50);
 
         assertThatThrownBy(() -> handler().handle(badFloor))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -77,7 +78,7 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void duplicateCode_throwsAndDoesNotPersist() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        CreateRoomCommand command = new CreateRoomCommand(UUID.randomUUID(), "F", 2, 1, "F-201", 50);
         when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(command))
@@ -88,7 +89,7 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void duplicateName_throwsAndDoesNotPersist() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        CreateRoomCommand command = new CreateRoomCommand(UUID.randomUUID(), "F", 2, 1, "F-201", 50);
         when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
         when(roomRepository.existsByName(any(), any())).thenReturn(true);
 
@@ -100,18 +101,18 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void happyPath_checksExists_beforeCreatingAndPersisting() {
-        CreateRoomCommand command = new CreateRoomCommand("f", 2, 1, "F-201", 50);
+        CreateRoomCommand command = new CreateRoomCommand(UUID.randomUUID(), "f", 2, 1, "F-201", 50);
         when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
         when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        CreateRoomCommand.Result result = handler().handle(command);
+        handler().handle(command);
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
         Room persisted = captor.getValue();
 
-        assertThat(result.id()).isEqualTo(persisted.id().value());
+        assertThat(persisted.id()).isNotNull();
         assertThat(persisted.name()).isEqualTo(RoomName.of("F-201"));
         assertThat(persisted.location()).isEqualTo(RoomLocation.of("F", 2));
         assertThat(persisted.code()).isEqualTo(RoomCode.of(1));
@@ -120,7 +121,7 @@ class CreateRoomCommandHandlerTest {
 
     @Test
     void happyPath_checksExistsInOrderBeforeSaving() {
-        CreateRoomCommand command = new CreateRoomCommand("F", 2, 1, "F-201", 50);
+        CreateRoomCommand command = new CreateRoomCommand(UUID.randomUUID(), "F", 2, 1, "F-201", 50);
         when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
         when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

@@ -26,7 +26,7 @@ import java.util.UUID;
 
 @Component
 class PublishWorkshopCommandHandler
-        implements CommandHandler<PublishWorkshopCommand, PublishWorkshopCommand.Result> {
+        implements CommandHandler<PublishWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
@@ -48,7 +48,7 @@ class PublishWorkshopCommandHandler
 
     @Override
     @Transactional
-    public PublishWorkshopCommand.Result handle(PublishWorkshopCommand command) {
+    public void handle(PublishWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -109,7 +109,5 @@ class PublishWorkshopCommandHandler
         workshopDomainEventPublisher.publish(events);
         target.clearDomainEvents();
         kickedOut.forEach(Workshop::clearDomainEvents);
-
-        return new PublishWorkshopCommand.Result(target.id().value(), target.updatedAt());
     }
 }

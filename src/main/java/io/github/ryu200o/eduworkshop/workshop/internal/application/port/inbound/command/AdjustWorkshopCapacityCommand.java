@@ -2,14 +2,10 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 public record AdjustWorkshopCapacityCommand(
         UUID workshopId,
         int newCapacity
-) implements Command<AdjustWorkshopCapacityCommand.Result> {
-
-    public record Result(UUID id, int capacity, Instant updatedAt) {
-    }
+) implements Command {
 }

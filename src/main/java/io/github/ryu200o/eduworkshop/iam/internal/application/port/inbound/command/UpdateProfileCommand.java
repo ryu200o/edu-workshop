@@ -24,8 +24,5 @@ public record UpdateProfileCommand(
         String phoneNumber,
         String studentCode,
         String avatarUrl
-) implements Command<UpdateProfileCommand.Result> {
-
-    public record Result() {
-    }
+) implements Command {
 }

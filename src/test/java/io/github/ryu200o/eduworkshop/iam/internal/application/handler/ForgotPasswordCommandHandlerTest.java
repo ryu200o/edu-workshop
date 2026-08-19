@@ -51,13 +51,11 @@ class ForgotPasswordCommandHandlerTest {
         User user = User.create(UserId.generate(), Email.of("student@example.com"), "hash", "A", now);
         when(userRepository.loadByEmail(Email.of("student@example.com"))).thenReturn(Optional.of(user));
 
-        ForgotPasswordCommand.Result result = handler().handle(new ForgotPasswordCommand("student@example.com"));
-
-        assertThat(result.resetToken()).isNotBlank();
+        handler().handle(new ForgotPasswordCommand("student@example.com"));
 
         ArgumentCaptor<OneTimeToken> tokenCaptor = ArgumentCaptor.forClass(OneTimeToken.class);
         verify(oneTimeTokenRepository).save(tokenCaptor.capture());
-        assertThat(tokenCaptor.getValue().tokenHash()).isEqualTo(TokenHash.sha256Hex(result.resetToken()));
+        assertThat(tokenCaptor.getValue().tokenHash()).matches("[0-9a-f]{64}");
         assertThat(tokenCaptor.getValue().userId()).isEqualTo(user.getId());
 
         ArgumentCaptor<PasswordResetRequestedIntegrationEvent> eventCaptor =
@@ -69,12 +67,11 @@ class ForgotPasswordCommandHandlerTest {
     }
 
     @Test
-    void forgotPassword_unknownEmail_returnsNullTokenSilentlyAndPublishesNothing() {
+    void forgotPassword_unknownEmail_silentlyDoesNothing() {
         when(userRepository.loadByEmail(Email.of("nobody@example.com"))).thenReturn(Optional.empty());
 
-        ForgotPasswordCommand.Result result = handler().handle(new ForgotPasswordCommand("nobody@example.com"));
+        handler().handle(new ForgotPasswordCommand("nobody@example.com"));
 
-        assertThat(result.resetToken()).isNull();
         verify(oneTimeTokenRepository, never()).save(org.mockito.ArgumentMatchers.any());
         verify(userIntegrationEventPublisher, never()).publish(org.mockito.ArgumentMatchers.any());
     }

@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.com
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -18,17 +17,5 @@ import java.util.UUID;
 public record RenameRoomCommand(
         UUID roomId,
         String newName
-) implements Command<RenameRoomCommand.Result> {
-
-    /**
-     * Lightweight write-side result for this command — carries only the fields directly affected by the
-     * rename (id, the old/new name, and the update timestamp) to keep the write flow minimal.
-     *
-     * @param id        the renamed room's id
-     * @param oldName   the previous name (before the rename)
-     * @param newName   the new name (after the rename)
-     * @param updatedAt the moment the rename was applied
-     */
-    public record Result(UUID id, String oldName, String newName, Instant updatedAt) {
-    }
+) implements Command {
 }

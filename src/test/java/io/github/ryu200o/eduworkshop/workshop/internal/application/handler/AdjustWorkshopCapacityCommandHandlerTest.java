@@ -79,11 +79,9 @@ class AdjustWorkshopCapacityCommandHandlerTest {
                 .willReturn(Optional.of(workshop));
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID))).willReturn(20);
 
-        AdjustWorkshopCapacityCommand.Result result = handler.handle(
+        handler.handle(
                 new AdjustWorkshopCapacityCommand(WORKSHOP_ID, 40));
 
-        assertThat(result.capacity()).isEqualTo(40);
-        assertThat(result.updatedAt()).isEqualTo(NOW);
         assertThat(workshop.capacity().value()).isEqualTo(40);
         assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
 

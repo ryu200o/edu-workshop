@@ -19,7 +19,7 @@ public final class CompositeCommandPolicyResolver implements CommandPolicyResolv
     }
 
     @Override
-    public Optional<CommandPipeline> resolve(Command<?> command) {
+    public Optional<CommandPipeline> resolve(Command command) {
         return registrations.stream()
                 .filter(registration -> registration.matcher().test(command.getClass()))
                 .findFirst()

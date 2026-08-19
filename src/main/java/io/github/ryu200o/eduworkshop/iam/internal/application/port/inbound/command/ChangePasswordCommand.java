@@ -19,8 +19,5 @@ public record ChangePasswordCommand(
         UUID userId,
         String currentPassword,
         String newPassword
-) implements Command<ChangePasswordCommand.Result> {
-
-    public record Result() {
-    }
+) implements Command {
 }

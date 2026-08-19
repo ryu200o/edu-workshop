@@ -84,11 +84,8 @@ class CatchUpWorkshopCommandHandlerTest {
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
-        CatchUpWorkshopCommand.Result result = handler.handle(new CatchUpWorkshopCommand(WORKSHOP_ID));
+        handler.handle(new CatchUpWorkshopCommand(WORKSHOP_ID));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.caughtUpAt()).isEqualTo(NOW);
-        assertThat(result.state()).isEqualTo("COMPLETED");
         assertThat(workshop.state()).isEqualTo(WorkshopState.COMPLETED);
         verify(workshopRepository).save(workshop);
         verify(workshopDomainEventPublisher).publish(eventsCaptor.capture());

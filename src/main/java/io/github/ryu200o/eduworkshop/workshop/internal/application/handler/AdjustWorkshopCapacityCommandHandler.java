@@ -19,7 +19,7 @@ import java.time.Instant;
 
 @Component
 class AdjustWorkshopCapacityCommandHandler
-        implements CommandHandler<AdjustWorkshopCapacityCommand, AdjustWorkshopCapacityCommand.Result> {
+        implements CommandHandler<AdjustWorkshopCapacityCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final QueryBus queryBus;
@@ -38,7 +38,7 @@ class AdjustWorkshopCapacityCommandHandler
 
     @Override
     @Transactional
-    public AdjustWorkshopCapacityCommand.Result handle(AdjustWorkshopCapacityCommand command) {
+    public void handle(AdjustWorkshopCapacityCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -54,8 +54,5 @@ class AdjustWorkshopCapacityCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new AdjustWorkshopCapacityCommand.Result(
-                workshop.id().value(), workshop.capacity().value(), workshop.updatedAt());
     }
 }

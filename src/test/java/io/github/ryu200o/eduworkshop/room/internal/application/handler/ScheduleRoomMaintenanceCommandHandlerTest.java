@@ -73,7 +73,8 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
                 Instant.parse("2026-08-01T08:00:00Z"),
                 Instant.parse("2026-08-01T12:00:00Z"),
                 "Quarterly HVAC filter replacement and duct cleaning",
-                "operator-1");
+                "operator-1",
+                UUID.randomUUID());
     }
 
     @Test
@@ -84,13 +85,13 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
                 .thenReturn(false);
         when(maintenanceScheduleRepository.save(any(MaintenanceSchedule.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        ScheduleRoomMaintenanceCommand.Result result = handler().handle(validCommand(room.id().value()));
+        handler().handle(validCommand(room.id().value()));
 
-        assertThat(result).isNotNull();
-        assertThat(result.roomId()).isEqualTo(room.id().value());
-        assertThat(result.startTime()).isEqualTo(Instant.parse("2026-08-01T08:00:00Z"));
-        assertThat(result.endTime()).isEqualTo(Instant.parse("2026-08-01T12:00:00Z"));
-        verify(maintenanceScheduleRepository).save(any(MaintenanceSchedule.class));
+        ArgumentCaptor<MaintenanceSchedule> captor = ArgumentCaptor.forClass(MaintenanceSchedule.class);
+        verify(maintenanceScheduleRepository).save(captor.capture());
+        assertThat(captor.getValue().roomId()).isEqualTo(room.id());
+        assertThat(captor.getValue().startTime()).isEqualTo(Instant.parse("2026-08-01T08:00:00Z"));
+        assertThat(captor.getValue().endTime()).isEqualTo(Instant.parse("2026-08-01T12:00:00Z"));
     }
 
     @Test
@@ -135,7 +136,7 @@ class ScheduleRoomMaintenanceCommandHandlerTest {
                 .thenReturn(false);
         when(maintenanceScheduleRepository.save(any(MaintenanceSchedule.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        ScheduleRoomMaintenanceCommand.Result result = handler().handle(validCommand(room.id().value()));
+        handler().handle(validCommand(room.id().value()));
 
         ArgumentCaptor<MaintenanceSchedule> captor = ArgumentCaptor.forClass(MaintenanceSchedule.class);
         verify(maintenanceScheduleRepository).save(captor.capture());

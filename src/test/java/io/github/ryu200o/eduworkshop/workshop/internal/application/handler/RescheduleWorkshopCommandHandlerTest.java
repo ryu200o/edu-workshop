@@ -87,13 +87,9 @@ class RescheduleWorkshopCommandHandlerTest {
         given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
-        RescheduleWorkshopCommand.Result result = handler.handle(
+        handler.handle(
                 new RescheduleWorkshopCommand(WORKSHOP_ID, NEW_START, NEW_END));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.newStartTime()).isEqualTo(NEW_START);
-        assertThat(result.newEndTime()).isEqualTo(NEW_END);
-        assertThat(result.updatedAt()).isEqualTo(NOW);
         assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
         assertThat(workshop.roomReference().roomId()).isEqualTo(ROOM_ID);
         assertThat(workshop.startTime()).isEqualTo(NEW_START);

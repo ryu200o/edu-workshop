@@ -22,7 +22,7 @@ import java.time.Instant;
  * (ADR 0015). An unknown, used, or expired token raises {@link InvalidTokenException}.
  */
 @Component
-class VerifyEmailCommandHandler implements CommandHandler<VerifyEmailCommand, VerifyEmailCommand.Result> {
+class VerifyEmailCommandHandler implements CommandHandler<VerifyEmailCommand> {
 
     private final OneTimeTokenRepository oneTimeTokenRepository;
     private final UserRepository userRepository;
@@ -41,7 +41,7 @@ class VerifyEmailCommandHandler implements CommandHandler<VerifyEmailCommand, Ve
 
     @Override
     @Transactional
-    public VerifyEmailCommand.Result handle(VerifyEmailCommand command) {
+    public void handle(VerifyEmailCommand command) {
         Instant now = Instant.now(clock);
         String tokenHash = TokenHash.sha256Hex(command.token());
 
@@ -61,7 +61,5 @@ class VerifyEmailCommandHandler implements CommandHandler<VerifyEmailCommand, Ve
 
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-
-        return new VerifyEmailCommand.Result();
     }
 }

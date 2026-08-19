@@ -23,11 +23,11 @@ import java.time.Instant;
 /**
  * Orchestrates public self-registration (plan §2.1 steps 1-3): checks email uniqueness (fast-fail,
  * ADR 0005; the DB unique index is the race-proof backstop), creates the {@code PENDING_VERIFICATION}
- * aggregate, persists it, and mints a one-time verify token whose raw value is returned in the result
- * (dev seam until SMTP — plan §1.2 line 34).
+ * aggregate, persists it, and mints a one-time verify token whose hash is persisted (ADR 0021 — the
+ * raw value is never returned over HTTP; delivery moves to the notification/outbox channel).
  */
 @Component
-class RegisterCommandHandler implements CommandHandler<RegisterCommand, RegisterCommand.Result> {
+class RegisterCommandHandler implements CommandHandler<RegisterCommand> {
 
     private final UserRepository userRepository;
     private final OneTimeTokenRepository oneTimeTokenRepository;
@@ -52,7 +52,7 @@ class RegisterCommandHandler implements CommandHandler<RegisterCommand, Register
 
     @Override
     @Transactional
-    public RegisterCommand.Result handle(RegisterCommand command) {
+    public void handle(RegisterCommand command) {
         Email email = Email.of(command.email());
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException(email);
@@ -60,7 +60,7 @@ class RegisterCommandHandler implements CommandHandler<RegisterCommand, Register
 
         Instant now = Instant.now(clock);
         String passwordHash = passwordEncoder.encode(command.password());
-        User user = User.create(UserId.generate(), email, passwordHash, command.fullName(), now);
+        User user = User.create(UserId.of(command.userId()), email, passwordHash, command.fullName(), now);
         userRepository.save(user);
 
         String rawToken = TokenHash.generateRaw();
@@ -74,7 +74,5 @@ class RegisterCommandHandler implements CommandHandler<RegisterCommand, Register
 
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-
-        return new RegisterCommand.Result(user.getId().value(), rawToken);
     }
 }

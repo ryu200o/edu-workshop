@@ -16,6 +16,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.UUID;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -82,11 +84,13 @@ class IamSelfControllerE2ETest {
                 "{\"email\":\"" + email + "\",\"password\":\"" + password + "\",\"fullName\":\"Nguyen Van A\"}",
                 null);
         assertThat(register.statusCode()).isEqualTo(201);
-        String verifyToken = json(register.body()).path("verifyToken").asText();
+        UUID userId = IamE2eTestSupport.idFromLocation(register);
+        String verifyToken = "verify-" + email;
+        seedToken(userId, verifyToken);
 
         HttpResponse<String> verify = request("POST", "/api/v1/iam/auth/verify-email",
                 "{\"token\":\"" + verifyToken + "\"}", null);
-        assertThat(verify.statusCode()).isEqualTo(200);
+        assertThat(verify.statusCode()).isEqualTo(204);
 
         HttpResponse<String> login = request("POST", "/api/v1/iam/auth/login",
                 "{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}", null);
@@ -94,6 +98,26 @@ class IamSelfControllerE2ETest {
         JsonNode loginBody = json(login.body());
         return new RegisteredUser(email, password,
                 loginBody.path("refreshToken").asText(), loginBody.path("accessToken").asText());
+    }
+
+    /** Test seam: inserts a known raw token + its SHA-256 digest (plan §2.2). */
+    private void seedToken(UUID userId, String rawToken) {
+        jdbcTemplate.update("""
+                INSERT INTO iam_password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
+                VALUES (?, ?, ?, ?, NULL, CURRENT_TIMESTAMP)
+                """,
+                UUID.randomUUID(), userId, sha256Hex(rawToken), java.time.Instant.now().plusSeconds(3600));
+    }
+
+    private static String sha256Hex(String rawToken) {
+        try {
+            java.security.MessageDigest digest =
+                    java.security.MessageDigest.getInstance("SHA-256");
+            return java.util.HexFormat.of().formatHex(
+                    digest.digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     // ====================== TESTS ======================
@@ -127,12 +151,7 @@ class IamSelfControllerE2ETest {
                 "{\"fullName\":\"Tran Thi B\",\"phoneNumber\":\"0901234567\","
                         + "\"studentCode\":\"B21DCVT000\",\"avatarUrl\":\"https://cdn.example.com/a.png\"}",
                 user.accessToken());
-        assertThat(update.statusCode()).isEqualTo(200);
-        JsonNode body = json(update.body());
-        assertThat(body.path("fullName").asText()).isEqualTo("Tran Thi B");
-        assertThat(body.path("phoneNumber").asText()).isEqualTo("0901234567");
-        assertThat(body.path("studentCode").asText()).isEqualTo("B21DCVT000");
-        assertThat(body.path("avatarUrl").asText()).isEqualTo("https://cdn.example.com/a.png");
+        assertThat(update.statusCode()).isEqualTo(204);
 
         HttpResponse<String> reload = request("GET", "/api/v1/iam/me", null, user.accessToken());
         assertThat(json(reload.body()).path("fullName").asText()).isEqualTo("Tran Thi B");
@@ -157,7 +176,7 @@ class IamSelfControllerE2ETest {
 
         HttpResponse<String> change = request("POST", "/api/v1/iam/me/change-password",
                 "{\"currentPassword\":\"Passw0rd!\",\"newPassword\":\"BrandNew!99\"}", user.accessToken());
-        assertThat(change.statusCode()).isEqualTo(200);
+        assertThat(change.statusCode()).isEqualTo(204);
 
         HttpResponse<String> oldLogin = request("POST", "/api/v1/iam/auth/login",
                 "{\"email\":\"" + user.email() + "\",\"password\":\"Passw0rd!\"}", null);
@@ -188,7 +207,7 @@ class IamSelfControllerE2ETest {
 
         HttpResponse<String> logout = request("POST", "/api/v1/iam/auth/logout",
                 "{\"refreshToken\":\"" + user.refreshToken() + "\"}", null);
-        assertThat(logout.statusCode()).isEqualTo(200);
+        assertThat(logout.statusCode()).isEqualTo(204);
 
         HttpResponse<String> refresh = request("POST", "/api/v1/iam/auth/refresh",
                 "{\"refreshToken\":\"" + user.refreshToken() + "\"}", null);
@@ -204,7 +223,7 @@ class IamSelfControllerE2ETest {
 
         HttpResponse<String> logoutAll = request("POST", "/api/v1/iam/me/logout-all", "{}",
                 first.accessToken());
-        assertThat(logoutAll.statusCode()).isEqualTo(200);
+        assertThat(logoutAll.statusCode()).isEqualTo(204);
 
         HttpResponse<String> reuseFirst = request("POST", "/api/v1/iam/auth/refresh",
                 "{\"refreshToken\":\"" + first.refreshToken() + "\"}", null);

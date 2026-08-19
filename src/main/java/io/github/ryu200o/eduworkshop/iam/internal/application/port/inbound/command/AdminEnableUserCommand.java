@@ -10,8 +10,5 @@ import java.util.UUID;
  *
  * @param userId the account to enable
  */
-public record AdminEnableUserCommand(UUID userId) implements Command<AdminEnableUserCommand.Result> {
-
-    public record Result() {
-    }
+public record AdminEnableUserCommand(UUID userId) implements Command {
 }

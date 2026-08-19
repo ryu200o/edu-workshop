@@ -16,8 +16,5 @@ import java.util.UUID;
 public record AdminResetPasswordCommand(
         UUID userId,
         String newPassword
-) implements Command<AdminResetPasswordCommand.Result> {
-
-    public record Result() {
-    }
+) implements Command {
 }

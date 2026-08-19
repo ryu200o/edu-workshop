@@ -76,12 +76,11 @@ class AuditorAdjustCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        AuditorAdjustCommand.Result result = handler().handle(
+        handler().handle(
                 new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "student marked absent per CCTV",
                         "evidence://cam-2", AUDITOR));
 
-        assertThat(result.currentResult()).isEqualTo(AttendanceResult.ABSENT);
-        assertThat(result.state()).isEqualTo(AttendanceState.RECONCILING.name());
+        assertThat(record.state()).isEqualTo(AttendanceState.RECONCILING);
         assertThat(record.currentResult()).isEqualTo(AttendanceResult.ABSENT);
         assertThat(record.entries()).hasSize(2);
         verify(attendanceDomainEventPublisher).publish(argThat(events -> events.size() == 1

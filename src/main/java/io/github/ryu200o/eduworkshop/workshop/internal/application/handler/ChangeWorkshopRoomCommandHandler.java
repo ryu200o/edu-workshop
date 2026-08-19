@@ -29,7 +29,7 @@ import java.util.UUID;
 
 @Component
 class ChangeWorkshopRoomCommandHandler
-        implements CommandHandler<ChangeWorkshopRoomCommand, ChangeWorkshopRoomCommand.Result> {
+        implements CommandHandler<ChangeWorkshopRoomCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
@@ -54,7 +54,7 @@ class ChangeWorkshopRoomCommandHandler
 
     @Override
     @Transactional
-    public ChangeWorkshopRoomCommand.Result handle(ChangeWorkshopRoomCommand command) {
+    public void handle(ChangeWorkshopRoomCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
         UUID newRoomId = command.newRoomId();
@@ -117,7 +117,5 @@ class ChangeWorkshopRoomCommandHandler
         workshopDomainEventPublisher.publish(events);
         target.clearDomainEvents();
         kickedOut.forEach(Workshop::clearDomainEvents);
-
-        return new ChangeWorkshopRoomCommand.Result(target.id().value(), newRoomRef.roomId(), target.updatedAt());
     }
 }

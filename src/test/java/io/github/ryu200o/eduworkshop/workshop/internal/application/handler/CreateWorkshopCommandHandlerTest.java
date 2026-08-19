@@ -11,6 +11,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.domain.model.WorkshopStat
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class CreateWorkshopCommandHandlerTest {
@@ -45,7 +47,7 @@ class CreateWorkshopCommandHandlerTest {
 
     @Test
     void happyPath_createsAndPersistsWorkshop() {
-        var command = new CreateWorkshopCommand(
+        var command = new CreateWorkshopCommand(UUID.randomUUID(), 
                 "Spring Boot Workshop",
                 "Hands-on intro to Spring Modulith.",
                 Instant.parse("2026-09-01T09:00:00Z"),
@@ -54,17 +56,17 @@ class CreateWorkshopCommandHandlerTest {
 
         when(workshopRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        CreateWorkshopCommand.Result result = handler().handle(command);
+        handler().handle(command);
 
-        assertThat(result.id()).isNotNull();
-        assertThat(result.title()).isEqualTo("Spring Boot Workshop");
-
-        verify(workshopRepository).save(any());
+        ArgumentCaptor<Workshop> savedCaptor = ArgumentCaptor.forClass(Workshop.class);
+        verify(workshopRepository).save(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().id().value()).isNotNull();
+        assertThat(savedCaptor.getValue().title().value()).isEqualTo("Spring Boot Workshop");
     }
 
     @Test
     void ramGuard_rejectsBlankTitle() {
-        var command = new CreateWorkshopCommand(
+        var command = new CreateWorkshopCommand(UUID.randomUUID(), 
                 "   ",
                 "desc",
                 Instant.parse("2026-09-01T09:00:00Z"),
@@ -79,7 +81,7 @@ class CreateWorkshopCommandHandlerTest {
 
     @Test
     void ramGuard_rejectsEndNotAfterStart() {
-        var command = new CreateWorkshopCommand(
+        var command = new CreateWorkshopCommand(UUID.randomUUID(), 
                 "Workshop",
                 "desc",
                 Instant.parse("2026-09-01T11:00:00Z"),
@@ -95,7 +97,7 @@ class CreateWorkshopCommandHandlerTest {
 
     @Test
     void ramGuard_rejectsNonPositiveCapacity() {
-        var command = new CreateWorkshopCommand(
+        var command = new CreateWorkshopCommand(UUID.randomUUID(), 
                 "Workshop",
                 "desc",
                 Instant.parse("2026-09-01T09:00:00Z"),

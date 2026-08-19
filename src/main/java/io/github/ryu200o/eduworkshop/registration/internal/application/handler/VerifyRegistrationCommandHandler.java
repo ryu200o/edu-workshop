@@ -32,7 +32,7 @@ import java.time.Instant;
  */
 @Component
 class VerifyRegistrationCommandHandler
-        implements CommandHandler<VerifyRegistrationCommand, VerifyRegistrationCommand.Result> {
+        implements CommandHandler<VerifyRegistrationCommand> {
 
     private static final String VERIFIER_ROLE = "VERIFIER";
 
@@ -53,7 +53,7 @@ class VerifyRegistrationCommandHandler
 
     @Override
     @Transactional
-    public VerifyRegistrationCommand.Result handle(VerifyRegistrationCommand command) {
+    public void handle(VerifyRegistrationCommand command) {
         Instant now = Instant.now(clock);
 
         if (!VERIFIER_ROLE.equals(command.role())) {
@@ -78,7 +78,5 @@ class VerifyRegistrationCommandHandler
 
         registrationDomainEventPublisher.publish(registration.recordedEvents());
         registration.clearDomainEvents();
-
-        return new VerifyRegistrationCommand.Result(registration.id().value(), registration.verifiedAt());
     }
 }

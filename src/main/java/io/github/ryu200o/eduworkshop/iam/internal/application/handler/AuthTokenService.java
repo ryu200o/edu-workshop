@@ -1,7 +1,10 @@
 package io.github.ryu200o.eduworkshop.iam.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.iam.internal.application.exception.InvalidCredentialsException;
-import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.LoginCommand;
+import io.github.ryu200o.eduworkshop.iam.internal.application.exception.InvalidTokenException;
+import io.github.ryu200o.eduworkshop.iam.internal.application.exception.UserNotFoundException;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.auth.AuthTokenResponse;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.auth.AuthTokenUseCase;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.parameter.IamSecurityParameters;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.AccessTokenCodec;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.RefreshTokenRepository;
@@ -11,10 +14,10 @@ import io.github.ryu200o.eduworkshop.iam.internal.domain.model.Email;
 import io.github.ryu200o.eduworkshop.iam.internal.domain.model.RefreshToken;
 import io.github.ryu200o.eduworkshop.iam.internal.domain.model.User;
 import io.github.ryu200o.eduworkshop.iam.internal.domain.model.UserId;
-import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
+import io.github.ryu200o.eduworkshop.iam.internal.domain.model.UserStatus;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -24,14 +27,22 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Password login (plan §2.1 steps 5-7). Unknown email and wrong password both surface as
- * {@link InvalidCredentialsException} (no user enumeration). The status gate
- * (LOCKED → {@code UserLockedException}, PENDING_VERIFICATION/DISABLED → illegal state) is enforced
- * by the aggregate during {@code recordFailedLogin}/{@code recordSuccessfulLogin} (ADR 0020 §1.5).
- * A successful login resets the lockout streak and issues a fresh access + refresh session.
+ * Implementation of the {@link AuthTokenUseCase} security-ingress port (ADR 0021): password login and
+ * refresh-token rotation (RTR). These mint access/refresh sessions and are deliberately NOT commands
+ * on the strictly-void {@code CommandBus}.
+ *
+ * <p>Login: unknown email and wrong password both surface as {@link InvalidCredentialsException}
+ * (no user enumeration). The status gate (LOCKED → {@code UserLockedException},
+ * PENDING_VERIFICATION/DISABLED → illegal state) is enforced by the aggregate during
+ * {@code recordFailedLogin}/{@code recordSuccessfulLogin} (ADR 0020 §1.5). A successful login resets
+ * the lockout streak and issues a fresh access + refresh session.</p>
+ *
+ * <p>Refresh: the presented token is loaded under a pessimistic write lock so concurrent refreshes
+ * serialize. Replay of a revoked token triggers the family revoke (RFC 6819) — a single bulk UPDATE
+ * revokes all still-active tokens of the user. A LOCKED/DISABLED account cannot refresh.</p>
  */
-@Component
-class LoginCommandHandler implements CommandHandler<LoginCommand, LoginCommand.Result> {
+@Service
+class AuthTokenService implements AuthTokenUseCase {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -41,13 +52,13 @@ class LoginCommandHandler implements CommandHandler<LoginCommand, LoginCommand.R
     private final IamSecurityParameters parameters;
     private final Clock clock;
 
-    LoginCommandHandler(UserRepository userRepository,
-                        RefreshTokenRepository refreshTokenRepository,
-                        UserDomainEventPublisher userDomainEventPublisher,
-                        PasswordEncoder passwordEncoder,
-                        AccessTokenCodec accessTokenCodec,
-                        IamSecurityParameters parameters,
-                        Clock clock) {
+    AuthTokenService(UserRepository userRepository,
+                     RefreshTokenRepository refreshTokenRepository,
+                     UserDomainEventPublisher userDomainEventPublisher,
+                     PasswordEncoder passwordEncoder,
+                     AccessTokenCodec accessTokenCodec,
+                     IamSecurityParameters parameters,
+                     Clock clock) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.userDomainEventPublisher = userDomainEventPublisher;
@@ -59,14 +70,14 @@ class LoginCommandHandler implements CommandHandler<LoginCommand, LoginCommand.R
 
     @Override
     @Transactional(noRollbackFor = InvalidCredentialsException.class)
-    public LoginCommand.Result handle(LoginCommand command) {
+    public AuthTokenResponse login(String email, String password) {
         Instant now = Instant.now(clock);
-        Email email = Email.of(command.email());
+        Email parsedEmail = Email.of(email);
 
-        User user = userRepository.loadByEmail(email).orElseThrow(InvalidCredentialsException::new);
+        User user = userRepository.loadByEmail(parsedEmail).orElseThrow(InvalidCredentialsException::new);
         user.assertNotLocked(now);
 
-        if (!passwordEncoder.matches(command.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             user.recordFailedLogin(now);
             userRepository.save(user);
             userDomainEventPublisher.publish(user.recordedEvents());
@@ -83,7 +94,41 @@ class LoginCommandHandler implements CommandHandler<LoginCommand, LoginCommand.R
         String rawRefreshToken = issueRefreshToken(user.getId(), now);
         long expiresInSeconds = Duration.ofMinutes(parameters.accessTtlMinutes()).toSeconds();
 
-        return new LoginCommand.Result(accessToken, rawRefreshToken, expiresInSeconds, user.isMustChangePassword());
+        return new AuthTokenResponse(accessToken, rawRefreshToken, expiresInSeconds, user.isMustChangePassword());
+    }
+
+    @Override
+    @Transactional(noRollbackFor = InvalidTokenException.class)
+    public AuthTokenResponse refresh(String refreshToken) {
+        Instant now = Instant.now(clock);
+        String tokenHash = TokenHash.sha256Hex(refreshToken);
+
+        RefreshToken token = refreshTokenRepository.loadByHashWithLock(tokenHash)
+                .orElseThrow(InvalidTokenException::new);
+
+        if (token.isRevoked()) {
+            refreshTokenRepository.revokeAllActiveByUserId(token.userId(), now);
+            throw new InvalidTokenException();
+        }
+        if (token.isExpired(now)) {
+            throw new InvalidTokenException();
+        }
+
+        User user = userRepository.loadByIdWithLock(token.userId())
+                .orElseThrow(() -> new UserNotFoundException(token.userId()));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            refreshTokenRepository.revokeAllActiveByUserId(user.getId(), now);
+            throw new InvalidTokenException();
+        }
+
+        token.revoke(now);
+        refreshTokenRepository.save(token);
+
+        String accessToken = accessTokenCodec.encode(toClaims(user, now, parameters.accessTtlMinutes()));
+        String rawRefreshToken = issueRefreshToken(user.getId(), now);
+
+        return new AuthTokenResponse(accessToken, rawRefreshToken,
+                Duration.ofMinutes(parameters.accessTtlMinutes()).toSeconds(), user.isMustChangePassword());
     }
 
     /**

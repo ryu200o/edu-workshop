@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class RegisterCommandHandlerTest {
@@ -57,7 +58,7 @@ class RegisterCommandHandlerTest {
         when(userRepository.existsByEmail(Email.of("student@example.com"))).thenReturn(true);
 
         assertThatThrownBy(() -> handler().handle(
-                new RegisterCommand("student@example.com", "Passw0rd!", "Nguyen Van A")))
+                new RegisterCommand(UUID.randomUUID(), "student@example.com", "Passw0rd!", "Nguyen Van A")))
                 .isInstanceOf(DuplicateEmailException.class);
 
         verify(userRepository, never()).save(any());
@@ -69,10 +70,7 @@ class RegisterCommandHandlerTest {
         when(userRepository.existsByEmail(any())).thenReturn(false);
         when(passwordEncoder.encode("Passw0rd!")).thenReturn("$2a$12$encodedHash");
 
-        RegisterCommand.Result result = handler().handle(
-                new RegisterCommand("Student@Example.com", "Passw0rd!", "Nguyen Van A"));
-
-        assertThat(result.verifyToken()).isNotBlank();
+        handler().handle(new RegisterCommand(UUID.randomUUID(), "Student@Example.com", "Passw0rd!", "Nguyen Van A"));
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
@@ -80,13 +78,12 @@ class RegisterCommandHandlerTest {
         assertThat(saved.getEmail().value()).isEqualTo("student@example.com");
         assertThat(saved.getStatus()).isEqualTo(UserStatus.PENDING_VERIFICATION);
         assertThat(saved.getPasswordHash()).isEqualTo("$2a$12$encodedHash");
-        assertThat(result.userId()).isEqualTo(saved.getId().value());
 
         ArgumentCaptor<OneTimeToken> tokenCaptor = ArgumentCaptor.forClass(OneTimeToken.class);
         verify(oneTimeTokenRepository).save(tokenCaptor.capture());
         OneTimeToken token = tokenCaptor.getValue();
         assertThat(token.userId()).isEqualTo(saved.getId());
-        assertThat(token.tokenHash()).isEqualTo(TokenHash.sha256Hex(result.verifyToken()));
+        assertThat(token.tokenHash()).matches("[0-9a-f]{64}");
         assertThat(token.isActive(Instant.now(clock))).isTrue();
 
         verify(userDomainEventPublisher).publish(org.mockito.ArgumentMatchers.anyList());
@@ -97,14 +94,14 @@ class RegisterCommandHandlerTest {
         when(userRepository.existsByEmail(Email.of("Mixed@Case.COM"))).thenReturn(false);
         when(passwordEncoder.encode(any())).thenReturn("hash");
 
-        handler().handle(new RegisterCommand("Mixed@Case.COM", "Passw0rd!", "A"));
+        handler().handle(new RegisterCommand(UUID.randomUUID(), "Mixed@Case.COM", "Passw0rd!", "A"));
 
         org.mockito.Mockito.verify(userRepository).existsByEmail(Email.of("mixed@case.com"));
     }
 
     @Test
     void register_rejectsMalformedEmail() {
-        assertThatThrownBy(() -> handler().handle(new RegisterCommand("not-an-email", "x", "A")))
+        assertThatThrownBy(() -> handler().handle(new RegisterCommand(UUID.randomUUID(), "not-an-email", "x", "A")))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(userRepository, never()).save(any());
     }

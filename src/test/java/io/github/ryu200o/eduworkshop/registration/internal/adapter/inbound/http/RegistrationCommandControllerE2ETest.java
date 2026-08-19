@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 /**
  * End-to-end HTTP test for the Registration write side, exercising the full stack against a real
@@ -69,7 +68,7 @@ class RegistrationCommandControllerE2ETest {
 
     @BeforeEach
     void setUp() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
     }
@@ -97,8 +96,8 @@ class RegistrationCommandControllerE2ETest {
                 """
                 {"building": "%s", "floor": 1, "code": 1, "name": "%s-ROOM-1", "capacity": 50}
                 """.formatted(building, building), Map.of());
-        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.OK.value());
-        return UUID.fromString(readField(response, "id"));
+        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID createWorkshop(String title, Instant start, Instant end) throws Exception {
@@ -112,7 +111,7 @@ class RegistrationCommandControllerE2ETest {
                 """.formatted(title, start, end, capacity), Map.of());
         assertThat(response.statusCode()).as("create workshop: %s", response.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        return UUID.fromString(readField(response, "id"));
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID publishWorkshop(UUID roomId) throws Exception {
@@ -125,9 +124,9 @@ class RegistrationCommandControllerE2ETest {
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(planned.statusCode()).as("plan workshop: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan workshop: %s", planned.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
-        assertThat(published.statusCode()).as("publish workshop: %s", published.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(published.statusCode()).as("publish workshop: %s", published.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         return workshopId;
     }
 
@@ -146,6 +145,24 @@ class RegistrationCommandControllerE2ETest {
         return body.substring(begin, body.indexOf("\"", begin));
     }
 
+    // Commands are void (Strict CQS / ADR 0021): the register/cancel/verify responses carry no body,
+    // so the registration id and state changes are re-derived from the write-side table.
+    private UUID findRegistrationId(UUID workshopId, IamE2eTestSupport.TestUser student) {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM registrations WHERE workshop_id = ? AND user_id = ?",
+                UUID.class, workshopId, student.userId());
+    }
+
+    private String readStatus(UUID registrationId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT status FROM registrations WHERE id = ?", String.class, registrationId);
+    }
+
+    private String readVerifiedAtRaw(UUID registrationId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT verified_at FROM registrations WHERE id = ?", String.class, registrationId);
+    }
+
     @Test
     void registerAndCancel_happyPath() throws Exception {
         UUID roomId = createRoom("HAPPY");
@@ -154,12 +171,11 @@ class RegistrationCommandControllerE2ETest {
 
         HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body()).isEqualTo(HttpStatus.CREATED.value());
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
 
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
                 student.bearer());
-        assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(cancelled.body()).contains(registrationId.toString());
+        assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 
     @Test
@@ -182,7 +198,7 @@ class RegistrationCommandControllerE2ETest {
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> registered = register(workshopId, iam.registerAndLogin());
         assertThat(registered.statusCode()).as("register draft: %s", registered.body())
@@ -232,7 +248,7 @@ class RegistrationCommandControllerE2ETest {
         IamE2eTestSupport.TestUser stranger = iam.registerAndLogin();
 
         HttpResponse<String> registered = register(workshopId, owner);
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, owner);
 
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
                 stranger.bearer());
@@ -249,15 +265,15 @@ class RegistrationCommandControllerE2ETest {
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
-        assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         IamE2eTestSupport.TestUser student = iam.registerAndLogin();
 
         HttpResponse<String> registered = register(workshopId, student); // starts within 24h → past deadline
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
 
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
                 student.bearer());
@@ -290,12 +306,11 @@ class RegistrationCommandControllerE2ETest {
         HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
 
         HttpResponse<String> verified = verify("QR-REG-" + registrationId, verifier.bearer());
-        assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(verified.body()).contains("\"registrationId\":\"" + registrationId + "\"");
-        assertThat(readField(verified, "verifiedAt")).isNotBlank();
+        assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
+        assertThat(readStatus(registrationId)).isEqualTo("VERIFIED");
     }
 
     @Test
@@ -307,22 +322,22 @@ class RegistrationCommandControllerE2ETest {
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan: %s", planned.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
-        assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(published.statusCode()).as("publish: %s", published.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         IamE2eTestSupport.TestUser student = iam.registerAndLogin();
         IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
 
         HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
 
-        assertThat(startWorkshop(workshopId).statusCode()).isEqualTo(HttpStatus.OK.value());
+        assertThat(startWorkshop(workshopId).statusCode()).isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> verified = verify("QR-REG-" + registrationId, verifier.bearer());
         assertThat(verified.statusCode()).as("verify IN_PROGRESS: %s", verified.body())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 
     @Test
@@ -333,20 +348,18 @@ class RegistrationCommandControllerE2ETest {
         IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
 
         HttpResponse<String> registered = register(workshopId, student);
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
         Map<String, String> headers = verifier.bearer();
 
         HttpResponse<String> first = verify("QR-REG-" + registrationId, headers);
-        assertThat(first.statusCode()).isEqualTo(HttpStatus.OK.value());
-        String firstVerifiedAt = readField(first, "verifiedAt");
+        assertThat(first.statusCode()).isEqualTo(HttpStatus.NO_CONTENT.value());
+        String firstVerifiedAt = readVerifiedAtRaw(registrationId);
 
         HttpResponse<String> second = verify("QR-REG-" + registrationId, headers);
-        assertThat(second.statusCode()).as("re-verify: %s", second.body()).isEqualTo(HttpStatus.OK.value());
-        // Re-verify must not advance verifiedAt: the first response is read from the in-memory
-        // aggregate (nanos), the second is re-loaded from the DB (rounded to micros) — compare within
-        // a 1µs tolerance to absorb the storage rounding (H2/PostgreSQL TIMESTAMPTZ).
-        assertThat(Instant.parse(readField(second, "verifiedAt")))
-                .isCloseTo(Instant.parse(firstVerifiedAt), within(Duration.ofNanos(1000)));
+        assertThat(second.statusCode()).as("re-verify: %s", second.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
+        // Re-verify must not advance verifiedAt: compare the raw stored value before/after the
+        // second verify (H2/PostgreSQL TIMESTAMPTZ) — identical means the idempotent no-op held.
+        assertThat(readVerifiedAtRaw(registrationId)).isEqualTo(firstVerifiedAt);
     }
 
     @Test
@@ -357,7 +370,7 @@ class RegistrationCommandControllerE2ETest {
         IamE2eTestSupport.TestUser trainer = iam.registerAndLoginWithRoles("PLANNER");
 
         HttpResponse<String> registered = register(workshopId, student);
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
 
         HttpResponse<String> verified = verify("QR-REG-" + registrationId, trainer.bearer());
         assertThat(verified.statusCode()).as("non-verifier: %s", verified.body())
@@ -381,11 +394,11 @@ class RegistrationCommandControllerE2ETest {
         HttpResponse<String> registered = register(workshopId, student);
         assertThat(registered.statusCode()).as("register: %s", registered.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
 
         HttpResponse<String> cancelled = post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of());
         assertThat(cancelled.statusCode()).as("cancel workshop: %s", cancelled.body())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> verified = verify("QR-REG-" + registrationId,
                 iam.registerAndLoginWithRoles("VERIFIER").bearer());
@@ -401,10 +414,10 @@ class RegistrationCommandControllerE2ETest {
         IamE2eTestSupport.TestUser verifier = iam.registerAndLoginWithRoles("VERIFIER");
 
         HttpResponse<String> registered = register(workshopId, student);
-        UUID registrationId = UUID.fromString(readField(registered, "registrationId"));
+        UUID registrationId = findRegistrationId(workshopId, student);
         HttpResponse<String> cancelled = post("/api/v1/registrations/" + registrationId + "/cancel", null,
                 student.bearer());
-        assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> verified = verify("QR-REG-" + registrationId, verifier.bearer());
         assertThat(verified.statusCode()).as("verify cancelled: %s", verified.body())

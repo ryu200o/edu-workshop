@@ -100,11 +100,8 @@ class FinalizeWorkshopRosterCommandHandlerTest {
                 .thenReturn(Optional.of(new WorkshopSchedulingContract(WORKSHOP_ID, WorkshopStateContract.COMPLETED, completedAt)));
         when(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).thenReturn(List.of(record1, record2));
 
-        FinalizeWorkshopRosterCommand.Result result = handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM));
+        handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM));
 
-        assertThat(result.finalizedRecordsCount()).isEqualTo(2);
-        assertThat(result.state()).isEqualTo(AttendanceState.FINALIZED.name());
-        assertThat(result.finalizedAt()).isEqualTo(NOW);
         assertThat(record1.state()).isEqualTo(AttendanceState.FINALIZED);
         assertThat(record2.state()).isEqualTo(AttendanceState.FINALIZED);
         verify(attendanceRecordRepository).saveAll(any());

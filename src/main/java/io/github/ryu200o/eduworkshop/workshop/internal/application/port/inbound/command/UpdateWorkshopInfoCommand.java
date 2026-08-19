@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -15,8 +14,5 @@ public record UpdateWorkshopInfoCommand(
         UUID workshopId,
         String newTitle,
         String newDescription
-) implements Command<UpdateWorkshopInfoCommand.Result> {
-
-    public record Result(UUID id, String title, String description, Instant updatedAt) {
-    }
+) implements Command {
 }

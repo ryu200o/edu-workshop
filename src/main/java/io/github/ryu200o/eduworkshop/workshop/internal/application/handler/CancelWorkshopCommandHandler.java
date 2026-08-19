@@ -16,7 +16,7 @@ import java.time.Instant;
 
 @Component
 class CancelWorkshopCommandHandler
-        implements CommandHandler<CancelWorkshopCommand, CancelWorkshopCommand.Result> {
+        implements CommandHandler<CancelWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -32,7 +32,7 @@ class CancelWorkshopCommandHandler
 
     @Override
     @Transactional
-    public CancelWorkshopCommand.Result handle(CancelWorkshopCommand command) {
+    public void handle(CancelWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -45,7 +45,5 @@ class CancelWorkshopCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new CancelWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt());
     }
 }

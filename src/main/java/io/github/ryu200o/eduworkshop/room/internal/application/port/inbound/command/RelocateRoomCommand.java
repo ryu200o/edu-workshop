@@ -1,9 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command;
 
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomLocation;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -19,18 +17,5 @@ public record RelocateRoomCommand(
         UUID roomId,
         String newBuilding,
         int newFloor
-) implements Command<RelocateRoomCommand.Result> {
-
-    public record LocationDto (String building, int floor) {}
-    /**
-     * Lightweight write-side result for this command — carries only the fields directly affected by the
-     * relocation (id, old/new location, and the update timestamp) to keep the write flow minimal.
-     *
-     * @param id          the relocated room's id
-     * @param oldLocation the previous location
-     * @param newLocation the new location
-     * @param updatedAt   the moment the relocation was applied
-     */
-    public record Result(UUID id, LocationDto oldLocation, LocationDto newLocation, Instant updatedAt) {
-    }
+) implements Command {
 }

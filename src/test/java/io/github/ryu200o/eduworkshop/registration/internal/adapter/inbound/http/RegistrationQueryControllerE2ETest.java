@@ -60,7 +60,7 @@ class RegistrationQueryControllerE2ETest {
 
     @BeforeEach
     void setUp() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
     }
@@ -95,17 +95,17 @@ class RegistrationQueryControllerE2ETest {
                 """
                 {"building": "%s", "floor": 1, "code": 1, "name": "%s-ROOM-1", "capacity": 50}
                 """.formatted(building, building), Map.of());
-        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.OK.value());
-        return UUID.fromString(readField(response, "id"));
+        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID publishWorkshop(UUID roomId, String building) throws Exception {
         UUID workshopId = createWorkshop(building, START, END);
         assertThat(post("/api/v1/workshops/" + workshopId + "/plan",
                 "{\"roomId\":\"%s\"}".formatted(roomId), Map.of()).statusCode())
-                .isEqualTo(HttpStatus.OK.value());
+        .isEqualTo(HttpStatus.NO_CONTENT.value());
         assertThat(post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of()).statusCode())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         return workshopId;
     }
 
@@ -116,7 +116,7 @@ class RegistrationQueryControllerE2ETest {
                 """.formatted(title, start, end), Map.of());
         assertThat(response.statusCode()).as("create workshop: %s", response.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        return UUID.fromString(readField(response, "id"));
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private static String readField(HttpResponse<String> response, String field) {
@@ -166,7 +166,7 @@ class RegistrationQueryControllerE2ETest {
         // REFUNDED is a learner-selectable filter: cancel the workshop to flip the seat to REFUNDED,
         // then the status=REFUNDED query must return that row (e-commerce style refunded-order view).
         assertThat(post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of()).statusCode())
-                .isEqualTo(HttpStatus.OK.value());
+        .isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> refunded = get("/api/v1/registrations?status=REFUNDED", user.bearer());
         assertThat(refunded.statusCode()).isEqualTo(HttpStatus.OK.value());

@@ -16,7 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class ReactivateRoomCommandHandler implements CommandHandler<ReactivateRoomCommand, ReactivateRoomCommand.Result> {
+class ReactivateRoomCommandHandler implements CommandHandler<ReactivateRoomCommand> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
@@ -31,7 +31,7 @@ class ReactivateRoomCommandHandler implements CommandHandler<ReactivateRoomComma
 
     @Override
     @Transactional
-    public ReactivateRoomCommand.Result handle(ReactivateRoomCommand command) {
+    public void handle(ReactivateRoomCommand command) {
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
@@ -39,13 +39,10 @@ class ReactivateRoomCommandHandler implements CommandHandler<ReactivateRoomComma
         Instant now = Instant.now(clock);
         room.reactivate(now);
         if (previous == room.state()) {
-            return new ReactivateRoomCommand.Result(
-                    room.id().value(), previous, room.state(), room.updatedAt());
+            return;
         }
-        Room saved = roomRepository.save(room);
+        roomRepository.save(room);
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-        return new ReactivateRoomCommand.Result(
-                saved.id().value(), previous, saved.state(), saved.updatedAt());
     }
 }

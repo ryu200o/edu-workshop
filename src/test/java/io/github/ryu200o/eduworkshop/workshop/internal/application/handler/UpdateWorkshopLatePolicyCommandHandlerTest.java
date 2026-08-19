@@ -73,11 +73,8 @@ class UpdateWorkshopLatePolicyCommandHandlerTest {
         Workshop workshop = publishedWorkshop(id);
         when(workshopRepository.loadById(WorkshopId.of(id))).thenReturn(Optional.of(workshop));
 
-        UpdateWorkshopLatePolicyCommand.Result result =
-                handler().handle(new UpdateWorkshopLatePolicyCommand(id, 930));
+        handler().handle(new UpdateWorkshopLatePolicyCommand(id, 930));
 
-        assertThat(result.workshopId()).isEqualTo(id);
-        assertThat(result.lateThresholdSeconds()).isEqualTo(930);
         assertThat(workshop.lateThreshold().seconds()).isEqualTo(930);
         verify(workshopRepository).save(workshop);
         verify(workshopDomainEventPublisher).publish(argThat(events -> events.size() == 1
@@ -91,10 +88,9 @@ class UpdateWorkshopLatePolicyCommandHandlerTest {
         Workshop workshop = publishedWorkshop(id);
         when(workshopRepository.loadById(WorkshopId.of(id))).thenReturn(Optional.of(workshop));
 
-        UpdateWorkshopLatePolicyCommand.Result result =
-                handler().handle(new UpdateWorkshopLatePolicyCommand(id, 0));
+        handler().handle(new UpdateWorkshopLatePolicyCommand(id, 0));
 
-        assertThat(result.lateThresholdSeconds()).isZero();
+        assertThat(workshop.lateThreshold().seconds()).isZero();
     }
 
     @Test

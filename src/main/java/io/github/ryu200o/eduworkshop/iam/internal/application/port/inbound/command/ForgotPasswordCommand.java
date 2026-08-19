@@ -8,12 +8,5 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
  *
  * @param email the login email
  */
-public record ForgotPasswordCommand(String email) implements Command<ForgotPasswordCommand.Result> {
-
-    /**
-     * @param resetToken the RAW one-time reset token, or {@code null} when no account exists for the
-     *                   email (dev seam — real delivery moves to email/event in production)
-     */
-    public record Result(String resetToken) {
-    }
+public record ForgotPasswordCommand(String email) implements Command {
 }

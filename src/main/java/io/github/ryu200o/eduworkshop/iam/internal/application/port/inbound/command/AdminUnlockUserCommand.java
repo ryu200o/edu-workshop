@@ -11,8 +11,5 @@ import java.util.UUID;
  *
  * @param userId the account to unlock
  */
-public record AdminUnlockUserCommand(UUID userId) implements Command<AdminUnlockUserCommand.Result> {
-
-    public record Result() {
-    }
+public record AdminUnlockUserCommand(UUID userId) implements Command {
 }

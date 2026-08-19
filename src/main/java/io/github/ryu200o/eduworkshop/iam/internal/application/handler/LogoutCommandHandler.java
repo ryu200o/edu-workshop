@@ -18,7 +18,7 @@ import java.time.Instant;
  * success — logout never fails.
  */
 @Component
-class LogoutCommandHandler implements CommandHandler<LogoutCommand, LogoutCommand.Result> {
+class LogoutCommandHandler implements CommandHandler<LogoutCommand> {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final Clock clock;
@@ -30,13 +30,12 @@ class LogoutCommandHandler implements CommandHandler<LogoutCommand, LogoutComman
 
     @Override
     @Transactional
-    public LogoutCommand.Result handle(LogoutCommand command) {
+    public void handle(LogoutCommand command) {
         Instant now = Instant.now(clock);
         String tokenHash = TokenHash.sha256Hex(command.refreshToken());
         refreshTokenRepository.loadByHashWithLock(tokenHash).ifPresent(token -> {
             token.revoke(now);
             refreshTokenRepository.save(token);
         });
-        return new LogoutCommand.Result();
     }
 }

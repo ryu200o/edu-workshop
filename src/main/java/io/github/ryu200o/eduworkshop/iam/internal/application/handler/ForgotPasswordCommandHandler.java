@@ -21,13 +21,12 @@ import java.util.Optional;
 
 /**
  * Issues a one-time reset token for the forgot-password flow (plan §1.2 line 34). Answers
- * identically whether or not the email exists (no account enumeration): an unknown email yields a
- * {@code null} reset token, a known one the raw token — until SMTP integration the raw token is
- * returned through the response as a dev seam.
+ * identically whether or not the email exists (no account enumeration). The raw token is never
+ * returned over HTTP; the integration event {@link PasswordResetRequestedIntegrationEvent} carries
+ * the token id for outbox-based delivery (ADR 0020 §1.6, ADR 0021).
  */
 @Component
-class ForgotPasswordCommandHandler
-        implements CommandHandler<ForgotPasswordCommand, ForgotPasswordCommand.Result> {
+class ForgotPasswordCommandHandler implements CommandHandler<ForgotPasswordCommand> {
 
     private final UserRepository userRepository;
     private final OneTimeTokenRepository oneTimeTokenRepository;
@@ -49,13 +48,13 @@ class ForgotPasswordCommandHandler
 
     @Override
     @Transactional
-    public ForgotPasswordCommand.Result handle(ForgotPasswordCommand command) {
+    public void handle(ForgotPasswordCommand command) {
         Instant now = Instant.now(clock);
         Email email = Email.of(command.email());
 
         Optional<User> user = userRepository.loadByEmail(email);
         if (user.isEmpty()) {
-            return new ForgotPasswordCommand.Result(null);
+            return;
         }
 
         String rawToken = TokenHash.generateRaw();
@@ -71,7 +70,5 @@ class ForgotPasswordCommandHandler
                 email.value(),
                 resetToken.id()
         ));
-
-        return new ForgotPasswordCommand.Result(rawToken);
     }
 }

@@ -8,5 +8,5 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
  */
 public interface BehaviorChain {
 
-    Object next(Command<?> command);
+    void next(Command command);
 }

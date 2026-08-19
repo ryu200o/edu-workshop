@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Set;
+import java.net.URI;
 import java.util.UUID;
 
 /**
@@ -47,10 +48,11 @@ class IamAdminController {
     }
 
     @PostMapping
-    ResponseEntity<AdminCreateUserCommand.Result> createUser(@RequestBody CreateUserRequest request) {
-        AdminCreateUserCommand.Result result = commandBus.execute(new AdminCreateUserCommand(
-                request.email(), request.fullName(), request.temporaryPassword(), request.roles()));
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    ResponseEntity<Void> createUser(@RequestBody CreateUserRequest request) {
+        UUID userId = UUID.randomUUID();
+        commandBus.execute(new AdminCreateUserCommand(
+                userId, request.email(), request.fullName(), request.temporaryPassword(), request.roles()));
+        return ResponseEntity.created(URI.create("/api/v1/iam/admin/users/" + userId)).build();
     }
 
     @GetMapping
@@ -64,43 +66,41 @@ class IamAdminController {
     }
 
     @PutMapping("/{userId}/roles")
-    ResponseEntity<AdminUpdateRolesCommand.Result> updateRoles(@PathVariable UUID userId,
-                                                              @RequestBody RolesRequest request) {
-        AdminUpdateRolesCommand.Result result = commandBus.execute(
-                new AdminUpdateRolesCommand(userId, request.roles()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> updateRoles(@PathVariable UUID userId,
+                                     @RequestBody RolesRequest request) {
+        commandBus.execute(new AdminUpdateRolesCommand(userId, request.roles()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{userId}/lock")
-    ResponseEntity<AdminLockUserCommand.Result> lockUser(@PathVariable UUID userId) {
-        AdminLockUserCommand.Result result = commandBus.execute(new AdminLockUserCommand(userId));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> lockUser(@PathVariable UUID userId) {
+        commandBus.execute(new AdminLockUserCommand(userId));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{userId}/unlock")
-    ResponseEntity<AdminUnlockUserCommand.Result> unlockUser(@PathVariable UUID userId) {
-        AdminUnlockUserCommand.Result result = commandBus.execute(new AdminUnlockUserCommand(userId));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> unlockUser(@PathVariable UUID userId) {
+        commandBus.execute(new AdminUnlockUserCommand(userId));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{userId}/disable")
-    ResponseEntity<AdminDisableUserCommand.Result> disableUser(@PathVariable UUID userId) {
-        AdminDisableUserCommand.Result result = commandBus.execute(new AdminDisableUserCommand(userId));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> disableUser(@PathVariable UUID userId) {
+        commandBus.execute(new AdminDisableUserCommand(userId));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{userId}/enable")
-    ResponseEntity<AdminEnableUserCommand.Result> enableUser(@PathVariable UUID userId) {
-        AdminEnableUserCommand.Result result = commandBus.execute(new AdminEnableUserCommand(userId));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> enableUser(@PathVariable UUID userId) {
+        commandBus.execute(new AdminEnableUserCommand(userId));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{userId}/reset-password")
-    ResponseEntity<AdminResetPasswordCommand.Result> resetPassword(@PathVariable UUID userId,
-                                                                  @RequestBody ResetPasswordRequest request) {
-        AdminResetPasswordCommand.Result result = commandBus.execute(
-                new AdminResetPasswordCommand(userId, request.newPassword()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> resetPassword(@PathVariable UUID userId,
+                                       @RequestBody ResetPasswordRequest request) {
+        commandBus.execute(new AdminResetPasswordCommand(userId, request.newPassword()));
+        return ResponseEntity.noContent().build();
     }
 
     record CreateUserRequest(String email, String fullName, String temporaryPassword, Set<String> roles) {

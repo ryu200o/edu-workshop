@@ -13,8 +13,5 @@ public record UpdateWorkshopScheduleCommand(
         UUID workshopId,
         Instant newStartTime,
         Instant newEndTime
-) implements Command<UpdateWorkshopScheduleCommand.Result> {
-
-    public record Result(UUID id, Instant startTime, Instant endTime, Instant updatedAt) {
-    }
+) implements Command {
 }

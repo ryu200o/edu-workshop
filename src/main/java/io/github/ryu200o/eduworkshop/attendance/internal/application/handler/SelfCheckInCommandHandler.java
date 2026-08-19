@@ -53,7 +53,7 @@ import java.util.UUID;
  * </ol>
  */
 @Component
-class SelfCheckInCommandHandler implements CommandHandler<SelfCheckInCommand, SelfCheckInCommand.Result> {
+class SelfCheckInCommandHandler implements CommandHandler<SelfCheckInCommand> {
 
     private final WorkshopExposeAPI workshopExposeApi;
     private final RegistrationExposeAPI registrationExposeApi;
@@ -75,7 +75,7 @@ class SelfCheckInCommandHandler implements CommandHandler<SelfCheckInCommand, Se
 
     @Override
     @Transactional
-    public SelfCheckInCommand.Result handle(SelfCheckInCommand command) {
+    public void handle(SelfCheckInCommand command) {
         Instant now = Instant.now(clock);
         UUID workshopId = command.workshopId();
         UUID studentId = command.actor().id().value();
@@ -92,26 +92,25 @@ class SelfCheckInCommandHandler implements CommandHandler<SelfCheckInCommand, Se
             throw new RegistrationNotVerifiedException(workshopId, List.of(studentId));
         }
 
-        return attendanceRecordRepository.loadByWorkshopAndStudent(workshopId, studentId)
-                .<SelfCheckInCommand.Result>map(existing -> new SelfCheckInCommand.Result(
-                        existing.id().value(),
-                        existing.currentResult(),
-                        existing.state()))
-                .orElseGet(() -> {
-                    AttendanceStatusContract status = workshopExposeApi.evaluateCheckIn(workshopId, now)
-                            .orElseThrow(() -> new ReferencedWorkshopNotFoundException(workshopId));
-                    AttendanceRecord record = AttendanceRecord.create(
-                            AttendanceRecordId.generate(),
-                            StudentId.of(studentId),
-                            workshopId,
-                            AttendanceMapper.toResult(status),
-                            null,
-                            command.actor(),
-                            now);
-                    attendanceRecordRepository.save(record);
-                    attendanceDomainEventPublisher.publish(record.recordedEvents());
-                    record.clearDomainEvents();
-                    return new SelfCheckInCommand.Result(record.id().value(), record.currentResult(), record.state());
-                });
+        AttendanceRecord existing = attendanceRecordRepository
+                .loadByWorkshopAndStudent(workshopId, studentId)
+                .orElse(null);
+        if (existing != null) {
+            return;
+        }
+
+        AttendanceStatusContract status = workshopExposeApi.evaluateCheckIn(workshopId, now)
+                .orElseThrow(() -> new ReferencedWorkshopNotFoundException(workshopId));
+        AttendanceRecord record = AttendanceRecord.create(
+                AttendanceRecordId.generate(),
+                StudentId.of(studentId),
+                workshopId,
+                AttendanceMapper.toResult(status),
+                null,
+                command.actor(),
+                now);
+        attendanceRecordRepository.save(record);
+        attendanceDomainEventPublisher.publish(record.recordedEvents());
+        record.clearDomainEvents();
     }
 }

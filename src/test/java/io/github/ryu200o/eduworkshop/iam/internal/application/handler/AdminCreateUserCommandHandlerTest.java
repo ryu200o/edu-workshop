@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class AdminCreateUserCommandHandlerTest {
@@ -51,13 +52,12 @@ class AdminCreateUserCommandHandlerTest {
         when(userRepository.existsByEmail(Email.of("new@example.com"))).thenReturn(false);
         when(passwordEncoder.encode("Temporary!1")).thenReturn("$2a$12$newHash");
 
-        AdminCreateUserCommand.Result result = handler().handle(new AdminCreateUserCommand(
+        handler().handle(new AdminCreateUserCommand(UUID.randomUUID(), 
                 "new@example.com", "Nguyen Van B", "Temporary!1", null));
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
         User saved = captor.getValue();
-        assertThat(result.userId()).isEqualTo(saved.getId().value());
         assertThat(saved.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(saved.isMustChangePassword()).isTrue();
         assertThat(saved.getEmail().value()).isEqualTo("new@example.com");
@@ -69,7 +69,7 @@ class AdminCreateUserCommandHandlerTest {
     void createUser_duplicateEmail_throwsDuplicate() {
         when(userRepository.existsByEmail(Email.of("dup@example.com"))).thenReturn(true);
 
-        assertThatThrownBy(() -> handler().handle(new AdminCreateUserCommand(
+        assertThatThrownBy(() -> handler().handle(new AdminCreateUserCommand(UUID.randomUUID(), 
                 "dup@example.com", "Dup", "Temporary!1", null)))
                 .isInstanceOf(DuplicateEmailException.class);
         verify(userRepository, never()).save(any());
@@ -80,7 +80,7 @@ class AdminCreateUserCommandHandlerTest {
         when(userRepository.existsByEmail(Email.of("planner@example.com"))).thenReturn(false);
         when(passwordEncoder.encode("Temporary!1")).thenReturn("$2a$12$newHash");
 
-        handler().handle(new AdminCreateUserCommand("planner@example.com", "Planner", "Temporary!1",
+        handler().handle(new AdminCreateUserCommand(UUID.randomUUID(), "planner@example.com", "Planner", "Temporary!1",
                 Set.of("USER", "PLANNER")));
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
@@ -93,7 +93,7 @@ class AdminCreateUserCommandHandlerTest {
         when(userRepository.existsByEmail(Email.of("bad@example.com"))).thenReturn(false);
         when(passwordEncoder.encode("Temporary!1")).thenReturn("$2a$12$newHash");
 
-        assertThatThrownBy(() -> handler().handle(new AdminCreateUserCommand(
+        assertThatThrownBy(() -> handler().handle(new AdminCreateUserCommand(UUID.randomUUID(), 
                 "bad@example.com", "Bad", "Temporary!1", Set.of("ADMIN"))))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(userRepository, never()).save(any());
@@ -103,7 +103,7 @@ class AdminCreateUserCommandHandlerTest {
     void createUser_blankTemporaryPassword_throwsIllegalArgument() {
         when(userRepository.existsByEmail(Email.of("blank@example.com"))).thenReturn(false);
 
-        assertThatThrownBy(() -> handler().handle(new AdminCreateUserCommand(
+        assertThatThrownBy(() -> handler().handle(new AdminCreateUserCommand(UUID.randomUUID(), 
                 "blank@example.com", "Blank", "  ", null)))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(userRepository, never()).save(any());

@@ -1,14 +1,16 @@
 package io.github.ryu200o.eduworkshop.iam.internal.adapter.inbound.http;
 
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.auth.AuthTokenResponse;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.auth.AuthTokenUseCase;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.ForgotPasswordCommand;
-import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.LoginCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.LogoutCommand;
-import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.RefreshCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.RegisterCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.ResetPasswordCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.VerifyEmailCommand;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 
+import java.net.URI;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,8 +19,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Driving HTTP adapter for the 6 public IAM auth APIs (plan §2.1-2.4, ADR 0020 §2). PermitAll at the
- * security chain level; talks exclusively to the shared {@link CommandBus}. Error handling is
+ * Driving HTTP adapter for the public IAM auth APIs (plan §2.1-2.4, ADR 0020 §2). PermitAll at the
+ * security chain level. Login/refresh are Security Token Minting Operations handled by the
+ * {@link AuthTokenUseCase} (ADR 0021) and return 200 with the session payload; all other endpoints
+ * are strictly-void {@link CommandBus} commands returning 201/204 with no body. Error handling is
  * centralized in {@link IamExceptionAdvice}.
  */
 @RestController
@@ -26,53 +30,52 @@ import org.springframework.web.bind.annotation.RestController;
 class IamAuthController {
 
     private final CommandBus commandBus;
+    private final AuthTokenUseCase authTokenUseCase;
 
-    IamAuthController(CommandBus commandBus) {
+    IamAuthController(CommandBus commandBus, AuthTokenUseCase authTokenUseCase) {
         this.commandBus = commandBus;
+        this.authTokenUseCase = authTokenUseCase;
     }
 
     @PostMapping("/register")
-    ResponseEntity<RegisterCommand.Result> register(@RequestBody RegisterRequest request) {
-        RegisterCommand.Result result = commandBus.execute(
-                new RegisterCommand(request.email(), request.password(), request.fullName()));
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    ResponseEntity<Void> register(@RequestBody RegisterRequest request) {
+        UUID userId = UUID.randomUUID();
+        commandBus.execute(new RegisterCommand(userId, request.email(), request.password(), request.fullName()));
+        return ResponseEntity.created(URI.create("/api/v1/iam/users/" + userId)).build();
     }
 
     @PostMapping("/verify-email")
-    ResponseEntity<VerifyEmailCommand.Result> verifyEmail(@RequestBody TokenRequest request) {
-        VerifyEmailCommand.Result result = commandBus.execute(new VerifyEmailCommand(request.token()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> verifyEmail(@RequestBody TokenRequest request) {
+        commandBus.execute(new VerifyEmailCommand(request.token()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/login")
-    ResponseEntity<LoginCommand.Result> login(@RequestBody LoginRequest request) {
-        LoginCommand.Result result = commandBus.execute(new LoginCommand(request.email(), request.password()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<AuthTokenResponse> login(@RequestBody LoginRequest request) {
+        return ResponseEntity.ok(authTokenUseCase.login(request.email(), request.password()));
     }
 
     @PostMapping("/refresh")
-    ResponseEntity<RefreshCommand.Result> refresh(@RequestBody TokenRequest request) {
-        RefreshCommand.Result result = commandBus.execute(new RefreshCommand(request.refreshToken()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<AuthTokenResponse> refresh(@RequestBody TokenRequest request) {
+        return ResponseEntity.ok(authTokenUseCase.refresh(request.refreshToken()));
     }
 
     @PostMapping("/logout")
-    ResponseEntity<LogoutCommand.Result> logout(@RequestBody TokenRequest request) {
-        LogoutCommand.Result result = commandBus.execute(new LogoutCommand(request.refreshToken()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> logout(@RequestBody TokenRequest request) {
+        commandBus.execute(new LogoutCommand(request.refreshToken()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/forgot-password")
-    ResponseEntity<ForgotPasswordCommand.Result> forgotPassword(@RequestBody EmailRequest request) {
-        ForgotPasswordCommand.Result result = commandBus.execute(new ForgotPasswordCommand(request.email()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> forgotPassword(@RequestBody EmailRequest request) {
+        commandBus.execute(new ForgotPasswordCommand(request.email()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/reset-password")
-    ResponseEntity<ResetPasswordCommand.Result> resetPassword(@RequestBody ResetPasswordRequest request) {
-        ResetPasswordCommand.Result result = commandBus.execute(
-                new ResetPasswordCommand(request.token(), request.newPassword()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> resetPassword(@RequestBody ResetPasswordRequest request) {
+        commandBus.execute(new ResetPasswordCommand(request.token(), request.newPassword()));
+        return ResponseEntity.noContent().build();
     }
 
     record RegisterRequest(String email, String password, String fullName) {

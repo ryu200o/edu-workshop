@@ -11,8 +11,5 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
  *
  * @param refreshToken the RAW opaque refresh token to revoke
  */
-public record LogoutCommand(String refreshToken) implements Command<LogoutCommand.Result> {
-
-    public record Result() {
-    }
+public record LogoutCommand(String refreshToken) implements Command {
 }

@@ -20,7 +20,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, CreateRoomCommand.Result> {
+class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
@@ -35,8 +35,8 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
 
     @Override
     @Transactional
-    public CreateRoomCommand.Result handle(CreateRoomCommand command) {
-        RoomId id = RoomId.generate();
+    public void handle(CreateRoomCommand command) {
+        RoomId id = RoomId.of(command.roomId());
         RoomLocation location = RoomLocation.of(command.building(), command.floor());
         RoomName name = RoomName.of(command.name());
         RoomCapacity capacity = RoomCapacity.of(command.capacity());
@@ -52,9 +52,8 @@ class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, Crea
 
         Room room = Room.create(id, name, location, code, capacity, now);
 
-        Room saved = roomRepository.save(room);
+        roomRepository.save(room);
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-        return new CreateRoomCommand.Result(saved.id().value(), saved.name().value());
     }
 }

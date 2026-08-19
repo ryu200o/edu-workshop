@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.port.inb
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -13,8 +12,5 @@ import java.util.UUID;
 public record CancelRegistrationCommand(
         UUID registrationId,
         UUID userId
-) implements Command<CancelRegistrationCommand.Result> {
-
-    public record Result(UUID registrationId, Instant cancelledAt) {
-    }
+) implements Command {
 }

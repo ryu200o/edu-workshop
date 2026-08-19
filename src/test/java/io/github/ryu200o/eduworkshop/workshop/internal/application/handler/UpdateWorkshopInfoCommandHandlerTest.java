@@ -91,13 +91,9 @@ class UpdateWorkshopInfoCommandHandlerTest {
         given(queryBus.execute(new CountActiveRegistrationsQuery(WORKSHOP_ID)))
                 .willReturn(0);
 
-        UpdateWorkshopInfoCommand.Result result = handler.handle(
+        handler.handle(
                 new UpdateWorkshopInfoCommand(WORKSHOP_ID, "New Title", "New Description"));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.title()).isEqualTo("New Title");
-        assertThat(result.description()).isEqualTo("New Description");
-        assertThat(result.updatedAt()).isEqualTo(NOW);
         assertThat(workshop.title().value()).isEqualTo("New Title");
         assertThat(workshop.description().value()).isEqualTo("New Description");
         verify(workshopRepository).save(workshop);

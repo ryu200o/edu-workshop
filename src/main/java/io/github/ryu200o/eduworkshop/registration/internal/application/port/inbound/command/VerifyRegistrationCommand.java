@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.registration.internal.application.port.inb
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -18,8 +17,5 @@ public record VerifyRegistrationCommand(
         UUID registrationId,
         UUID verifierId,
         String role
-) implements Command<VerifyRegistrationCommand.Result> {
-
-    public record Result(UUID registrationId, Instant verifiedAt) {
-    }
+) implements Command {
 }

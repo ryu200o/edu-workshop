@@ -112,31 +112,28 @@ class RelocateRoomCommandHandlerTest {
     }
 
     @Test
-    void sameLocation_isIdempotent_noGateNoSave_returnsExistingUpdatedAt() {
-        Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
+    void sameLocation_isIdempotent_noGateNoSave() {
         Room room = Room.reconstruct(
                 RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
                 RoomLocation.of("F", 2), RoomCode.of(1), RoomCapacity.of(50), RoomState.ACTIVE,
-                Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-03-15T00:00:00Z"));
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "F", 2));
+        handler().handle(new RelocateRoomCommand(room.id().value(), "F", 2));
 
-        assertThat(response.oldLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
-        assertThat(response.newLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
-        assertThat(response.updatedAt()).isEqualTo(fixedUpdated);
+        assertThat(room.location()).isEqualTo(RoomLocation.of("F", 2));
         verify(roomRepository, never()).save(any());
     }
 
     @Test
-    void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
+    void happyPath_passesGuards_mutatesAndPersists() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
         when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RelocateRoomCommand.Result response = handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
+        handler().handle(new RelocateRoomCommand(room.id().value(), "G", 3));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
@@ -148,9 +145,7 @@ class RelocateRoomCommandHandlerTest {
         ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
         verify(roomDomainEventPublisher).publish(eventCaptor.capture());
         assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomRelocatedEvent);
-        assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.oldLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("F", 2));
-        assertThat(response.newLocation()).isEqualTo(new RelocateRoomCommand.LocationDto("G", 3));
+        assertThat(saved.id()).isEqualTo(room.id());
     }
 
     @Test

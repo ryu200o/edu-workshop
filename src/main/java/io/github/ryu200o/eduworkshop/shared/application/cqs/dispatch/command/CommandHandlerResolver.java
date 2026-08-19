@@ -10,11 +10,11 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandHandler;
  */
 public interface CommandHandlerResolver {
 
-    <R, C extends Command<R>> CommandHandler<C, R> resolve(C command);
+    <C extends Command> CommandHandler<C> resolve(C command);
 
     /**
-     * Resolves the handler for the given command and invokes it, returning the handler's result. Used by the
+     * Resolves the handler for the given command and invokes it as a side-effect. Used by the
      * dispatch pipeline terminal link, which works with the erased (wildcard) command type.
      */
-    Object handle(Command<?> command);
+    void handle(Command command);
 }

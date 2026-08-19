@@ -16,7 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapacityCommand, ChangeRoomCapacityCommand.Result> {
+class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapacityCommand> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
@@ -31,26 +31,19 @@ class ChangeRoomCapacityCommandHandler implements CommandHandler<ChangeRoomCapac
 
     @Override
     @Transactional
-    public ChangeRoomCapacityCommand.Result handle(ChangeRoomCapacityCommand command) {
+    public void handle(ChangeRoomCapacityCommand command) {
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         RoomCapacity newCapacity = RoomCapacity.of(command.newCapacity());
         if (newCapacity.equals(room.capacity())) {
-            return toResult(room, room.capacity());
+            return;
         }
 
-        RoomCapacity oldCapacity = room.capacity();
         Instant now = Instant.now(clock);
         room.changeCapacity(newCapacity, now);
-        Room saved = roomRepository.save(room);
+        roomRepository.save(room);
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-        return toResult(saved, oldCapacity);
-    }
-
-    private static ChangeRoomCapacityCommand.Result toResult(Room room, RoomCapacity oldCapacity) {
-        return new ChangeRoomCapacityCommand.Result(
-                room.id().value(), oldCapacity.value(), room.capacity().value(), room.updatedAt());
     }
 }

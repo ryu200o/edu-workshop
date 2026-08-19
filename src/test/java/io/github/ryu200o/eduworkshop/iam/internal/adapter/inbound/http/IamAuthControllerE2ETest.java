@@ -16,6 +16,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.UUID;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -86,14 +88,35 @@ class IamAuthControllerE2ETest {
         HttpResponse<String> register = post("/api/v1/iam/auth/register",
                 "{\"email\":\"" + email + "\",\"password\":\"" + password + "\",\"fullName\":\"Nguyen Van A\"}");
         assertThat(register.statusCode()).isEqualTo(201);
-        JsonNode reg = json(register.body());
-        String verifyToken = reg.path("verifyToken").asText();
-        UUID userId = UUID.fromString(reg.path("userId").asText());
+
+        UUID userId = IamE2eTestSupport.idFromLocation(register);
+        String verifyToken = "verify-" + email;
+        seedToken(userId, verifyToken);
 
         HttpResponse<String> verify = post("/api/v1/iam/auth/verify-email",
                 "{\"token\":\"" + verifyToken + "\"}");
-        assertThat(verify.statusCode()).isEqualTo(200);
+        assertThat(verify.statusCode()).isEqualTo(204);
         return new RegisteredUser(email, password, verifyToken, userId);
+    }
+
+    /** Test seam: inserts a known raw token + its SHA-256 digest (plan §2.2). */
+    private void seedToken(UUID userId, String rawToken) {
+        jdbcTemplate.update("""
+                INSERT INTO iam_password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
+                VALUES (?, ?, ?, ?, NULL, CURRENT_TIMESTAMP)
+                """,
+                UUID.randomUUID(), userId, sha256Hex(rawToken), java.time.Instant.now().plusSeconds(3600));
+    }
+
+    private static String sha256Hex(String rawToken) {
+        try {
+            java.security.MessageDigest digest =
+                    java.security.MessageDigest.getInstance("SHA-256");
+            return java.util.HexFormat.of().formatHex(
+                    digest.digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     // ====================== TESTS ======================
@@ -155,13 +178,16 @@ class IamAuthControllerE2ETest {
 
         HttpResponse<String> forgot = post("/api/v1/iam/auth/forgot-password",
                 "{\"email\":\"" + user.email() + "\"}");
-        assertThat(forgot.statusCode()).isEqualTo(200);
-        String resetToken = json(forgot.body()).path("resetToken").asText();
-        assertThat(resetToken).isNotBlank();
+        assertThat(forgot.statusCode()).isEqualTo(204);
+
+        // The reset token is never returned over HTTP (void contract); the test seam seeds the
+        // same token the forgot-password handler would have persisted (plan §2.2).
+        String resetToken = "reset-" + user.email();
+        seedToken(user.userId(), resetToken);
 
         HttpResponse<String> reset = post("/api/v1/iam/auth/reset-password",
                 "{\"token\":\"" + resetToken + "\",\"newPassword\":\"BrandNew!99\"}");
-        assertThat(reset.statusCode()).isEqualTo(200);
+        assertThat(reset.statusCode()).isEqualTo(204);
 
         HttpResponse<String> oldLogin = post("/api/v1/iam/auth/login",
                 "{\"email\":\"" + user.email() + "\",\"password\":\"" + user.password() + "\"}");
@@ -176,8 +202,8 @@ class IamAuthControllerE2ETest {
     void forgotPassword_unknownEmail_isSilentlyOkWithoutToken() throws Exception {
         HttpResponse<String> forgot = post("/api/v1/iam/auth/forgot-password",
                 "{\"email\":\"nobody@example.com\"}");
-        assertThat(forgot.statusCode()).isEqualTo(200);
-        assertThat(json(forgot.body()).path("resetToken").isNull()).isTrue();
+        assertThat(forgot.statusCode()).isEqualTo(204);
+        assertThat(forgot.body()).isEmpty();
     }
 
     @Test
