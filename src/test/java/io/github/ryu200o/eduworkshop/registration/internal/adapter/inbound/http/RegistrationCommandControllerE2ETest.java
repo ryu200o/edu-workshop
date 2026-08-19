@@ -36,8 +36,15 @@ import static org.assertj.core.api.Assertions.within;
  * plan §7 Slice 5); the acting user always comes from the authenticated principal and only a
  * {@code VERIFIER} global role passes the verify gate (OQ-3C-1). The removed permit-all test chain
  * is gone.</p>
+ *
+ * <p>The workshop lifecycle scheduler is disabled ({@code app.workshop.lifecycle.enabled=false})
+ * so a published workshop whose start time has already passed is not auto-started mid-test
+ * (mirroring {@code AttendanceCommandControllerE2ETest}); {@code verify_allowsWorkshopInProgress}
+ * deliberately publishes a past-start workshop and must reach {@code register} while still
+ * {@code PUBLISHED}.</p>
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {"app.workshop.lifecycle.enabled=false"})
 class RegistrationCommandControllerE2ETest {
 
     @LocalServerPort
