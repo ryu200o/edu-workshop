@@ -1,9 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command;
 
-import io.github.ryu200o.eduworkshop.room.internal.domain.model.RoomState;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -13,17 +11,5 @@ import java.util.UUID;
  *
  * @param roomId the id of the room to reactivate
  */
-public record ReactivateRoomCommand(UUID roomId) implements Command<ReactivateRoomCommand.Result> {
-
-    /**
-     * Lightweight write-side result — carries the affected room id, the previous/new physical states, and
-     * the update timestamp.
-     *
-     * @param id            the updated room's id
-     * @param previousState the physical state before the transition
-     * @param newState      the physical state after the transition
-     * @param updatedAt     the moment the transition was applied
-     */
-    public record Result(UUID id, RoomState previousState, RoomState newState, Instant updatedAt) {
-    }
+public record ReactivateRoomCommand(UUID roomId) implements Command {
 }

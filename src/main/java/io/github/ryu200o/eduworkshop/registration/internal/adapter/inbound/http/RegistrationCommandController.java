@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.UUID;
 
 /**
@@ -40,31 +41,32 @@ class RegistrationCommandController {
     }
 
     @PostMapping
-    ResponseEntity<RegisterWorkshopCommand.Result> register(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                                            @RequestBody RegisterWorkshopRequest request) {
-        var command = new RegisterWorkshopCommand(request.workshopId(), principal.userId());
-        RegisterWorkshopCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    ResponseEntity<Void> register(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                  @RequestBody RegisterWorkshopRequest request) {
+        UUID registrationId = UUID.randomUUID();
+        var command = new RegisterWorkshopCommand(registrationId, request.workshopId(), principal.userId());
+        commandBus.execute(command);
+        return ResponseEntity.created(URI.create("/api/v1/registrations/" + registrationId)).build();
     }
 
     @PostMapping("/{id}/cancel")
-    ResponseEntity<CancelRegistrationCommand.Result> cancel(@PathVariable UUID id,
-                                                            @AuthenticationPrincipal AuthenticatedPrincipal principal) {
+    ResponseEntity<Void> cancel(@PathVariable UUID id,
+                                @AuthenticationPrincipal AuthenticatedPrincipal principal) {
         var command = new CancelRegistrationCommand(id, principal.userId());
-        CancelRegistrationCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/verify")
-    ResponseEntity<VerifyRegistrationCommand.Result> verify(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                                            @RequestBody VerifyRegistrationRequest request) {
+    ResponseEntity<Void> verify(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                @RequestBody VerifyRegistrationRequest request) {
         // Thin QR seam (Epic 3C, Slice A — fixture): the qrReference is opaque input resolved here to
         // a registrationId; the handler never sees the QR itself. Real resolver → Slice B (OQ-3C-6).
         UUID registrationId = qrResolver.resolveRegistrationId(request.qrReference());
         String role = principal.hasRole(VERIFIER_ROLE) ? VERIFIER_ROLE : "NONE";
         var command = new VerifyRegistrationCommand(registrationId, principal.userId(), role);
-        VerifyRegistrationCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
     }
 
     record RegisterWorkshopRequest(UUID workshopId) {

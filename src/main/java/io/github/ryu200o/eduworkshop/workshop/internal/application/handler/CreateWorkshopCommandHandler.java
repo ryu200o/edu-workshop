@@ -28,7 +28,7 @@ import java.time.Instant;
  * persists via {@link WorkshopRepository}, and returns a lightweight result.
  */
 @Component
-class CreateWorkshopCommandHandler implements CommandHandler<CreateWorkshopCommand, CreateWorkshopCommand.Result> {
+class CreateWorkshopCommandHandler implements CommandHandler<CreateWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopBufferParameters bufferParameters;
@@ -47,10 +47,10 @@ class CreateWorkshopCommandHandler implements CommandHandler<CreateWorkshopComma
 
     @Override
     @Transactional
-    public CreateWorkshopCommand.Result handle(CreateWorkshopCommand command) {
+    public void handle(CreateWorkshopCommand command) {
         Instant now = Instant.now(clock);
 
-        WorkshopId id = WorkshopId.generate();
+        WorkshopId id = WorkshopId.of(command.workshopId());
         WorkshopTitle title = WorkshopTitle.of(command.title());
         WorkshopDescription description = WorkshopDescription.of(command.description());
         WorkshopCapacity capacity = WorkshopCapacity.of(command.capacity());
@@ -65,7 +65,5 @@ class CreateWorkshopCommandHandler implements CommandHandler<CreateWorkshopComma
                 command.startTime(), command.endTime(), occupancyStart, capacity, lateThreshold, now);
 
         workshopRepository.save(workshop);
-
-        return new CreateWorkshopCommand.Result(id.value(), title.value());
     }
 }

@@ -17,12 +17,12 @@ public final class RegistryCommandHandlerResolver implements CommandHandlerResol
     }
 
     @Override
-    public <R, C extends Command<R>> CommandHandler<C, R> resolve(C command) {
+    public <C extends Command> CommandHandler<C> resolve(C command) {
         return registry.commandHandler(command.getClass());
     }
 
     @Override
-    public Object handle(Command<?> command) {
-        return registry.handleCommand(command);
+    public void handle(Command command) {
+        registry.handleCommand(command);
     }
 }

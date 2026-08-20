@@ -39,7 +39,7 @@ import java.util.UUID;
  */
 @Component
 class FinalizeWorkshopRosterCommandHandler
-        implements CommandHandler<FinalizeWorkshopRosterCommand, FinalizeWorkshopRosterCommand.Result> {
+        implements CommandHandler<FinalizeWorkshopRosterCommand> {
 
     private final WorkshopExposeAPI workshopExposeApi;
     private final AttendanceRecordRepository attendanceRecordRepository;
@@ -61,7 +61,7 @@ class FinalizeWorkshopRosterCommandHandler
 
     @Override
     @Transactional
-    public FinalizeWorkshopRosterCommand.Result handle(FinalizeWorkshopRosterCommand command) {
+    public void handle(FinalizeWorkshopRosterCommand command) {
         Instant now = Instant.now(clock);
         UUID workshopId = command.workshopId();
 
@@ -84,7 +84,6 @@ class FinalizeWorkshopRosterCommandHandler
         List<AttendanceRecord> records = attendanceRecordRepository.loadNonFinalizedByWorkshop(workshopId);
 
         List<AttendanceDomainEvent> allEvents = new ArrayList<>();
-        int finalized = 0;
         for (AttendanceRecord record : records) {
             // Recovery: an OPEN record whose workshop is COMPLETED was never reconciled (event lost).
             // Anchor the window to the authoritative completedAt — never `now` (OQ-4 / OQ-10).
@@ -101,7 +100,6 @@ class FinalizeWorkshopRosterCommandHandler
             }
             Instant deadline = startedAt.plus(Duration.ofMinutes(reconciliationParameters.windowMinutes()));
             record.finalizeRecord(command.actor(), now, deadline);
-            finalized++;
 
             allEvents.addAll(record.recordedEvents());
             record.clearDomainEvents();
@@ -109,7 +107,5 @@ class FinalizeWorkshopRosterCommandHandler
 
         attendanceRecordRepository.saveAll(records);
         attendanceDomainEventPublisher.publish(allEvents);
-
-        return new FinalizeWorkshopRosterCommand.Result(workshopId, finalized, AttendanceState.FINALIZED.name(), now);
     }
 }

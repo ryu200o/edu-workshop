@@ -20,7 +20,7 @@ import java.time.Instant;
  */
 @Component
 class AdminEnableUserCommandHandler
-        implements CommandHandler<AdminEnableUserCommand, AdminEnableUserCommand.Result> {
+        implements CommandHandler<AdminEnableUserCommand> {
 
     private final UserRepository userRepository;
     private final UserDomainEventPublisher userDomainEventPublisher;
@@ -36,7 +36,7 @@ class AdminEnableUserCommandHandler
 
     @Override
     @Transactional
-    public AdminEnableUserCommand.Result handle(AdminEnableUserCommand command) {
+    public void handle(AdminEnableUserCommand command) {
         Instant now = Instant.now(clock);
         UserId userId = UserId.of(command.userId());
         User user = userRepository.loadByIdWithLock(userId)
@@ -46,6 +46,5 @@ class AdminEnableUserCommandHandler
         userRepository.save(user);
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-        return new AdminEnableUserCommand.Result();
     }
 }

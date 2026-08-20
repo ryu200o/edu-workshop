@@ -79,10 +79,8 @@ class CancelWorkshopCommandHandlerTest {
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
-        CancelWorkshopCommand.Result result = handler.handle(new CancelWorkshopCommand(WORKSHOP_ID));
+        handler.handle(new CancelWorkshopCommand(WORKSHOP_ID));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.updatedAt()).isEqualTo(NOW);
         assertThat(workshop.state()).isEqualTo(WorkshopState.CANCELLED);
 
         verify(workshopRepository).save(workshop);

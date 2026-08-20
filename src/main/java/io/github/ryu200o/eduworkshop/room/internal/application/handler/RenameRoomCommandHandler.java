@@ -17,7 +17,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RenameRoomCommand.Result> {
+class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
@@ -32,34 +32,24 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
 
     @Override
     @Transactional
-    public RenameRoomCommand.Result handle(RenameRoomCommand command) {
+    public void handle(RenameRoomCommand command) {
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         RoomName newName = RoomName.of(command.newName());
 
         if (newName.equals(room.name())) {
-            return toResult(room, room.name());
+            return;
         }
 
         if (roomRepository.existsByName(room.location(), newName)) {
             throw new DuplicateRoomNameException(room.location(), newName);
         }
 
-        RoomName oldName = room.name();
         Instant now = Instant.now(clock);
         room.changeName(newName, now);
-        Room saved = roomRepository.save(room);
+        roomRepository.save(room);
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-        return toResult(saved, oldName);
-    }
-
-    private static RenameRoomCommand.Result toResult(Room room, RoomName oldName) {
-        return new RenameRoomCommand.Result(
-                room.id().value(),
-                oldName.value(),
-                room.name().value(),
-                room.updatedAt());
     }
 }

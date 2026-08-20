@@ -26,7 +26,7 @@ import java.time.Instant;
  */
 @Component
 class UpdateWorkshopLatePolicyCommandHandler
-        implements CommandHandler<UpdateWorkshopLatePolicyCommand, UpdateWorkshopLatePolicyCommand.Result> {
+        implements CommandHandler<UpdateWorkshopLatePolicyCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -42,7 +42,7 @@ class UpdateWorkshopLatePolicyCommandHandler
 
     @Override
     @Transactional
-    public UpdateWorkshopLatePolicyCommand.Result handle(UpdateWorkshopLatePolicyCommand command) {
+    public void handle(UpdateWorkshopLatePolicyCommand command) {
         Instant now = Instant.now(clock);
 
         WorkshopLateThreshold lateThreshold = WorkshopLateThreshold.of(command.lateThresholdSeconds());
@@ -56,7 +56,5 @@ class UpdateWorkshopLatePolicyCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new UpdateWorkshopLatePolicyCommand.Result(workshop.id().value(), lateThreshold.seconds());
     }
 }

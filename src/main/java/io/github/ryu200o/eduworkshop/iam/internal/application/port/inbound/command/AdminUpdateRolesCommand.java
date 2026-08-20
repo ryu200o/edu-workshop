@@ -16,8 +16,5 @@ import java.util.UUID;
 public record AdminUpdateRolesCommand(
         UUID userId,
         Set<String> roles
-) implements Command<AdminUpdateRolesCommand.Result> {
-
-    public record Result() {
-    }
+) implements Command {
 }

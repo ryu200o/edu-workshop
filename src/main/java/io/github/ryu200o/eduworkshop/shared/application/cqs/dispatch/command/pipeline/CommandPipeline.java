@@ -17,13 +17,13 @@ public class CommandPipeline {
         this.behaviors = List.copyOf(behaviors);
     }
 
-    public Object run(Command<?> command, CommandHandlerInvoker terminal) {
-        return new Chain(0, terminal).next(command);
+    public void run(Command command, CommandHandlerInvoker terminal) {
+        new Chain(0, terminal).next(command);
     }
 
     @FunctionalInterface
     public interface CommandHandlerInvoker {
-        Object invoke(Command<?> command);
+        void invoke(Command command);
     }
 
     private final class Chain implements BehaviorChain {
@@ -36,11 +36,12 @@ public class CommandPipeline {
         }
 
         @Override
-        public Object next(Command<?> command) {
+        public void next(Command command) {
             if (index < behaviors.size()) {
-                return behaviors.get(index).handle(command, new Chain(index + 1, terminal));
+                behaviors.get(index).handle(command, new Chain(index + 1, terminal));
+            } else {
+                terminal.invoke(command);
             }
-            return terminal.invoke(command);
         }
     }
 }

@@ -32,7 +32,7 @@ import java.util.List;
  * {@code ReconciliationWindowExceededException} → 409) → persist and publish.</p>
  */
 @Component
-class SubmitAppealCommandHandler implements CommandHandler<SubmitAppealCommand, SubmitAppealCommand.Result> {
+class SubmitAppealCommandHandler implements CommandHandler<SubmitAppealCommand> {
 
     private final AttendanceRecordRepository attendanceRecordRepository;
     private final AttendanceDomainEventPublisher attendanceDomainEventPublisher;
@@ -51,7 +51,7 @@ class SubmitAppealCommandHandler implements CommandHandler<SubmitAppealCommand, 
 
     @Override
     @Transactional
-    public SubmitAppealCommand.Result handle(SubmitAppealCommand command) {
+    public void handle(SubmitAppealCommand command) {
         Instant now = Instant.now(clock);
         AttendanceRecordId recordId = AttendanceRecordId.of(command.recordId());
 
@@ -82,12 +82,5 @@ class SubmitAppealCommandHandler implements CommandHandler<SubmitAppealCommand, 
         record.clearDomainEvents();
         attendanceRecordRepository.save(record);
         attendanceDomainEventPublisher.publish(events);
-
-        int entryNumber = record.entries().size();
-        return new SubmitAppealCommand.Result(
-                record.id().value(),
-                entryNumber,
-                record.state().name(),
-                "Appeal submitted — current result unchanged; pending auditor review");
     }
 }

@@ -53,7 +53,7 @@ class FacilityOpsQueryControllerE2ETest {
 
     @BeforeEach
     void setUp() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         bearer = iam.registerAndLogin().accessToken();
     }
@@ -62,8 +62,8 @@ class FacilityOpsQueryControllerE2ETest {
     void previewImpact_existingRoom_returns200WithView() throws Exception {
         HttpResponse<String> created = createRoom(Map.of(
                 "building", "OPS", "floor", 3, "code", 11, "name", "OPS-ROOM-11", "capacity", 40));
-        assertThat(created.statusCode()).as("room: %s", created.body()).isEqualTo(HttpStatus.OK.value());
-        String roomId = extractId(created.body());
+        assertThat(created.statusCode()).as("room: %s", created.body()).isEqualTo(HttpStatus.CREATED.value());
+        String roomId = IamE2eTestSupport.idFromLocation(created).toString();
 
         HttpResponse<String> response = previewImpact(roomId, "2026-09-01T08:00:00Z", "2026-09-01T12:00:00Z");
 

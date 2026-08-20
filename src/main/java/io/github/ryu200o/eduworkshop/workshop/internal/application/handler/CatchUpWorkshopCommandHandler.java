@@ -27,7 +27,7 @@ import java.time.Instant;
  */
 @Component
 class CatchUpWorkshopCommandHandler
-        implements CommandHandler<CatchUpWorkshopCommand, CatchUpWorkshopCommand.Result> {
+        implements CommandHandler<CatchUpWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -43,7 +43,7 @@ class CatchUpWorkshopCommandHandler
 
     @Override
     @Transactional
-    public CatchUpWorkshopCommand.Result handle(CatchUpWorkshopCommand command) {
+    public void handle(CatchUpWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -57,7 +57,5 @@ class CatchUpWorkshopCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new CatchUpWorkshopCommand.Result(workshop.id().value(), now, workshop.state().name());
     }
 }

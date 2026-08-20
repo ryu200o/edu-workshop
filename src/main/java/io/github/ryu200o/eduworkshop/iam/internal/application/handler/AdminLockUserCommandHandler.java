@@ -21,7 +21,7 @@ import java.time.Instant;
  * aggregate. {@code UserNotFoundException} → 404.
  */
 @Component
-class AdminLockUserCommandHandler implements CommandHandler<AdminLockUserCommand, AdminLockUserCommand.Result> {
+class AdminLockUserCommandHandler implements CommandHandler<AdminLockUserCommand> {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -40,7 +40,7 @@ class AdminLockUserCommandHandler implements CommandHandler<AdminLockUserCommand
 
     @Override
     @Transactional
-    public AdminLockUserCommand.Result handle(AdminLockUserCommand command) {
+    public void handle(AdminLockUserCommand command) {
         Instant now = Instant.now(clock);
         UserId userId = UserId.of(command.userId());
         User user = userRepository.loadByIdWithLock(userId)
@@ -51,6 +51,5 @@ class AdminLockUserCommandHandler implements CommandHandler<AdminLockUserCommand
         userRepository.save(user);
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-        return new AdminLockUserCommand.Result();
     }
 }

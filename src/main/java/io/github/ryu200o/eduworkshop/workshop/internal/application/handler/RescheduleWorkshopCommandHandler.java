@@ -35,7 +35,7 @@ import java.util.UUID;
  */
 @Component
 class RescheduleWorkshopCommandHandler
-        implements CommandHandler<RescheduleWorkshopCommand, RescheduleWorkshopCommand.Result> {
+        implements CommandHandler<RescheduleWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -57,7 +57,7 @@ class RescheduleWorkshopCommandHandler
 
     @Override
     @Transactional
-    public RescheduleWorkshopCommand.Result handle(RescheduleWorkshopCommand command) {
+    public void handle(RescheduleWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -109,11 +109,5 @@ class RescheduleWorkshopCommandHandler
         workshopDomainEventPublisher.publish(events);
         target.clearDomainEvents();
         kickedOut.forEach(Workshop::clearDomainEvents);
-
-        return new RescheduleWorkshopCommand.Result(
-                target.id().value(),
-                target.startTime(),
-                target.endTime(),
-                target.updatedAt());
     }
 }

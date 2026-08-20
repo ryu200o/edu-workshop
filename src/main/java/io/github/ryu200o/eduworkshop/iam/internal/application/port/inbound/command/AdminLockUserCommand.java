@@ -11,8 +11,5 @@ import java.util.UUID;
  *
  * @param userId the account to lock
  */
-public record AdminLockUserCommand(UUID userId) implements Command<AdminLockUserCommand.Result> {
-
-    public record Result() {
-    }
+public record AdminLockUserCommand(UUID userId) implements Command {
 }

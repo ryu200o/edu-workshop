@@ -83,11 +83,10 @@ class SubmitAppealCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        SubmitAppealCommand.Result result = handler().handle(
+        handler().handle(
                 new SubmitAppealCommand(RECORD_ID, "I was actually present", "evidence://img-1", STUDENT));
 
-        assertThat(result.recordId()).isEqualTo(RECORD_ID);
-        assertThat(result.state()).isEqualTo(AttendanceState.RECONCILING.name());
+        assertThat(record.state()).isEqualTo(AttendanceState.RECONCILING);
         assertThat(record.currentResult()).isEqualTo(AttendanceResult.PRESENT);
         assertThat(record.entries()).hasSize(2);
         verify(attendanceDomainEventPublisher).publish(argThat(events -> events.size() == 1

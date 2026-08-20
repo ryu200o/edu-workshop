@@ -23,7 +23,7 @@ import java.time.Instant;
  */
 @Component
 class AdminResetPasswordCommandHandler
-        implements CommandHandler<AdminResetPasswordCommand, AdminResetPasswordCommand.Result> {
+        implements CommandHandler<AdminResetPasswordCommand> {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -45,7 +45,7 @@ class AdminResetPasswordCommandHandler
 
     @Override
     @Transactional
-    public AdminResetPasswordCommand.Result handle(AdminResetPasswordCommand command) {
+    public void handle(AdminResetPasswordCommand command) {
         Instant now = Instant.now(clock);
         UserId userId = UserId.of(command.userId());
         User user = userRepository.loadByIdWithLock(userId)
@@ -60,6 +60,5 @@ class AdminResetPasswordCommandHandler
         userRepository.save(user);
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-        return new AdminResetPasswordCommand.Result();
     }
 }

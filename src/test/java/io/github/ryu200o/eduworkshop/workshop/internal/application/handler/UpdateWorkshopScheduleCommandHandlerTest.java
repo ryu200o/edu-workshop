@@ -95,13 +95,9 @@ class UpdateWorkshopScheduleCommandHandlerTest {
         Instant newStart = START.plus(Duration.ofDays(7));
         Instant newEnd = newStart.plusSeconds(7200);
 
-        UpdateWorkshopScheduleCommand.Result result = handler.handle(
+        handler.handle(
                 new UpdateWorkshopScheduleCommand(WORKSHOP_ID, newStart, newEnd));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.startTime()).isEqualTo(newStart);
-        assertThat(result.endTime()).isEqualTo(newEnd);
-        assertThat(result.updatedAt()).isEqualTo(NOW);
         assertThat(workshop.startTime()).isEqualTo(newStart);
         assertThat(workshop.endTime()).isEqualTo(newEnd);
         verify(workshopRepository).save(workshop);

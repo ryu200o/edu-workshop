@@ -25,7 +25,7 @@ import java.time.Instant;
  * so the current password stops working on all devices.
  */
 @Component
-class ChangePasswordCommandHandler implements CommandHandler<ChangePasswordCommand, ChangePasswordCommand.Result> {
+class ChangePasswordCommandHandler implements CommandHandler<ChangePasswordCommand> {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -47,7 +47,7 @@ class ChangePasswordCommandHandler implements CommandHandler<ChangePasswordComma
 
     @Override
     @Transactional
-    public ChangePasswordCommand.Result handle(ChangePasswordCommand command) {
+    public void handle(ChangePasswordCommand command) {
         Instant now = Instant.now(clock);
         UserId userId = UserId.of(command.userId());
         User user = userRepository.loadById(userId)
@@ -65,6 +65,5 @@ class ChangePasswordCommandHandler implements CommandHandler<ChangePasswordComma
         userRepository.save(user);
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-        return new ChangePasswordCommand.Result();
     }
 }

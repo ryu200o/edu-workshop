@@ -59,7 +59,7 @@ class WorkshopCommandControllerE2ETest {
 
     @BeforeEach
     void setUp() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
     }
@@ -104,8 +104,9 @@ class WorkshopCommandControllerE2ETest {
                 """
                 {"building": "%s", "floor": 1, "code": 1, "name": "%s-ROOM", "capacity": %d}
                 """.formatted(building, building, capacity), Map.of());
-        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.OK.value());
-        return UUID.fromString(readField(response, "id"));
+        assertThat(response.statusCode()).as("create room: %s", response.body())
+                .isEqualTo(HttpStatus.CREATED.value());
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID createWorkshop(String title, Instant start, Instant end, int capacity) throws Exception {
@@ -115,7 +116,7 @@ class WorkshopCommandControllerE2ETest {
                 """.formatted(title, start, end, capacity), Map.of());
         assertThat(response.statusCode()).as("create workshop: %s", response.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        return UUID.fromString(readField(response, "id"));
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID plan(UUID workshopId, UUID roomId) throws Exception {
@@ -123,19 +124,19 @@ class WorkshopCommandControllerE2ETest {
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(response.statusCode()).as("plan: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.statusCode()).as("plan: %s", response.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         return workshopId;
     }
 
     private UUID publish(UUID workshopId) throws Exception {
         HttpResponse<String> response = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
-        assertThat(response.statusCode()).as("publish: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.statusCode()).as("publish: %s", response.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         return workshopId;
     }
 
     private void placeUnderMaintenance(UUID roomId) throws Exception {
         HttpResponse<String> response = post("/api/v1/rooms/" + roomId + "/maintenance", null, Map.of());
-        assertThat(response.statusCode()).as("maintenance: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.statusCode()).as("maintenance: %s", response.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 
     private void register(UUID workshopId, IamE2eTestSupport.TestUser student) throws Exception {
@@ -163,6 +164,32 @@ class WorkshopCommandControllerE2ETest {
                 "SELECT room_id FROM workshops WHERE id = ?", String.class, workshopId.toString()));
     }
 
+    private int workshopCapacity(UUID workshopId) {
+        Integer capacity = jdbcTemplate.queryForObject(
+                "SELECT capacity FROM workshops WHERE id = ?", Integer.class, workshopId.toString());
+        return capacity == null ? 0 : capacity;
+    }
+
+    private String workshopTitle(UUID workshopId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT title FROM workshops WHERE id = ?", String.class, workshopId.toString());
+    }
+
+    private String workshopDescription(UUID workshopId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT description FROM workshops WHERE id = ?", String.class, workshopId.toString());
+    }
+
+    private Instant workshopStartTime(UUID workshopId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT start_time FROM workshops WHERE id = ?", Instant.class, workshopId.toString());
+    }
+
+    private Instant workshopEndTime(UUID workshopId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT end_time FROM workshops WHERE id = ?", Instant.class, workshopId.toString());
+    }
+
     private static String readField(HttpResponse<String> response, String field) {
         String body = response.body();
         int start = body.indexOf("\"" + field + "\"");
@@ -181,8 +208,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> cancelled = post("/api/v1/workshops/" + workshopId + "/cancel", null, Map.of());
 
-        assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(cancelled.body()).contains(workshopId.toString());
+        assertThat(cancelled.statusCode()).as("cancel: %s", cancelled.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         assertThat(activeRegistrations(workshopId)).isZero();
     }
 
@@ -210,8 +236,8 @@ class WorkshopCommandControllerE2ETest {
                 {"roomId": "%s"}
                 """.formatted(newRoom), Map.of());
 
-        assertThat(changed.statusCode()).as("change-room: %s", changed.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(changed.body()).contains(newRoom.toString());
+        assertThat(changed.statusCode()).as("change-room: %s", changed.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
+        assertThat(workshopRoomId(workshopId)).isEqualTo(newRoom);
     }
 
     @Test
@@ -277,7 +303,7 @@ class WorkshopCommandControllerE2ETest {
                 """.formatted(newRoom), Map.of());
 
         assertThat(changed.statusCode()).as("change-room kick-out: %s", changed.body())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         assertThat(workshopState(plannedB)).isEqualTo("DRAFT");
         assertThat(workshopRoomId(plannedB)).isEqualTo(newRoom);
     }
@@ -299,8 +325,8 @@ class WorkshopCommandControllerE2ETest {
                 """.formatted(newStart, newEnd), Map.of());
 
         assertThat(rescheduled.statusCode()).as("reschedule: %s", rescheduled.body())
-                .isEqualTo(HttpStatus.OK.value());
-        assertThat(rescheduled.body()).contains(newStart.toString());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        assertThat(workshopState(workshopId)).isEqualTo("PUBLISHED");
     }
 
     @Test
@@ -366,8 +392,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> started = post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
 
-        assertThat(started.statusCode()).as("start: %s", started.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(started.body()).contains("\"state\":\"IN_PROGRESS\"");
+        assertThat(started.statusCode()).as("start: %s", started.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         assertThat(workshopState(workshopId)).isEqualTo("IN_PROGRESS");
     }
 
@@ -410,8 +435,7 @@ class WorkshopCommandControllerE2ETest {
 
         HttpResponse<String> completed = post("/api/v1/workshops/" + workshopId + "/complete", null, Map.of());
 
-        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(completed.body()).contains("\"state\":\"COMPLETED\"");
+        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         assertThat(workshopState(workshopId)).isEqualTo("COMPLETED");
     }
 
@@ -442,9 +466,8 @@ class WorkshopCommandControllerE2ETest {
         HttpResponse<String> unplan = delete("/api/v1/workshops/" + workshopId + "/plan", Map.of());
 
         assertThat(unplan.statusCode()).as("unplan: %s", unplan.body())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         assertThat(workshopState(workshopId)).isEqualTo("DRAFT");
-        assertThat(unplan.body()).contains(workshopId.toString());
     }
 
     @Test
@@ -474,8 +497,8 @@ class WorkshopCommandControllerE2ETest {
                 """, Map.of());
 
         assertThat(adjusted.statusCode()).as("adjust-capacity: %s", adjusted.body())
-                .isEqualTo(HttpStatus.OK.value());
-        assertThat(adjusted.body()).contains("\"capacity\":40");
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        assertThat(workshopCapacity(workshopId)).isEqualTo(40);
     }
 
     @Test
@@ -507,9 +530,9 @@ class WorkshopCommandControllerE2ETest {
                 """, Map.of());
 
         assertThat(response.statusCode()).as("updateInfo draft: %s", response.body())
-                .isEqualTo(HttpStatus.OK.value());
-        assertThat(response.body()).contains("Updated Title");
-        assertThat(response.body()).contains("Updated Description");
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        assertThat(workshopTitle(workshopId)).isEqualTo("Updated Title");
+        assertThat(workshopDescription(workshopId)).isEqualTo("Updated Description");
     }
 
     @Test
@@ -523,7 +546,8 @@ class WorkshopCommandControllerE2ETest {
                 """, Map.of());
 
         assertThat(response.statusCode()).as("updateInfo published no regs: %s", response.body())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        assertThat(workshopTitle(workshopId)).isEqualTo("New Title");
     }
 
     @Test
@@ -559,9 +583,9 @@ class WorkshopCommandControllerE2ETest {
                 """.formatted(newStart, newEnd), Map.of());
 
         assertThat(response.statusCode()).as("updateSchedule draft: %s", response.body())
-                .isEqualTo(HttpStatus.OK.value());
-        assertThat(response.body()).contains(newStart.toString());
-        assertThat(response.body()).contains(newEnd.toString());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        assertThat(workshopStartTime(workshopId)).isEqualTo(newStart);
+        assertThat(workshopEndTime(workshopId)).isEqualTo(newEnd);
     }
 
     @Test
@@ -605,8 +629,7 @@ class WorkshopCommandControllerE2ETest {
                 """, Map.of());
 
         assertThat(response.statusCode()).as("updateLatePolicy: %s", response.body())
-                .isEqualTo(HttpStatus.OK.value());
-        assertThat(response.body()).contains("\"lateThresholdSeconds\":930");
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
 
         Integer persisted = jdbcTemplate.queryForObject(
                 "SELECT late_threshold_seconds FROM workshops WHERE id = ?",
@@ -624,8 +647,7 @@ class WorkshopCommandControllerE2ETest {
                 """, Map.of());
 
         assertThat(response.statusCode()).as("updateLatePolicy zero: %s", response.body())
-                .isEqualTo(HttpStatus.OK.value());
-        assertThat(response.body()).contains("\"lateThresholdSeconds\":0");
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 
     @Test

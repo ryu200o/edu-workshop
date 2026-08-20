@@ -77,7 +77,7 @@ class DeactivateRoomCommandHandlerTest {
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        DeactivateRoomCommand.Result response = handler().handle(
+        handler().handle(
                 new DeactivateRoomCommand(room.id().value()));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
@@ -86,21 +86,18 @@ class DeactivateRoomCommandHandlerTest {
         ArgumentCaptor<List> captor2 = ArgumentCaptor.forClass(List.class);
         verify(roomDomainEventPublisher).publish(captor2.capture());
         assertThat(captor2.getValue()).anyMatch(e -> e instanceof RoomStateChanged);
-        assertThat(response.previousState()).isEqualTo(RoomState.ACTIVE);
-        assertThat(response.newState()).isEqualTo(RoomState.DEACTIVATED);
+        assertThat(captor.getValue().id()).isEqualTo(room.id());
     }
 
     @Test
-    void idempotent_alreadyDeactivated_noSave_returnsExistingUpdatedAt() {
+    void idempotent_alreadyDeactivated_noSave() {
         Room room = existingRoom(RoomState.DEACTIVATED);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        DeactivateRoomCommand.Result response = handler().handle(
+        handler().handle(
                 new DeactivateRoomCommand(room.id().value()));
 
-        assertThat(response.previousState()).isEqualTo(RoomState.DEACTIVATED);
-        assertThat(response.newState()).isEqualTo(RoomState.DEACTIVATED);
-        assertThat(response.updatedAt()).isEqualTo(room.updatedAt()); // NOT Instant.now()
+        assertThat(room.state()).isEqualTo(RoomState.DEACTIVATED);
         verify(roomRepository, never()).save(any());
     }
 

@@ -100,21 +100,20 @@ class ChangeRoomCodeCommandHandlerTest {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        ChangeRoomCodeCommand.Result response = handler().handle(new ChangeRoomCodeCommand(room.id().value(), 1));
+        handler().handle(new ChangeRoomCodeCommand(room.id().value(), 1));
 
-        assertThat(response.oldCode()).isEqualTo(1);
-        assertThat(response.newCode()).isEqualTo(1);
+        assertThat(room.code()).isEqualTo(RoomCode.of(1));
         verify(roomRepository, never()).save(any());
     }
 
     @Test
-    void happyPath_changesCodeSilently_persists_andReturnsResponse() {
+    void happyPath_changesCodeSilently_persists() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.existsByCoordinate(any(), any(RoomCode.class))).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ChangeRoomCodeCommand.Result response = handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
+        handler().handle(new ChangeRoomCodeCommand(room.id().value(), 99));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
@@ -124,9 +123,7 @@ class ChangeRoomCodeCommandHandlerTest {
         assertThat(saved.recordedEvents())
                 .filteredOn(RoomRenamedEvent.class::isInstance)
                 .isEmpty();
-        assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.oldCode()).isEqualTo(1);
-        assertThat(response.newCode()).isEqualTo(99);
+        assertThat(saved.id()).isEqualTo(room.id());
     }
 
     @Test

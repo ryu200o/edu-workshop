@@ -22,33 +22,28 @@ import java.util.Map;
  */
 public class CommandHandlerRegistry {
 
-    private final Map<Class<?>, CommandHandler<?, ?>> commandHandlers;
+    private final Map<Class<?>, CommandHandler<?>> commandHandlers;
 
-    public CommandHandlerRegistry(ObjectProvider<CommandHandler<?, ?>> commandHandlerProvider) {
+    public CommandHandlerRegistry(ObjectProvider<CommandHandler<?>> commandHandlerProvider) {
         this.commandHandlers = Map.copyOf(scan(commandHandlerProvider));
     }
 
     @SuppressWarnings("unchecked")
-    <R, C extends Command<R>> CommandHandler<C, R> commandHandler(Class<?> commandType) {
-        CommandHandler<?, ?> handler = commandHandlers.get(commandType);
+    <C extends Command> CommandHandler<C> commandHandler(Class<?> commandType) {
+        CommandHandler<?> handler = commandHandlers.get(commandType);
         if (handler == null) {
             throw new MissingCommandHandlerException(commandType);
         }
-        return (CommandHandler<C, R>) handler;
+        return (CommandHandler<C>) handler;
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    Object handleCommand(Command<?> command) {
-        CommandHandler handler = commandHandlers.get(command.getClass());
-        if (handler == null) {
-            throw new MissingCommandHandlerException(command.getClass());
-        }
-        return handler.handle(command);
+    void handleCommand(Command command) {
+        commandHandler(command.getClass()).handle(command);
     }
 
-    private static Map<Class<?>, CommandHandler<?, ?>> scan(ObjectProvider<CommandHandler<?, ?>> provider) {
-        Map<Class<?>, CommandHandler<?, ?>> commandHandlers = new LinkedHashMap<>();
-        for (CommandHandler<?, ?> handler : provider.orderedStream().toList()) {
+    private static Map<Class<?>, CommandHandler<?>> scan(ObjectProvider<CommandHandler<?>> provider) {
+        Map<Class<?>, CommandHandler<?>> commandHandlers = new LinkedHashMap<>();
+        for (CommandHandler<?> handler : provider.orderedStream().toList()) {
             Class<?> commandType = commandTypeOf(handler);
             if (commandType == null) {
                 continue;

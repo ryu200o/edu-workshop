@@ -10,5 +10,5 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
  */
 public interface CommandBus {
 
-    <R, C extends Command<R>> R execute(C command);
+    void execute(Command command);
 }

@@ -18,13 +18,5 @@ public record AuditorAdjustCommand(
         String reason,
         String evidenceReference,
         Actor actor
-) implements Command<AuditorAdjustCommand.Result> {
-
-    public record Result(
-            UUID recordId,
-            int entryNumber,
-            AttendanceResult currentResult,
-            String state
-    ) {
-    }
+) implements Command {
 }

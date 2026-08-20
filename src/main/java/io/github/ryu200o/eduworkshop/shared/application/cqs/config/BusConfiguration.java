@@ -47,7 +47,7 @@ public class BusConfiguration {
     // =========================================================================
 
     @Bean
-    CommandHandlerRegistry commandHandlerRegistry(ObjectProvider<CommandHandler<?, ?>> commandHandlers) {
+    CommandHandlerRegistry commandHandlerRegistry(ObjectProvider<CommandHandler<?>> commandHandlers) {
         return new CommandHandlerRegistry(commandHandlers);
     }
 
@@ -114,9 +114,8 @@ public class BusConfiguration {
         }
 
         @Override
-        @SuppressWarnings("unchecked")
-        public <R, C extends Command<R>> R execute(C command) {
-            return (R) dispatcher.dispatch(command);
+        public void execute(Command command) {
+            dispatcher.dispatch(command);
         }
     }
 

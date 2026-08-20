@@ -68,7 +68,7 @@ class RegistrationCapacityConcurrencyIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
     }
@@ -96,8 +96,8 @@ class RegistrationCapacityConcurrencyIntegrationTest {
                 """
                 {"building": "%s", "floor": 1, "code": 1, "name": "%s-ROOM-1", "capacity": 50}
                 """.formatted(building, building), Map.of());
-        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.OK.value());
-        return UUID.fromString(readField(response, "id"));
+        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID publishSingleSeatWorkshop(String building) throws Exception {
@@ -107,13 +107,13 @@ class RegistrationCapacityConcurrencyIntegrationTest {
                 {"title": "WS-%s", "description": "concurrency", "startTime": "%s", "endTime": "%s", "capacity": 1}
                 """.formatted(UUID.randomUUID(), START, END), Map.of());
         assertThat(created.statusCode()).as("create workshop: %s", created.body()).isEqualTo(HttpStatus.CREATED.value());
-        UUID workshopId = UUID.fromString(readField(created, "id"));
+        UUID workshopId = IamE2eTestSupport.idFromLocation(created);
 
         assertThat(post("/api/v1/workshops/" + workshopId + "/plan",
                 "{\"roomId\":\"%s\"}".formatted(roomId), Map.of()).statusCode())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         assertThat(post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of()).statusCode())
-                .isEqualTo(HttpStatus.OK.value());
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         return workshopId;
     }
 

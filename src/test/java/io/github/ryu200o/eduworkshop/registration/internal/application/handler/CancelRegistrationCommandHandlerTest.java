@@ -17,6 +17,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.domain.model.exceptio
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -71,12 +72,14 @@ class CancelRegistrationCommandHandlerTest {
         when(registrationRepository.loadById(id)).thenReturn(Optional.of(registration));
         when(registrationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        CancelRegistrationCommand.Result result = handler().handle(new CancelRegistrationCommand(id.value(), OWNER_ID));
+        handler().handle(new CancelRegistrationCommand(id.value(), OWNER_ID));
 
-        assertThat(result.registrationId()).isEqualTo(id.value());
-        assertThat(result.cancelledAt()).isEqualTo(NOW);
+        ArgumentCaptor<Registration> savedCaptor = ArgumentCaptor.forClass(Registration.class);
+        verify(registrationRepository).save(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().id()).isEqualTo(id);
+        assertThat(savedCaptor.getValue().state()).isEqualTo(RegistrationState.CANCELLED);
+        assertThat(savedCaptor.getValue().cancelledAt()).isEqualTo(NOW);
 
-        verify(registrationRepository).save(argThat(r -> r.state() == RegistrationState.CANCELLED));
         verify(registrationDomainEventPublisher).publish(argThat(events -> events.size() == 2
                 && events.get(1) instanceof RegistrationCancelled));
     }

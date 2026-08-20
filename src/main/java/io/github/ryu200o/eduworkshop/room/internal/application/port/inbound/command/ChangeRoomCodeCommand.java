@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.com
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -16,17 +15,5 @@ import java.util.UUID;
 public record ChangeRoomCodeCommand(
         UUID roomId,
         int newCode
-) implements Command<ChangeRoomCodeCommand.Result> {
-
-    /**
-     * Lightweight write-side result for this command — carries only the fields directly affected
-     * (the room id, the old/new code, and the update timestamp) to keep the write flow minimal.
-     *
-     * @param id        the room's id
-     * @param oldCode   the previous code (before the change)
-     * @param newCode   the new code (after the change)
-     * @param updatedAt the moment the code change was applied
-     */
-    public record Result(UUID id, int oldCode, int newCode, Instant updatedAt) {
-    }
+) implements Command {
 }

@@ -45,7 +45,7 @@ import java.time.Instant;
  */
 @Component
 class RegisterWorkshopCommandHandler
-        implements CommandHandler<RegisterWorkshopCommand, RegisterWorkshopCommand.Result> {
+        implements CommandHandler<RegisterWorkshopCommand> {
 
     private final WorkshopExposeAPI workshopExposeApi;
     private final RegistrationReader registrationReader;
@@ -67,7 +67,7 @@ class RegisterWorkshopCommandHandler
 
     @Override
     @Transactional
-    public RegisterWorkshopCommand.Result handle(RegisterWorkshopCommand command) {
+    public void handle(RegisterWorkshopCommand command) {
         Instant now = Instant.now(clock);
 
         WorkshopRegistrationContract workshop = workshopExposeApi.lockForRegistration(command.workshopId())
@@ -95,14 +95,12 @@ class RegisterWorkshopCommandHandler
             registration = existing.get();
             registration.reactivate(reference, now);
         } else {
-            registration = Registration.create(RegistrationId.generate(), studentId, reference, now);
+            registration = Registration.create(RegistrationId.of(command.registrationId()), studentId, reference, now);
         }
 
         registrationRepository.save(registration);
 
         registrationDomainEventPublisher.publish(registration.recordedEvents());
         registration.clearDomainEvents();
-
-        return new RegisterWorkshopCommand.Result(registration.id().value(), registration.updatedAt());
     }
 }

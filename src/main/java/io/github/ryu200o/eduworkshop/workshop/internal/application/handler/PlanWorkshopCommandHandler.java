@@ -22,7 +22,7 @@ import java.time.Instant;
 
 @Component
 class PlanWorkshopCommandHandler
-        implements CommandHandler<PlanWorkshopCommand, PlanWorkshopCommand.Result> {
+        implements CommandHandler<PlanWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final RoomExposeAPI roomExposeApi;
@@ -41,7 +41,7 @@ class PlanWorkshopCommandHandler
 
     @Override
     @Transactional
-    public PlanWorkshopCommand.Result handle(PlanWorkshopCommand command) {
+    public void handle(PlanWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -74,11 +74,5 @@ class PlanWorkshopCommandHandler
         workshop.plan(roomRef, hasRoomWarning, occupancyStart, now);
 
         workshopRepository.save(workshop);
-
-        return new PlanWorkshopCommand.Result(
-                workshop.id().value(),
-                workshop.roomReference().roomId(),
-                workshop.updatedAt(),
-                workshop.hasRoomWarning());
     }
 }

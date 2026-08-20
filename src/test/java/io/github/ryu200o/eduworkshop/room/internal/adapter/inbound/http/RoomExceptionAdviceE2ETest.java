@@ -18,6 +18,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -51,7 +52,7 @@ class RoomExceptionAdviceE2ETest {
 
     @BeforeEach
     void setUp() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         bearer = iam.registerAndLogin().accessToken();
     }
@@ -72,7 +73,7 @@ class RoomExceptionAdviceE2ETest {
     void duplicateCodeConflict_isReturnedAsProblemDetail() throws Exception {
         HttpResponse<String> first = createRoom(Map.of(
                 "building", "PROBLEM", "floor", 1, "code", 7, "name", "PROBLEM-ROOM-7", "capacity", 50));
-        assertThat(first.statusCode()).as("first room: %s", first.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(first.statusCode()).as("first room: %s", first.body()).isEqualTo(HttpStatus.CREATED.value());
 
         HttpResponse<String> duplicate = createRoom(Map.of(
                 "building", "PROBLEM", "floor", 1, "code", 7, "name", "PROBLEM-ROOM-OTHER", "capacity", 50));
@@ -89,12 +90,12 @@ class RoomExceptionAdviceE2ETest {
     void overlappingMaintenanceSchedules_return409Conflict() throws Exception {
         HttpResponse<String> created = createRoom(Map.of(
                 "building", "PROBLEM", "floor", 2, "code", 8, "name", "PROBLEM-ROOM-8", "capacity", 50));
-        assertThat(created.statusCode()).as("room: %s", created.body()).isEqualTo(HttpStatus.OK.value());
-        String roomId = extractId(created.body());
+        assertThat(created.statusCode()).as("room: %s", created.body()).isEqualTo(HttpStatus.CREATED.value());
+        String roomId = IamE2eTestSupport.idFromLocation(created).toString();
 
         String reason = "Quarterly HVAC filter replacement and duct cleaning";
         HttpResponse<String> first = scheduleMaintenance(roomId, "2026-09-01T08:00:00Z", "2026-09-01T12:00:00Z", reason);
-        assertThat(first.statusCode()).as("first schedule: %s", first.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(first.statusCode()).as("first schedule: %s", first.body()).isEqualTo(HttpStatus.CREATED.value());
 
         HttpResponse<String> overlap = scheduleMaintenance(roomId, "2026-09-01T10:00:00Z", "2026-09-01T14:00:00Z", reason);
 
@@ -116,9 +117,5 @@ class RoomExceptionAdviceE2ETest {
                                 .formatted(start, end, reason)))
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
-    }
-
-    private static String extractId(String body) {
-        return body.replaceAll(".*\\\"id\\\"\\s*:\\s*\\\"([^\"]+)\\\".*", "$1");
     }
 }

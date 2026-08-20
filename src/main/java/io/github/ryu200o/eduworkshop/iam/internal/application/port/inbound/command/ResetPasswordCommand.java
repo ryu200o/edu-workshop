@@ -10,8 +10,5 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
  * @param newPassword the raw new password (BCrypt-hashed by the handler)
  */
 public record ResetPasswordCommand(String token, String newPassword)
-        implements Command<ResetPasswordCommand.Result> {
-
-    public record Result() {
-    }
+        implements Command {
 }

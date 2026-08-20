@@ -4,6 +4,9 @@ import io.github.ryu200o.eduworkshop.iam.contract.events.PasswordResetRequestedI
 import io.github.ryu200o.eduworkshop.iam.contract.events.UserRegisteredIntegrationEvent;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.ForgotPasswordCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.RegisterCommand;
+import io.github.ryu200o.eduworkshop.iam.internal.application.port.outbound.UserRepository;
+import io.github.ryu200o.eduworkshop.iam.internal.domain.model.Email;
+import io.github.ryu200o.eduworkshop.iam.internal.domain.model.UserId;
 import io.github.ryu200o.eduworkshop.iam.internal.domain.model.event.UserRegistered;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 
@@ -35,19 +38,23 @@ class IamEventPublicationDurabilityTest {
     private CommandBus commandBus;
 
     @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private CompletedEventPublications completed;
 
     @Test
     void registerUser_recordsAndCompletesDomainAndIntegrationEventPublications() {
-        RegisterCommand.Result result = commandBus.execute(
-                new RegisterCommand("durability-student@example.com", "Passw0rd!", "Nguyen Van A"));
+        commandBus.execute(
+                new RegisterCommand(UUID.randomUUID(), "durability-student@example.com", "Passw0rd!", "Nguyen Van A"));
+        UserId userId = userIdOf("durability-student@example.com");
 
-        TargetEventPublication domain = single(UserRegistered.class, e -> e.userId().value().equals(result.userId()));
+        TargetEventPublication domain = single(UserRegistered.class, e -> e.userId().value().equals(userId.value()));
         assertThat(domain.getTargetIdentifier().getValue()).contains("UserDomainEventListener");
         assertThat(domain.isCompleted()).isTrue();
 
         TargetEventPublication integration = single(UserRegisteredIntegrationEvent.class,
-                e -> e.userId().equals(result.userId()));
+                e -> e.userId().equals(userId.value()));
         assertThat(integration.getTargetIdentifier().getValue()).contains("TestIamIntegrationEventListener");
         assertThat(integration.isCompleted()).isTrue();
         assertThat(integration.getCompletionDate()).isPresent();
@@ -58,12 +65,13 @@ class IamEventPublicationDurabilityTest {
 
     @Test
     void forgotPassword_recordsAndCompletesResetRequestIntegrationEventPublication() {
-        RegisterCommand.Result result = commandBus.execute(
-                new RegisterCommand("durability-reset@example.com", "Passw0rd!", "Nguyen Van A"));
+        commandBus.execute(
+                new RegisterCommand(UUID.randomUUID(), "durability-reset@example.com", "Passw0rd!", "Nguyen Van A"));
+        UserId userId = userIdOf("durability-reset@example.com");
         commandBus.execute(new ForgotPasswordCommand("durability-reset@example.com"));
 
         TargetEventPublication integration = single(PasswordResetRequestedIntegrationEvent.class,
-                e -> e.userId().equals(result.userId()));
+                e -> e.userId().equals(userId.value()));
         assertThat(integration.getTargetIdentifier().getValue()).contains("TestIamIntegrationEventListener");
         assertThat(integration.isCompleted()).isTrue();
         assertThat(integration.getCompletionDate()).isPresent();
@@ -72,6 +80,12 @@ class IamEventPublicationDurabilityTest {
                 .isEqualTo("durability-reset@example.com");
         assertThat(((PasswordResetRequestedIntegrationEvent) integration.getEvent()).tokenId())
                 .isNotNull();
+    }
+
+    private UserId userIdOf(String email) {
+        return userRepository.loadByEmail(Email.of(email))
+                .orElseThrow(() -> new AssertionError("user not found: " + email))
+                .getId();
     }
 
     private <T> TargetEventPublication single(Class<T> eventType, Predicate<T> filter) {

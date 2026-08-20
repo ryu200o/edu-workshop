@@ -11,8 +11,5 @@ import java.util.UUID;
  *
  * @param userId the account to disable
  */
-public record AdminDisableUserCommand(UUID userId) implements Command<AdminDisableUserCommand.Result> {
-
-    public record Result() {
-    }
+public record AdminDisableUserCommand(UUID userId) implements Command {
 }

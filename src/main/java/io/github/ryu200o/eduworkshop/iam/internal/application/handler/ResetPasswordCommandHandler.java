@@ -24,7 +24,7 @@ import java.time.Instant;
  * refresh tokens of the account (ADR 0020 §1.4: password reset invalidates the session family).
  */
 @Component
-class ResetPasswordCommandHandler implements CommandHandler<ResetPasswordCommand, ResetPasswordCommand.Result> {
+class ResetPasswordCommandHandler implements CommandHandler<ResetPasswordCommand> {
 
     private final OneTimeTokenRepository oneTimeTokenRepository;
     private final UserRepository userRepository;
@@ -49,7 +49,7 @@ class ResetPasswordCommandHandler implements CommandHandler<ResetPasswordCommand
 
     @Override
     @Transactional
-    public ResetPasswordCommand.Result handle(ResetPasswordCommand command) {
+    public void handle(ResetPasswordCommand command) {
         Instant now = Instant.now(clock);
         String tokenHash = TokenHash.sha256Hex(command.token());
 
@@ -72,7 +72,5 @@ class ResetPasswordCommandHandler implements CommandHandler<ResetPasswordCommand
 
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-
-        return new ResetPasswordCommand.Result();
     }
 }

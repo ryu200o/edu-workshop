@@ -98,10 +98,8 @@ class SelfCheckInCommandHandlerTest {
         when(workshopExposeApi.evaluateCheckIn(WORKSHOP_ID, NOW)).thenReturn(Optional.of(AttendanceStatusContract.ATTENDED));
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        SelfCheckInCommand.Result result = handler().handle(command());
+        handler().handle(command());
 
-        assertThat(result.state()).isEqualTo(AttendanceState.OPEN);
-        assertThat(result.result()).isEqualTo(AttendanceResult.PRESENT);
         verify(attendanceRecordRepository).save(argThat(record ->
                 record.state() == AttendanceState.OPEN
                         && record.currentResult() == AttendanceResult.PRESENT
@@ -120,9 +118,8 @@ class SelfCheckInCommandHandlerTest {
         when(workshopExposeApi.evaluateCheckIn(WORKSHOP_ID, NOW)).thenReturn(Optional.of(AttendanceStatusContract.LATE));
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        SelfCheckInCommand.Result result = handler().handle(command());
+        handler().handle(command());
 
-        assertThat(result.result()).isEqualTo(AttendanceResult.LATE);
         verify(attendanceRecordRepository).save(argThat(record ->
                 record.currentResult() == AttendanceResult.LATE));
     }
@@ -136,12 +133,9 @@ class SelfCheckInCommandHandlerTest {
         when(attendanceRecordRepository.loadByWorkshopAndStudent(WORKSHOP_ID, STUDENT))
                 .thenReturn(Optional.of(existing));
 
-        SelfCheckInCommand.Result result = handler().handle(command());
+        handler().handle(command());
 
-        // OQ-3B-3 idempotent no-op: returns the existing record's identity/result/state unchanged.
-        assertThat(result.recordId()).isEqualTo(existing.id().value());
-        assertThat(result.result()).isEqualTo(AttendanceResult.PRESENT);
-        assertThat(result.state()).isEqualTo(AttendanceState.OPEN);
+        // OQ-3B-3 idempotent no-op: the existing record's identity/result/state are untouched.
         assertThat(existing.entries()).hasSize(1);          // no new ledger entry
         assertThat(existing.currentResult()).isEqualTo(AttendanceResult.PRESENT); // never flipped
         // No evaluation, no save, no publish — nothing at all was touched.

@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -17,8 +16,5 @@ import java.util.UUID;
  */
 public record CatchUpWorkshopCommand(
         UUID workshopId
-) implements Command<CatchUpWorkshopCommand.Result> {
-
-    public record Result(UUID id, Instant caughtUpAt, String state) {
-    }
+) implements Command {
 }

@@ -89,10 +89,9 @@ class RenameRoomCommandHandlerTest {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "F-201"));
+        handler().handle(new RenameRoomCommand(room.id().value(), "F-201"));
 
-        assertThat(response.oldName()).isEqualTo("F-201");
-        assertThat(response.newName()).isEqualTo("F-201");
+        assertThat(room.name()).isEqualTo(RoomName.of("F-201"));
         verify(roomRepository, never()).save(any());
     }
 
@@ -109,13 +108,13 @@ class RenameRoomCommandHandlerTest {
     }
 
     @Test
-    void happyPath_mutatesPersistsAndReturnsResponse() {
+    void happyPath_mutatesAndPersists() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.existsByName(any(), any())).thenReturn(false);
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RenameRoomCommand.Result response = handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
+        handler().handle(new RenameRoomCommand(room.id().value(), "LAB-101"));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
@@ -125,9 +124,7 @@ class RenameRoomCommandHandlerTest {
         ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
         verify(roomDomainEventPublisher).publish(eventCaptor.capture());
         assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomRenamedEvent);
-        assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.oldName()).isEqualTo("F-201");
-        assertThat(response.newName()).isEqualTo("LAB-101");
+        assertThat(saved.id()).isEqualTo(room.id());
     }
 
     @Test

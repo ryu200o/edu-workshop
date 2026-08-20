@@ -43,7 +43,7 @@ import java.util.UUID;
  * (5) persist and publish domain events through the outbox (ADR 0011).</p>
  */
 @Component
-class MarkAttendanceCommandHandler implements CommandHandler<MarkAttendanceCommand, MarkAttendanceCommand.Result> {
+class MarkAttendanceCommandHandler implements CommandHandler<MarkAttendanceCommand> {
 
     private final WorkshopExposeAPI workshopExposeApi;
     private final RegistrationExposeAPI registrationExposeApi;
@@ -65,7 +65,7 @@ class MarkAttendanceCommandHandler implements CommandHandler<MarkAttendanceComma
 
     @Override
     @Transactional
-    public MarkAttendanceCommand.Result handle(MarkAttendanceCommand command) {
+    public void handle(MarkAttendanceCommand command) {
         Instant now = Instant.now(clock);
         UUID workshopId = command.workshopId();
 
@@ -108,6 +108,5 @@ class MarkAttendanceCommandHandler implements CommandHandler<MarkAttendanceComma
         }
 
         attendanceDomainEventPublisher.publish(allEvents);
-        return new MarkAttendanceCommand.Result(command.items().size());
     }
 }

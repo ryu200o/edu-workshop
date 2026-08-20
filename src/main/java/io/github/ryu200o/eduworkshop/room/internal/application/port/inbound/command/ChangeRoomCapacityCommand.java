@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.com
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -15,17 +14,5 @@ import java.util.UUID;
 public record ChangeRoomCapacityCommand(
         UUID roomId,
         int newCapacity
-) implements Command<ChangeRoomCapacityCommand.Result> {
-
-    /**
-     * Lightweight write-side result for this command — carries only the fields directly affected by the
-     * change (id, old/new capacity, and the update timestamp) to keep the write flow minimal.
-     *
-     * @param id          the updated room's id
-     * @param oldCapacity the previous capacity
-     * @param newCapacity the new capacity
-     * @param updatedAt   the moment the change was applied
-     */
-    public record Result(UUID id, int oldCapacity, int newCapacity, Instant updatedAt) {
-    }
+) implements Command {
 }

@@ -24,7 +24,7 @@ import java.time.Instant;
  */
 @Component
 class CancelRegistrationCommandHandler
-        implements CommandHandler<CancelRegistrationCommand, CancelRegistrationCommand.Result> {
+        implements CommandHandler<CancelRegistrationCommand> {
 
     private final RegistrationRepository registrationRepository;
     private final RegistrationDomainEventPublisher registrationDomainEventPublisher;
@@ -40,7 +40,7 @@ class CancelRegistrationCommandHandler
 
     @Override
     @Transactional
-    public CancelRegistrationCommand.Result handle(CancelRegistrationCommand command) {
+    public void handle(CancelRegistrationCommand command) {
         Instant now = Instant.now(clock);
 
         Registration registration = registrationRepository.loadById(RegistrationId.of(command.registrationId()))
@@ -56,7 +56,5 @@ class CancelRegistrationCommandHandler
 
         registrationDomainEventPublisher.publish(registration.recordedEvents());
         registration.clearDomainEvents();
-
-        return new CancelRegistrationCommand.Result(registration.id().value(), registration.cancelledAt());
     }
 }

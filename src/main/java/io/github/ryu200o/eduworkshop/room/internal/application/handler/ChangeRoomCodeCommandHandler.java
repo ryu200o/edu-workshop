@@ -17,7 +17,7 @@ import java.time.Clock;
 import java.time.Instant;
 
 @Component
-class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeCommand, ChangeRoomCodeCommand.Result> {
+class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeCommand> {
 
     private final RoomRepository roomRepository;
     private final Clock clock;
@@ -32,31 +32,24 @@ class ChangeRoomCodeCommandHandler implements CommandHandler<ChangeRoomCodeComma
 
     @Override
     @Transactional
-    public ChangeRoomCodeCommand.Result handle(ChangeRoomCodeCommand command) {
+    public void handle(ChangeRoomCodeCommand command) {
         Room room = roomRepository.loadById(RoomId.of(command.roomId()))
                 .orElseThrow(() -> new RoomNotFoundException("id", command.roomId()));
 
         RoomCode newCode = RoomCode.of(command.newCode());
 
         if (newCode.equals(room.code())) {
-            return toResult(room, room.code());
+            return;
         }
 
         if (roomRepository.existsByCoordinate(room.location(), newCode)) {
             throw new DuplicateRoomCodeException(room.location(), newCode);
         }
 
-        RoomCode oldCode = room.code();
         Instant now = Instant.now(clock);
         room.changeCode(newCode, now);
-        Room saved = roomRepository.save(room);
+        roomRepository.save(room);
         roomDomainEventPublisher.publish(room.recordedEvents());
         room.clearDomainEvents();
-        return toResult(saved, oldCode);
-    }
-
-    private static ChangeRoomCodeCommand.Result toResult(Room room, RoomCode oldCode) {
-        return new ChangeRoomCodeCommand.Result(
-                room.id().value(), oldCode.value(), room.code().value(), room.updatedAt());
     }
 }

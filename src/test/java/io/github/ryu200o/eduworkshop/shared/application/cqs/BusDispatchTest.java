@@ -35,13 +35,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BusDispatchTest {
 
-    private record PingCommand(String name) implements Command<String> {
+    private record PingCommand(String name) implements Command {
     }
 
-    private static final class PingHandler implements CommandHandler<PingCommand, String> {
+    private static final class PingHandler implements CommandHandler<PingCommand> {
+        private final java.util.List<String> effects;
+
+        PingHandler(java.util.List<String> effects) {
+            this.effects = effects;
+        }
+
         @Override
-        public String handle(PingCommand command) {
-            return "pong:" + command.name();
+        public void handle(PingCommand command) {
+            effects.add("pong:" + command.name());
         }
     }
 
@@ -55,19 +61,21 @@ class BusDispatchTest {
         }
     }
 
-    private record EchoQueryCommand(String value) implements Command<Integer> {
+    private record EchoQueryCommand(String value) implements Command {
     }
 
-    private static final class EchoQueryCommandHandler implements CommandHandler<EchoQueryCommand, Integer> {
+    private static final class EchoQueryCommandHandler implements CommandHandler<EchoQueryCommand> {
         private final QueryBus queryBus;
+        private final java.util.List<String> effects;
 
-        EchoQueryCommandHandler(QueryBus queryBus) {
+        EchoQueryCommandHandler(QueryBus queryBus, java.util.List<String> effects) {
             this.queryBus = queryBus;
+            this.effects = effects;
         }
 
         @Override
-        public Integer handle(EchoQueryCommand command) {
-            return queryBus.execute(new SizeQuery(command.value()));
+        public void handle(EchoQueryCommand command) {
+            effects.add("echo:" + queryBus.execute(new SizeQuery(command.value())));
         }
     }
 
@@ -75,7 +83,12 @@ class BusDispatchTest {
     static class Cfg {
         @Bean
         PingHandler pingHandler() {
-            return new PingHandler();
+            return new PingHandler(effects());
+        }
+
+        @Bean
+        java.util.List<String> effects() {
+            return new java.util.ArrayList<>();
         }
 
         @Bean
@@ -84,7 +97,7 @@ class BusDispatchTest {
         }
 
         @Bean
-        CommandHandlerRegistry commandHandlerRegistry(ObjectProvider<CommandHandler<?, ?>> commandHandlers) {
+        CommandHandlerRegistry commandHandlerRegistry(ObjectProvider<CommandHandler<?>> commandHandlers) {
             return new CommandHandlerRegistry(commandHandlers);
         }
 
@@ -133,10 +146,10 @@ class BusDispatchTest {
     }
 
     @Test
-    void commandDispatch_resolvesHandlerAndReturnsResult() {
+    void commandDispatch_resolvesHandlerAndAppliesSideEffect() {
         CommandDispatcher dispatcher = context.getBean(CommandDispatcher.class);
-        Object result = dispatcher.dispatch(new PingCommand("room"));
-        assertThat(result).isEqualTo("pong:room");
+        dispatcher.dispatch(new PingCommand("room"));
+        assertThat(context.getBean(java.util.List.class)).containsExactly("pong:room");
     }
 
     @Test
@@ -146,10 +159,10 @@ class BusDispatchTest {
         assertThat(result).isEqualTo(3);
     }
 
-    private static ObjectProvider<CommandHandler<?, ?>> commandHandlerProvider(
+    private static ObjectProvider<CommandHandler<?>> commandHandlerProvider(
             org.springframework.beans.factory.ListableBeanFactory factory) {
         @SuppressWarnings({"unchecked", "rawtypes"})
-        ObjectProvider<CommandHandler<?, ?>> provider = (ObjectProvider) factory.getBeanProvider(CommandHandler.class);
+        ObjectProvider<CommandHandler<?>> provider = (ObjectProvider) factory.getBeanProvider(CommandHandler.class);
         return provider;
     }
 
@@ -220,8 +233,8 @@ class BusDispatchTest {
         AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext(CycleFreeCfg.class);
         try {
             CommandBus commandBus = ctx.getBean(CommandBus.class);
-            Object result = commandBus.execute(new EchoQueryCommand("room"));
-            assertThat(result).isEqualTo(4);
+            commandBus.execute(new EchoQueryCommand("room"));
+            assertThat(ctx.getBean("effects", java.util.List.class)).containsExactly("echo:4");
         } finally {
             ctx.close();
         }
@@ -231,12 +244,12 @@ class BusDispatchTest {
     static class TwoPingCfg {
         @Bean
         PingHandler a() {
-            return new PingHandler();
+            return new PingHandler(new java.util.ArrayList<>());
         }
 
         @Bean
         PingHandler b() {
-            return new PingHandler();
+            return new PingHandler(new java.util.ArrayList<>());
         }
     }
 
@@ -267,12 +280,17 @@ class BusDispatchTest {
         }
 
         @Bean
-        EchoQueryCommandHandler echoQueryCommandHandler(QueryBus queryBus) {
-            return new EchoQueryCommandHandler(queryBus);
+        EchoQueryCommandHandler echoQueryCommandHandler(QueryBus queryBus, java.util.List<String> effects) {
+            return new EchoQueryCommandHandler(queryBus, effects);
         }
 
         @Bean
-        CommandHandlerRegistry commandHandlerRegistry(ObjectProvider<CommandHandler<?, ?>> commandHandlers) {
+        java.util.List<String> effects() {
+            return new java.util.ArrayList<>();
+        }
+
+        @Bean
+        CommandHandlerRegistry commandHandlerRegistry(ObjectProvider<CommandHandler<?>> commandHandlers) {
             return new CommandHandlerRegistry(commandHandlers);
         }
 
@@ -316,9 +334,8 @@ class BusDispatchTest {
         CommandBus commandBus(CommandDispatcher dispatcher) {
             return new CommandBus() {
                 @Override
-                @SuppressWarnings("unchecked")
-                public <R, C extends Command<R>> R execute(C command) {
-                    return (R) dispatcher.dispatch(command);
+                public void execute(Command command) {
+                    dispatcher.dispatch(command);
                 }
             };
         }

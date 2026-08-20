@@ -17,6 +17,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.UUID;
 
+import io.github.ryu200o.eduworkshop.shared.security.IamE2eTestSupport;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -95,7 +97,7 @@ class IamAdminControllerE2ETest {
                         + "\"temporaryPassword\":\"" + password + "\"}",
                 token);
         assertThat(create.statusCode()).isEqualTo(201);
-        String userId = json(create.body()).path("userId").asText();
+        String userId = IamE2eTestSupport.idFromLocation(create).toString();
         assertThat(userId).isNotBlank();
         return new CreatedUser(userId, email, password);
     }
@@ -122,7 +124,7 @@ class IamAdminControllerE2ETest {
 
         HttpResponse<String> change = request("POST", "/api/v1/iam/me/change-password",
                 "{\"currentPassword\":\"TempPassw0rd!\",\"newPassword\":\"MyOwnPass!1\"}", userToken);
-        assertThat(change.statusCode()).isEqualTo(200);
+        assertThat(change.statusCode()).isEqualTo(204);
 
         HttpResponse<String> newLogin = request("POST", "/api/v1/iam/auth/login",
                 "{\"email\":\"" + email + "\",\"password\":\"MyOwnPass!1\"}", null);
@@ -189,7 +191,7 @@ class IamAdminControllerE2ETest {
 
         HttpResponse<String> update = request("PUT", "/api/v1/iam/admin/users/" + user.userId() + "/roles",
                 "{\"roles\":[\"USER\",\"PLANNER\"]}", token);
-        assertThat(update.statusCode()).isEqualTo(200);
+        assertThat(update.statusCode()).isEqualTo(204);
 
         HttpResponse<String> detail = request("GET", "/api/v1/iam/admin/users/" + user.userId(), null, token);
         assertThat(json(detail.body()).path("roles").toString()).contains("PLANNER");
@@ -207,7 +209,7 @@ class IamAdminControllerE2ETest {
 
         HttpResponse<String> lock = request("POST", "/api/v1/iam/admin/users/" + user.userId() + "/lock",
                 null, token);
-        assertThat(lock.statusCode()).isEqualTo(200);
+        assertThat(lock.statusCode()).isEqualTo(204);
 
         HttpResponse<String> refresh = request("POST", "/api/v1/iam/auth/refresh",
                 "{\"refreshToken\":\"" + refreshToken + "\"}", null);
@@ -219,7 +221,7 @@ class IamAdminControllerE2ETest {
 
         HttpResponse<String> unlock = request("POST", "/api/v1/iam/admin/users/" + user.userId() + "/unlock",
                 null, token);
-        assertThat(unlock.statusCode()).isEqualTo(200);
+        assertThat(unlock.statusCode()).isEqualTo(204);
 
         HttpResponse<String> restoredLogin = request("POST", "/api/v1/iam/auth/login",
                 "{\"email\":\"" + email + "\",\"password\":\"TempPassw0rd!\"}", null);
@@ -234,7 +236,7 @@ class IamAdminControllerE2ETest {
 
         HttpResponse<String> disable = request("POST", "/api/v1/iam/admin/users/" + user.userId() + "/disable",
                 null, token);
-        assertThat(disable.statusCode()).isEqualTo(200);
+        assertThat(disable.statusCode()).isEqualTo(204);
 
         HttpResponse<String> blockedLogin = request("POST", "/api/v1/iam/auth/login",
                 "{\"email\":\"" + email + "\",\"password\":\"TempPassw0rd!\"}", null);
@@ -242,7 +244,7 @@ class IamAdminControllerE2ETest {
 
         HttpResponse<String> enable = request("POST", "/api/v1/iam/admin/users/" + user.userId() + "/enable",
                 null, token);
-        assertThat(enable.statusCode()).isEqualTo(200);
+        assertThat(enable.statusCode()).isEqualTo(204);
 
         HttpResponse<String> restoredLogin = request("POST", "/api/v1/iam/auth/login",
                 "{\"email\":\"" + email + "\",\"password\":\"TempPassw0rd!\"}", null);
@@ -257,7 +259,7 @@ class IamAdminControllerE2ETest {
 
         HttpResponse<String> reset = request("POST", "/api/v1/iam/admin/users/" + user.userId() + "/reset-password",
                 "{\"newPassword\":\"AdminReset!1\"}", token);
-        assertThat(reset.statusCode()).isEqualTo(200);
+        assertThat(reset.statusCode()).isEqualTo(204);
 
         HttpResponse<String> oldLogin = request("POST", "/api/v1/iam/auth/login",
                 "{\"email\":\"" + email + "\",\"password\":\"TempPassw0rd!\"}", null);
@@ -274,7 +276,14 @@ class IamAdminControllerE2ETest {
         String email = "plain-" + UUID.randomUUID() + "@example.com";
         HttpResponse<String> register = request("POST", "/api/v1/iam/auth/register",
                 "{\"email\":\"" + email + "\",\"password\":\"Passw0rd!\",\"fullName\":\"Plain User\"}", null);
-        String verifyToken = json(register.body()).path("verifyToken").asText();
+        assertThat(register.statusCode()).isEqualTo(201);
+        UUID userId = IamE2eTestSupport.idFromLocation(register);
+        String verifyToken = "verify-" + email;
+        jdbcTemplate.update("""
+                INSERT INTO iam_password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
+                VALUES (?, ?, ?, ?, NULL, CURRENT_TIMESTAMP)
+                """,
+                UUID.randomUUID(), userId, sha256Hex(verifyToken), java.time.Instant.now().plusSeconds(3600));
         request("POST", "/api/v1/iam/auth/verify-email", "{\"token\":\"" + verifyToken + "\"}", null);
 
         HttpResponse<String> login = request("POST", "/api/v1/iam/auth/login",
@@ -288,5 +297,16 @@ class IamAdminControllerE2ETest {
                 "{\"email\":\"nope@example.com\",\"fullName\":\"Nope\",\"temporaryPassword\":\"X\"}",
                 userToken);
         assertThat(create.statusCode()).isEqualTo(403);
+    }
+
+    private static String sha256Hex(String rawToken) {
+        try {
+            java.security.MessageDigest digest =
+                    java.security.MessageDigest.getInstance("SHA-256");
+            return java.util.HexFormat.of().formatHex(
+                    digest.digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 }

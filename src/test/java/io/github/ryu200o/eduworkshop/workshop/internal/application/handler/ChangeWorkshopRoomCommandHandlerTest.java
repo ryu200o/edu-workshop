@@ -126,10 +126,9 @@ class ChangeWorkshopRoomCommandHandlerTest {
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
 
-            ChangeWorkshopRoomCommand.Result result = handler.handle(
+            handler.handle(
                     new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
 
-            assertThat(result.roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomNameSnapshot()).isEqualTo("Room 302");
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
@@ -155,10 +154,9 @@ class ChangeWorkshopRoomCommandHandlerTest {
             given(workshopRepository.loadByIdWithLock(WorkshopId.of(WORKSHOP_ID)))
                     .willReturn(Optional.of(workshop));
 
-            ChangeWorkshopRoomCommand.Result result = handler.handle(
+            handler.handle(
                     new ChangeWorkshopRoomCommand(WORKSHOP_ID, NEW_ROOM_ID));
 
-            assertThat(result.roomId()).isEqualTo(NEW_ROOM_ID);
             assertThat(workshop.roomReference().roomId()).isEqualTo(NEW_ROOM_ID);
             // PLANNED workshop B was evicted back to DRAFT (keeps its room — UX upgrade).
             assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);

@@ -16,7 +16,7 @@ import java.time.Instant;
 
 @Component
 class CompleteWorkshopCommandHandler
-        implements CommandHandler<CompleteWorkshopCommand, CompleteWorkshopCommand.Result> {
+        implements CommandHandler<CompleteWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -32,7 +32,7 @@ class CompleteWorkshopCommandHandler
 
     @Override
     @Transactional
-    public CompleteWorkshopCommand.Result handle(CompleteWorkshopCommand command) {
+    public void handle(CompleteWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -45,7 +45,5 @@ class CompleteWorkshopCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new CompleteWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt(), workshop.state().name());
     }
 }

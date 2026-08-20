@@ -98,12 +98,7 @@ class PlanWorkshopCommandHandlerTest {
             given(roomExposeApi.getPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(ALLOWED_PERMISSION));
 
-            var result = handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
-
-            assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-            assertThat(result.roomId()).isEqualTo(ROOM_ID);
-            assertThat(result.updatedAt()).isEqualTo(NOW);
-            assertThat(result.hasRoomWarning()).isFalse();
+            handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
 
             assertThat(workshop.state().name()).isEqualTo("PLANNED");
             assertThat(workshop.roomReference()).isNotNull();
@@ -126,9 +121,8 @@ class PlanWorkshopCommandHandlerTest {
             given(roomExposeApi.getPlanningPermission(ROOM_ID))
                     .willReturn(Optional.of(WARNING_PERMISSION));
 
-            var result = handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
+            handler.handle(new PlanWorkshopCommand(WORKSHOP_ID, ROOM_ID));
 
-            assertThat(result.hasRoomWarning()).isTrue();
             assertThat(workshop.hasRoomWarning()).isTrue();
             verify(workshopRepository).save(workshop);
         }

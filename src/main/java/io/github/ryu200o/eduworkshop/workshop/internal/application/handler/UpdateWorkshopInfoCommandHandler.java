@@ -29,7 +29,7 @@ import java.util.List;
  */
 @Component
 class UpdateWorkshopInfoCommandHandler
-        implements CommandHandler<UpdateWorkshopInfoCommand, UpdateWorkshopInfoCommand.Result> {
+        implements CommandHandler<UpdateWorkshopInfoCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final QueryBus queryBus;
@@ -48,7 +48,7 @@ class UpdateWorkshopInfoCommandHandler
 
     @Override
     @Transactional
-    public UpdateWorkshopInfoCommand.Result handle(UpdateWorkshopInfoCommand command) {
+    public void handle(UpdateWorkshopInfoCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -68,11 +68,5 @@ class UpdateWorkshopInfoCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new UpdateWorkshopInfoCommand.Result(
-                workshop.id().value(),
-                workshop.title().value(),
-                workshop.description().value(),
-                workshop.updatedAt());
     }
 }

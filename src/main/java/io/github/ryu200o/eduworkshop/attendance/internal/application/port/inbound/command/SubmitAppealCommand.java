@@ -19,13 +19,5 @@ public record SubmitAppealCommand(
         String reason,
         String evidenceReference,
         Actor actor
-) implements Command<SubmitAppealCommand.Result> {
-
-    public record Result(
-            UUID recordId,
-            int entryNumber,
-            String state,
-            String message
-    ) {
-    }
+) implements Command {
 }

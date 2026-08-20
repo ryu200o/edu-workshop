@@ -27,8 +27,7 @@ import java.util.stream.Collectors;
  * are applied through the aggregate's {@code updateRoles}, which enforces the base {@code USER} role.
  */
 @Component
-class AdminCreateUserCommandHandler
-        implements CommandHandler<AdminCreateUserCommand, AdminCreateUserCommand.Result> {
+class AdminCreateUserCommandHandler implements CommandHandler<AdminCreateUserCommand> {
 
     private final UserRepository userRepository;
     private final UserDomainEventPublisher userDomainEventPublisher;
@@ -47,7 +46,7 @@ class AdminCreateUserCommandHandler
 
     @Override
     @Transactional
-    public AdminCreateUserCommand.Result handle(AdminCreateUserCommand command) {
+    public void handle(AdminCreateUserCommand command) {
         Instant now = Instant.now(clock);
         Email email = Email.of(command.email());
         if (userRepository.existsByEmail(email)) {
@@ -57,7 +56,7 @@ class AdminCreateUserCommandHandler
             throw new IllegalArgumentException("temporaryPassword must not be blank");
         }
 
-        User user = User.createByAdmin(UserId.generate(), email,
+        User user = User.createByAdmin(UserId.of(command.userId()), email,
                 passwordEncoder.encode(command.temporaryPassword()), command.fullName(), now);
         if (command.roles() != null && !command.roles().isEmpty()) {
             user.updateRoles(parseRoles(command.roles()), now);
@@ -66,7 +65,6 @@ class AdminCreateUserCommandHandler
         userRepository.save(user);
         userDomainEventPublisher.publish(user.recordedEvents());
         user.clearRecordedEvents();
-        return new AdminCreateUserCommand.Result(user.getId().value());
     }
 
     private static Set<GlobalRole> parseRoles(Set<String> roleNames) {

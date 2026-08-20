@@ -17,6 +17,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import java.net.URI;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,103 +45,96 @@ class WorkshopCommandController {
     }
 
     @PostMapping
-    ResponseEntity<CreateWorkshopCommand.Result> create(@RequestBody CreateWorkshopRequest request) {
+    ResponseEntity<Void> create(@RequestBody CreateWorkshopRequest request) {
+        UUID workshopId = UUID.randomUUID();
         var command = new CreateWorkshopCommand(
+                workshopId,
                 request.title(),
                 request.description(),
                 request.startTime(),
                 request.endTime(),
                 request.capacity());
-        CreateWorkshopCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        commandBus.execute(command);
+        return ResponseEntity.created(URI.create("/api/v1/workshops/" + workshopId)).build();
     }
 
     @PostMapping("/{id}/plan")
-    ResponseEntity<PlanWorkshopCommand.Result> plan(@PathVariable UUID id,
-                                                    @RequestBody PlanWorkshopRequest request) {
-        var command = new PlanWorkshopCommand(id, request.roomId());
-        PlanWorkshopCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> plan(@PathVariable UUID id,
+                              @RequestBody PlanWorkshopRequest request) {
+        commandBus.execute(new PlanWorkshopCommand(id, request.roomId()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/publish")
-    ResponseEntity<PublishWorkshopCommand.Result> publish(@PathVariable UUID id) {
-        var command = new PublishWorkshopCommand(id);
-        PublishWorkshopCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> publish(@PathVariable UUID id) {
+        commandBus.execute(new PublishWorkshopCommand(id));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/cancel")
-    ResponseEntity<CancelWorkshopCommand.Result> cancel(@PathVariable UUID id) {
-        var command = new CancelWorkshopCommand(id);
-        CancelWorkshopCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> cancel(@PathVariable UUID id) {
+        commandBus.execute(new CancelWorkshopCommand(id));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/start")
-    ResponseEntity<StartWorkshopCommand.Result> start(@PathVariable UUID id) {
-        StartWorkshopCommand.Result result = commandBus.execute(new StartWorkshopCommand(id));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> start(@PathVariable UUID id) {
+        commandBus.execute(new StartWorkshopCommand(id));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/complete")
-    ResponseEntity<CompleteWorkshopCommand.Result> complete(@PathVariable UUID id) {
-        CompleteWorkshopCommand.Result result = commandBus.execute(new CompleteWorkshopCommand(id));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> complete(@PathVariable UUID id) {
+        commandBus.execute(new CompleteWorkshopCommand(id));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/change-room")
-    ResponseEntity<ChangeWorkshopRoomCommand.Result> changeRoom(@PathVariable UUID id,
-                                                                @RequestBody ChangeWorkshopRoomRequest request) {
-        var command = new ChangeWorkshopRoomCommand(id, request.roomId());
-        ChangeWorkshopRoomCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> changeRoom(@PathVariable UUID id,
+                                    @RequestBody ChangeWorkshopRoomRequest request) {
+        commandBus.execute(new ChangeWorkshopRoomCommand(id, request.roomId()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/adjust-capacity")
-    ResponseEntity<AdjustWorkshopCapacityCommand.Result> adjustCapacity(@PathVariable UUID id,
-                                                                        @RequestBody AdjustWorkshopCapacityRequest request) {
-        var command = new AdjustWorkshopCapacityCommand(id, request.newCapacity());
-        AdjustWorkshopCapacityCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> adjustCapacity(@PathVariable UUID id,
+                                        @RequestBody AdjustWorkshopCapacityRequest request) {
+        commandBus.execute(new AdjustWorkshopCapacityCommand(id, request.newCapacity()));
+        return ResponseEntity.noContent().build();
     }
 
-@PostMapping("/{id}/reschedule")
-    ResponseEntity<RescheduleWorkshopCommand.Result> reschedule(@PathVariable UUID id,
-                                                                 @RequestBody RescheduleWorkshopRequest request) {
-        var command = new RescheduleWorkshopCommand(id, request.newStartTime(), request.newEndTime());
-        RescheduleWorkshopCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    @PostMapping("/{id}/reschedule")
+    ResponseEntity<Void> reschedule(@PathVariable UUID id,
+                                    @RequestBody RescheduleWorkshopRequest request) {
+        commandBus.execute(new RescheduleWorkshopCommand(id, request.newStartTime(), request.newEndTime()));
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/info")
-    ResponseEntity<UpdateWorkshopInfoCommand.Result> updateInfo(@PathVariable UUID id,
-                                                                       @RequestBody UpdateWorkshopInfoRequest request) {
-        var command = new UpdateWorkshopInfoCommand(id, request.newTitle(), request.newDescription());
-        UpdateWorkshopInfoCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> updateInfo(@PathVariable UUID id,
+                                    @RequestBody UpdateWorkshopInfoRequest request) {
+        commandBus.execute(new UpdateWorkshopInfoCommand(id, request.newTitle(), request.newDescription()));
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/schedule")
-    ResponseEntity<UpdateWorkshopScheduleCommand.Result> updateSchedule(@PathVariable UUID id,
-                                                                               @RequestBody UpdateWorkshopScheduleRequest request) {
-        var command = new UpdateWorkshopScheduleCommand(id, request.newStartTime(), request.newEndTime());
-        UpdateWorkshopScheduleCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> updateSchedule(@PathVariable UUID id,
+                                        @RequestBody UpdateWorkshopScheduleRequest request) {
+        commandBus.execute(new UpdateWorkshopScheduleCommand(id, request.newStartTime(), request.newEndTime()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/late-policy")
-    ResponseEntity<UpdateWorkshopLatePolicyCommand.Result> updateLatePolicy(@PathVariable UUID id,
-                                                                                   @RequestBody UpdateWorkshopLatePolicyRequest request) {
-        var command = new UpdateWorkshopLatePolicyCommand(id, request.lateThresholdSeconds());
-        UpdateWorkshopLatePolicyCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> updateLatePolicy(@PathVariable UUID id,
+                                          @RequestBody UpdateWorkshopLatePolicyRequest request) {
+        commandBus.execute(new UpdateWorkshopLatePolicyCommand(id, request.lateThresholdSeconds()));
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}/plan")
-    ResponseEntity<UnplanWorkshopCommand.Result> unplan(@PathVariable UUID id) {
-        UnplanWorkshopCommand.Result result = commandBus.execute(new UnplanWorkshopCommand(id));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> unplan(@PathVariable UUID id) {
+        commandBus.execute(new UnplanWorkshopCommand(id));
+        return ResponseEntity.noContent().build();
     }
 
     record CreateWorkshopRequest(

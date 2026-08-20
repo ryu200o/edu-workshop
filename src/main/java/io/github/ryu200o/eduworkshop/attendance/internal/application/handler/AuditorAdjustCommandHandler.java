@@ -27,7 +27,7 @@ import java.util.List;
  * → persist and publish.</p>
  */
 @Component
-class AuditorAdjustCommandHandler implements CommandHandler<AuditorAdjustCommand, AuditorAdjustCommand.Result> {
+class AuditorAdjustCommandHandler implements CommandHandler<AuditorAdjustCommand> {
 
     private final AttendanceRecordRepository attendanceRecordRepository;
     private final AttendanceDomainEventPublisher attendanceDomainEventPublisher;
@@ -43,7 +43,7 @@ class AuditorAdjustCommandHandler implements CommandHandler<AuditorAdjustCommand
 
     @Override
     @Transactional
-    public AuditorAdjustCommand.Result handle(AuditorAdjustCommand command) {
+    public void handle(AuditorAdjustCommand command) {
         Instant now = Instant.now(clock);
         AttendanceRecordId recordId = AttendanceRecordId.of(command.recordId());
 
@@ -61,12 +61,5 @@ class AuditorAdjustCommandHandler implements CommandHandler<AuditorAdjustCommand
         record.clearDomainEvents();
         attendanceRecordRepository.save(record);
         attendanceDomainEventPublisher.publish(events);
-
-        int entryNumber = record.entries().size();
-        return new AuditorAdjustCommand.Result(
-                record.id().value(),
-                entryNumber,
-                record.currentResult(),
-                record.state().name());
     }
 }

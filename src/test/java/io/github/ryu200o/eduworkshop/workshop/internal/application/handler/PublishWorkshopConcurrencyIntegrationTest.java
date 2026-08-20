@@ -60,7 +60,7 @@ class PublishWorkshopConcurrencyIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
     }
@@ -85,8 +85,8 @@ class PublishWorkshopConcurrencyIntegrationTest {
                 """
                 {"building": "%s", "floor": 1, "code": 5, "name": "%s-CONC", "capacity": 50}
                 """.formatted(prefix, prefix));
-        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.OK.value());
-        return UUID.fromString(readField(response, "id"));
+        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID createWorkshop(String title, String start, String end) throws Exception {
@@ -96,7 +96,7 @@ class PublishWorkshopConcurrencyIntegrationTest {
                 """.formatted(title, start, end));
         assertThat(response.statusCode()).as("create workshop: %s", response.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        return UUID.fromString(readField(response, "id"));
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID plan(UUID workshopId, UUID roomId) throws Exception {
@@ -104,7 +104,7 @@ class PublishWorkshopConcurrencyIntegrationTest {
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId));
-        assertThat(response.statusCode()).as("plan: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.statusCode()).as("plan: %s", response.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         return workshopId;
     }
 
@@ -139,8 +139,8 @@ class PublishWorkshopConcurrencyIntegrationTest {
         int statusA = publishA.get();
         int statusB = publishB.get();
 
-        assertThat(List.of(statusA, statusB)).as("one wins, one conflicts").containsExactlyInAnyOrder(
-                HttpStatus.OK.value(), HttpStatus.CONFLICT.value());
+        assertThat(List.of(statusA, statusB)).as("one wins (204), one conflicts").containsExactlyInAnyOrder(
+                HttpStatus.NO_CONTENT.value(), HttpStatus.CONFLICT.value());
 
         Integer published = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM workshops WHERE state = 'PUBLISHED' AND room_id = ?",

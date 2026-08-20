@@ -77,7 +77,7 @@ class PlaceRoomUnderMaintenanceCommandHandlerTest {
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        PlaceRoomUnderMaintenanceCommand.Result response = handler().handle(
+        handler().handle(
                 new PlaceRoomUnderMaintenanceCommand(room.id().value()));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
@@ -86,8 +86,7 @@ class PlaceRoomUnderMaintenanceCommandHandlerTest {
         ArgumentCaptor<List> captor2 = ArgumentCaptor.forClass(List.class);
         verify(roomDomainEventPublisher).publish(captor2.capture());
         assertThat(captor2.getValue()).anyMatch(e -> e instanceof RoomStateChanged);
-        assertThat(response.previousState()).isEqualTo(RoomState.ACTIVE);
-        assertThat(response.newState()).isEqualTo(RoomState.MAINTENANCE);
+        assertThat(captor.getValue().id()).isEqualTo(room.id());
     }
 
     @Test
@@ -101,16 +100,14 @@ class PlaceRoomUnderMaintenanceCommandHandlerTest {
     }
 
     @Test
-    void idempotent_sameState_noSave_returnsExistingUpdatedAt() {
+    void idempotent_sameState_noSave() {
         Room room = existingRoom(RoomState.MAINTENANCE);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        PlaceRoomUnderMaintenanceCommand.Result response = handler().handle(
+        handler().handle(
                 new PlaceRoomUnderMaintenanceCommand(room.id().value()));
 
-        assertThat(response.previousState()).isEqualTo(RoomState.MAINTENANCE);
-        assertThat(response.newState()).isEqualTo(RoomState.MAINTENANCE);
-        assertThat(response.updatedAt()).isEqualTo(room.updatedAt()); // NOT Instant.now()
+        assertThat(room.state()).isEqualTo(RoomState.MAINTENANCE);
         verify(roomRepository, never()).save(any());
     }
 

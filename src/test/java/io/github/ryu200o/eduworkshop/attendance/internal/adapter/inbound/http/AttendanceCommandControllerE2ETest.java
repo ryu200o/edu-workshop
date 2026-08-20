@@ -71,7 +71,7 @@ class AttendanceCommandControllerE2ETest {
 
     @BeforeEach
     void cleanSchema() throws Exception {
-        iam = new IamE2eTestSupport(port, client, objectMapper);
+        iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
         jdbcTemplate.update("DELETE FROM attendance_entries");
@@ -110,8 +110,8 @@ class AttendanceCommandControllerE2ETest {
                 """
                 {"building": "%s", "floor": 1, "code": 1, "name": "%s-ROOM-1", "capacity": 50}
                 """.formatted(building, building), Map.of());
-        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.OK.value());
-        return UUID.fromString(readField(response.body(), "id"));
+        assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
+        return IamE2eTestSupport.idFromLocation(response);
     }
 
     private UUID createAndPublishWorkshop(String building) throws Exception {
@@ -122,21 +122,21 @@ class AttendanceCommandControllerE2ETest {
                 """.formatted(UUID.randomUUID(), START, END), Map.of());
         assertThat(created.statusCode()).as("create workshop: %s", created.body())
                 .isEqualTo(HttpStatus.CREATED.value());
-        UUID workshopId = UUID.fromString(readField(created.body(), "id"));
+        UUID workshopId = IamE2eTestSupport.idFromLocation(created);
 
         HttpResponse<String> planned = post("/api/v1/workshops/" + workshopId + "/plan",
                 """
                 {"roomId": "%s"}
                 """.formatted(roomId), Map.of());
-        assertThat(planned.statusCode()).as("plan workshop: %s", planned.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(planned.statusCode()).as("plan workshop: %s", planned.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         HttpResponse<String> published = post("/api/v1/workshops/" + workshopId + "/publish", null, Map.of());
-        assertThat(published.statusCode()).as("publish workshop: %s", published.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(published.statusCode()).as("publish workshop: %s", published.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
         return workshopId;
     }
 
     private void startWorkshop(UUID workshopId) throws Exception {
         HttpResponse<String> started = post("/api/v1/workshops/" + workshopId + "/start", null, Map.of());
-        assertThat(started.statusCode()).as("start workshop: %s", started.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(started.statusCode()).as("start workshop: %s", started.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 
     private void registerStudent(UUID workshopId, IamE2eTestSupport.TestUser student) throws Exception {
@@ -160,7 +160,7 @@ class AttendanceCommandControllerE2ETest {
                 {"qrReference": "QR-REG-%s"}
                 """.formatted(registrationId),
                 verifier.bearer());
-        assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(verified.statusCode()).as("verify: %s", verified.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 
     private UUID mark(UUID workshopId, IamE2eTestSupport.TestUser student,
@@ -170,7 +170,8 @@ class AttendanceCommandControllerE2ETest {
                 {"items": [{"studentId": "%s", "status": "PRESENT", "note": null}]}
                 """.formatted(student.userId()),
                 trainer.bearer());
-        assertThat(response.statusCode()).as("mark: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.statusCode()).as("mark: %s", response.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         HttpResponse<String> roster = get("/api/v1/workshops/" + workshopId + "/attendance");
         return UUID.fromString(readField(roster.body(), "recordId"));
     }
@@ -304,30 +305,30 @@ class AttendanceCommandControllerE2ETest {
                 {"items": [{"studentId": "%s", "status": "PRESENT", "note": null}]}
                 """.formatted(student.userId()),
                 trainer.bearer());
-        assertThat(marked.statusCode()).isEqualTo(HttpStatus.OK.value());
+        assertThat(marked.statusCode()).isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> ledger = get("/api/v1/workshops/" + workshopId + "/attendance");
         String recordId = readField(ledger.body(), "recordId");
 
         // Complete → outbox delivers WorkshopCompletedIntegrationEvent → window opens (RECONCILING).
         HttpResponse<String> completed = post("/api/v1/workshops/" + workshopId + "/complete", null, Map.of());
-        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> appealed = post("/api/v1/attendance-records/" + recordId + "/appeal",
                 """
                 {"reason": "I was present but marked late", "evidenceReference": "evidence://cam-1"}
                 """,
                 student.bearer());
-        assertThat(appealed.statusCode()).as("appeal: %s", appealed.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(appealed.body()).contains("current result unchanged");
+        assertThat(appealed.statusCode()).as("appeal: %s", appealed.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> adjusted = post("/api/v1/attendance-records/" + recordId + "/adjust",
                 """
                 {"newStatus": "PRESENT", "reason": "CCTV confirms presence", "evidenceReference": "evidence://cam-1"}
                 """,
                 auditor.bearer());
-        assertThat(adjusted.statusCode()).as("adjust: %s", adjusted.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(adjusted.body()).contains("PRESENT");
+        assertThat(adjusted.statusCode()).as("adjust: %s", adjusted.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
 
         HttpResponse<String> fullLedger = get("/api/v1/attendance-records/" + recordId);
         assertThat(fullLedger.statusCode()).isEqualTo(HttpStatus.OK.value());
@@ -350,14 +351,16 @@ class AttendanceCommandControllerE2ETest {
 
         HttpResponse<String> response = checkIn(workshopId, student);
 
-        assertThat(response.statusCode()).as("check-in: %s", response.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(response.statusCode()).as("check-in: %s", response.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         // START is 5h before now and the late threshold is startTime + 15min → LATE.
-        assertThat(response.body()).contains("\"result\":\"LATE\"").contains("\"state\":\"OPEN\"");
-        String recordId = readField(response.body(), "recordId");
+        String recordId = readField(
+                get("/api/v1/workshops/" + workshopId + "/attendance").body(), "recordId");
 
         HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
         assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
-        assertThat(ledger.body()).contains("\"action\":\"MARK\"").contains("\"actorRole\":\"STUDENT\"");
+        assertThat(ledger.body()).contains("\"action\":\"MARK\"").contains("\"actorRole\":\"STUDENT\"")
+                .contains("\"result\":\"LATE\"").contains("\"state\":\"OPEN\"");
     }
 
     @Test
@@ -383,13 +386,17 @@ class AttendanceCommandControllerE2ETest {
         startWorkshop(workshopId);
 
         HttpResponse<String> first = checkIn(workshopId, student);
-        assertThat(first.statusCode()).as("first check-in: %s", first.body()).isEqualTo(HttpStatus.OK.value());
-        String recordId = readField(first.body(), "recordId");
+        assertThat(first.statusCode()).as("first check-in: %s", first.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        String recordId = readField(
+                get("/api/v1/workshops/" + workshopId + "/attendance").body(), "recordId");
 
         HttpResponse<String> second = checkIn(workshopId, student);
-        assertThat(second.statusCode()).as("second check-in: %s", second.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(second.statusCode()).as("second check-in: %s", second.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
         // OQ-3B-3 idempotent no-op: same record, same result, no new MARK entry appended.
-        assertThat(readField(second.body(), "recordId")).isEqualTo(recordId);
+        assertThat(readField(get("/api/v1/workshops/" + workshopId + "/attendance").body(), "recordId"))
+                .isEqualTo(recordId);
 
         HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
         assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
@@ -457,8 +464,10 @@ class AttendanceCommandControllerE2ETest {
         startWorkshop(workshopId);
 
         HttpResponse<String> scanned = checkIn(workshopId, student);
-        assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());
-        String recordId = readField(scanned.body(), "recordId");
+        assertThat(scanned.statusCode()).as("check-in: %s", scanned.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        String recordId = readField(
+                get("/api/v1/workshops/" + workshopId + "/attendance").body(), "recordId");
 
         // Trainer corrects the LATE scan to PRESENT — authoritative (append MARK, role TRAINER).
         mark(workshopId, student, trainer);
@@ -484,11 +493,13 @@ class AttendanceCommandControllerE2ETest {
         startWorkshop(workshopId);
 
         HttpResponse<String> scanned = checkIn(workshopId, student);
-        assertThat(scanned.statusCode()).as("check-in: %s", scanned.body()).isEqualTo(HttpStatus.OK.value());
-        String recordId = readField(scanned.body(), "recordId");
+        assertThat(scanned.statusCode()).as("check-in: %s", scanned.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
+        String recordId = readField(
+                get("/api/v1/workshops/" + workshopId + "/attendance").body(), "recordId");
 
         HttpResponse<String> completed = post("/api/v1/workshops/" + workshopId + "/complete", null, Map.of());
-        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.OK.value());
+        assertThat(completed.statusCode()).as("complete: %s", completed.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
 
         // State gate (ADR 0019 §3): workshop is COMPLETED → check-in is rejected (record no longer OPEN).
         HttpResponse<String> lateScan = checkIn(workshopId, student);
@@ -501,8 +512,8 @@ class AttendanceCommandControllerE2ETest {
                 {"newStatus": "PRESENT", "reason": "CCTV confirms presence", "evidenceReference": "evidence://cam-1"}
                 """,
                 auditor.bearer());
-        assertThat(adjusted.statusCode()).as("adjust: %s", adjusted.body()).isEqualTo(HttpStatus.OK.value());
-        assertThat(adjusted.body()).contains("PRESENT");
+        assertThat(adjusted.statusCode()).as("adjust: %s", adjusted.body())
+                .isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 
     private static int countOccurrences(String text, String needle) {

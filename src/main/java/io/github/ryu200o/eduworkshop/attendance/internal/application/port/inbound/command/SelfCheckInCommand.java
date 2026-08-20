@@ -1,8 +1,6 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceResult;
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceState;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
 import java.util.UUID;
@@ -28,7 +26,7 @@ public record SelfCheckInCommand(
         UUID workshopId,
         String qrReference,
         Actor actor
-) implements Command<SelfCheckInCommand.Result> {
+) implements Command {
 
     public SelfCheckInCommand {
         if (workshopId == null) {
@@ -40,12 +38,5 @@ public record SelfCheckInCommand(
         if (actor == null) {
             throw new IllegalArgumentException("actor must not be null.");
         }
-    }
-
-    public record Result(
-            UUID recordId,
-            AttendanceResult result,
-            AttendanceState state
-    ) {
     }
 }

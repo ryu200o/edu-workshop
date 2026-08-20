@@ -44,45 +44,49 @@ class AttendanceCommandController {
     }
 
     @PostMapping("/workshops/{workshopId}/attendance/mark")
-    ResponseEntity<MarkAttendanceCommand.Result> markAttendance(@PathVariable UUID workshopId,
-                                                                @AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                                                @RequestBody MarkAttendanceRequest request) {
+    ResponseEntity<Void> markAttendance(@PathVariable UUID workshopId,
+                                        @AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                        @RequestBody MarkAttendanceRequest request) {
         Actor actor = trainerActor(principal);
         var command = new MarkAttendanceCommand(workshopId, request.items().stream()
                 .map(item -> new MarkAttendanceCommand.MarkItem(item.studentId(), item.status(), item.note()))
                 .toList(), actor);
-        return ResponseEntity.ok(commandBus.execute(command));
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/workshops/{workshopId}/attendance/check-in")
-    ResponseEntity<SelfCheckInCommand.Result> selfCheckIn(@PathVariable UUID workshopId,
-                                                          @AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                                          @RequestBody SelfCheckInRequest request) {
+    ResponseEntity<Void> selfCheckIn(@PathVariable UUID workshopId,
+                                     @AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                     @RequestBody SelfCheckInRequest request) {
         Actor actor = studentActor(principal);
         // Thin QR seam (Epic 3B, Slice A): the qrReference is opaque input captured here — real QR
         // resolution is Slice B (OQ-3B-1/2, backlog). The workshop candidate is the path workshopId,
         // the student comes from the authenticated principal; the handler never sees the QR itself.
         var command = new SelfCheckInCommand(workshopId, request.qrReference(), actor);
-        return ResponseEntity.ok(commandBus.execute(command));
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/attendance-records/{recordId}/appeal")
-    ResponseEntity<SubmitAppealCommand.Result> submitAppeal(@PathVariable UUID recordId,
-                                                            @AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                                            @RequestBody SubmitAppealRequest request) {
+    ResponseEntity<Void> submitAppeal(@PathVariable UUID recordId,
+                                      @AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                      @RequestBody SubmitAppealRequest request) {
         Actor actor = studentActor(principal);
         var command = new SubmitAppealCommand(recordId, request.reason(), request.evidenceReference(), actor);
-        return ResponseEntity.ok(commandBus.execute(command));
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/attendance-records/{recordId}/adjust")
-    ResponseEntity<AuditorAdjustCommand.Result> auditorAdjust(@PathVariable UUID recordId,
-                                                              @AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                                              @RequestBody AuditorAdjustRequest request) {
+    ResponseEntity<Void> auditorAdjust(@PathVariable UUID recordId,
+                                       @AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                       @RequestBody AuditorAdjustRequest request) {
         Actor actor = auditorActor(principal);
         var command = new AuditorAdjustCommand(recordId, request.newStatus(), request.reason(),
                 request.evidenceReference(), actor);
-        return ResponseEntity.ok(commandBus.execute(command));
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
     }
 
     /**

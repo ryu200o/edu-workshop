@@ -13,5 +13,5 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 @FunctionalInterface
 public interface CommandBehavior {
 
-    Object handle(Command<?> command, BehaviorChain next);
+    void handle(Command command, BehaviorChain next);
 }

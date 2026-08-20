@@ -18,8 +18,5 @@ import java.util.UUID;
 public record UpdateWorkshopLatePolicyCommand(
         UUID workshopId,
         int lateThresholdSeconds
-) implements Command<UpdateWorkshopLatePolicyCommand.Result> {
-
-    public record Result(UUID workshopId, int lateThresholdSeconds) {
-    }
+) implements Command {
 }

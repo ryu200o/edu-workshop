@@ -94,6 +94,8 @@ class EventPublicationDurabilityTest {
     @Test
     void serializedEventContainsExpectedBusinessPayload() {
         UUID roomId = createRoom("F-201");
+        String oldName = jdbcTemplate.queryForObject(
+                "SELECT name FROM rooms WHERE id = ?", String.class, roomId);
         commandBus.execute(new RenameRoomCommand(roomId, "F-204"));
 
         String serialized = jdbcTemplate.queryForObject("""
@@ -105,7 +107,7 @@ class EventPublicationDurabilityTest {
                 String.class, RoomRenamedIntegrationEvent.class.getName(), "%" + roomId + "%");
 
         assertThat(serialized)
-                .contains("\"oldName\":\"F-201\"")
+                .contains("\"oldName\":\"" + oldName + "\"")
                 .contains("\"newName\":\"F-204\"");
     }
 
@@ -113,15 +115,18 @@ class EventPublicationDurabilityTest {
     void workshopSnapshotUpdatedAfterRename() {
         UUID roomId = createRoom("F-201");
 
-        CreateWorkshopCommand.Result created = commandBus.execute(new CreateWorkshopCommand(
+        commandBus.execute(new CreateWorkshopCommand(UUID.randomUUID(), 
                 "Intro to DDD", "workshop description",
                 Instant.parse("2026-09-01T09:00:00Z"), Instant.parse("2026-09-01T11:00:00Z"), 25));
 
-        commandBus.execute(new PlanWorkshopCommand(created.id(), roomId));
+        UUID workshopId = UUID.fromString(jdbcTemplate.queryForObject(
+                "SELECT id FROM workshops WHERE title = 'Intro to DDD'", String.class));
+
+        commandBus.execute(new PlanWorkshopCommand(workshopId, roomId));
 
         commandBus.execute(new RenameRoomCommand(roomId, "F-205"));
 
-        Workshop workshop = workshopRepository.loadById(WorkshopId.of(created.id())).orElseThrow();
+        Workshop workshop = workshopRepository.loadById(WorkshopId.of(workshopId)).orElseThrow();
         assertThat(workshop.roomReference()).isNotNull();
         assertThat(workshop.roomReference().roomNameSnapshot()).isEqualTo("F-205");
     }
@@ -139,7 +144,10 @@ class EventPublicationDurabilityTest {
 
     private UUID createRoom(String name) {
         int n = SEQUENCE.incrementAndGet();
-        return commandBus.execute(new CreateRoomCommand("B" + n, 2, n, name, 50)).id();
+        String uniqueName = name + "-" + n;
+        commandBus.execute(new CreateRoomCommand(UUID.randomUUID(), "B" + n, 2, n, uniqueName, 50));
+        return UUID.fromString(jdbcTemplate.queryForObject(
+                "SELECT id FROM rooms WHERE name = ?", String.class, uniqueName));
     }
 
     private <T> List<TargetEventPublication> findAll(Class<T> eventType, Predicate<T> filter) {

@@ -13,7 +13,7 @@ import java.util.function.Predicate;
  */
 public interface CommandPolicyResolver {
 
-    Optional<CommandPipeline> resolve(Command<?> command);
+    Optional<CommandPipeline> resolve(Command command);
 
     /**
      * A module's contribution: a matcher over command types and the pipeline those commands should run

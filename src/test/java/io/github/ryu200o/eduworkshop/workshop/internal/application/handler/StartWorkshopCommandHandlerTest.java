@@ -80,12 +80,9 @@ class StartWorkshopCommandHandlerTest {
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
-        StartWorkshopCommand.Result result = handler.handle(
+        handler.handle(
                 new StartWorkshopCommand(WORKSHOP_ID));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.startedAt()).isEqualTo(START);
-        assertThat(result.state()).isEqualTo("IN_PROGRESS");
         assertThat(workshop.state()).isEqualTo(WorkshopState.IN_PROGRESS);
 
         verify(workshopRepository).save(workshop);

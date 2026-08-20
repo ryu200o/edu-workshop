@@ -71,10 +71,8 @@ class UnplanWorkshopCommandHandlerTest {
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
-        UnplanWorkshopCommand.Result result = handler.handle(new UnplanWorkshopCommand(WORKSHOP_ID));
+        handler.handle(new UnplanWorkshopCommand(WORKSHOP_ID));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.updatedAt()).isEqualTo(NOW);
         assertThat(workshop.state()).isEqualTo(WorkshopState.DRAFT);
         assertThat(workshop.roomReference()).isNull();
         assertThat(workshop.hasRoomWarning()).isFalse();

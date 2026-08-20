@@ -85,7 +85,7 @@ class ChangeRoomCapacityCommandHandlerTest {
     }
 
     @Test
-    void sameCapacity_isIdempotent_noSave_returnsExistingUpdatedAt() {
+    void sameCapacity_isIdempotent_noSave() {
         Instant fixedUpdated = Instant.parse("2026-03-15T00:00:00Z");
         Room room = Room.reconstruct(
                 RoomId.of(UUID.randomUUID()), RoomName.of("F-201"),
@@ -93,21 +93,19 @@ class ChangeRoomCapacityCommandHandlerTest {
                 Instant.parse("2026-01-01T00:00:00Z"), fixedUpdated);
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
 
-        ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 50));
+        handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 50));
 
-        assertThat(response.oldCapacity()).isEqualTo(50);
-        assertThat(response.newCapacity()).isEqualTo(50);
-        assertThat(response.updatedAt()).isEqualTo(fixedUpdated);
+        assertThat(room.capacity()).isEqualTo(RoomCapacity.of(50));
         verify(roomRepository, never()).save(any());
     }
 
     @Test
-    void happyPath_passesGuards_mutatesPersistsAndReturnsResponse() {
+    void happyPath_passesGuards_mutatesAndPersists() {
         Room room = existingRoom();
         when(roomRepository.loadById(room.id())).thenReturn(Optional.of(room));
         when(roomRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ChangeRoomCapacityCommand.Result response = handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 80));
+        handler().handle(new ChangeRoomCapacityCommand(room.id().value(), 80));
 
         ArgumentCaptor<Room> captor = ArgumentCaptor.forClass(Room.class);
         verify(roomRepository).save(captor.capture());
@@ -117,9 +115,7 @@ class ChangeRoomCapacityCommandHandlerTest {
         ArgumentCaptor<List> eventCaptor = ArgumentCaptor.forClass(List.class);
         verify(roomDomainEventPublisher).publish(eventCaptor.capture());
         assertThat(eventCaptor.getValue()).anyMatch(e -> e instanceof RoomCapacityChanged);
-        assertThat(response.id()).isEqualTo(room.id().value());
-        assertThat(response.oldCapacity()).isEqualTo(50);
-        assertThat(response.newCapacity()).isEqualTo(80);
+        assertThat(saved.id()).isEqualTo(room.id());
     }
 
     @Test

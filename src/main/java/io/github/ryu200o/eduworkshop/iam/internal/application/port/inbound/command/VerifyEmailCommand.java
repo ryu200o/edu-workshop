@@ -8,8 +8,5 @@ import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
  *
  * @param token the raw one-time token received at registration
  */
-public record VerifyEmailCommand(String token) implements Command<VerifyEmailCommand.Result> {
-
-    public record Result() {
-    }
+public record VerifyEmailCommand(String token) implements Command {
 }

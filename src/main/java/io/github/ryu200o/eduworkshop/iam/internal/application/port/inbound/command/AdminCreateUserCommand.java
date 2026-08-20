@@ -11,22 +11,20 @@ import java.util.UUID;
  * true} and a temporary password supplied by the admin. The 48h temporary-password TTL is an
  * Application-layer policy deferred for a later slice (plan §8 risk #6) — the aggregate only enforces
  * the mcp gate. Base role {@code USER} is always present; {@code roles} may carry extra global roles.
+ * The {@code userId} is caller-generated (ADR 0021 Caller-Generated ID): the inbound adapter assigns
+ * it and the handler persists the aggregate under that id.
  *
+ * @param userId           the caller-generated aggregate id
  * @param email            the login email (LOWER-normalized by the domain)
  * @param fullName         the display name
  * @param temporaryPassword the temporary password the account starts with (must not be blank)
  * @param roles            optional extra global roles (e.g. ADMIN, PLANNER); {@code USER} is always kept
  */
 public record AdminCreateUserCommand(
+        UUID userId,
         String email,
         String fullName,
         String temporaryPassword,
         Set<String> roles
-) implements Command<AdminCreateUserCommand.Result> {
-
-    /**
-     * @param userId the id minted for the new account
-     */
-    public record Result(UUID userId) {
-    }
+) implements Command {
 }

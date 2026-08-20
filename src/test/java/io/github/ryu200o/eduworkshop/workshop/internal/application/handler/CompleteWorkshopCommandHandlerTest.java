@@ -81,12 +81,9 @@ class CompleteWorkshopCommandHandlerTest {
         given(workshopRepository.loadById(WorkshopId.of(WORKSHOP_ID)))
                 .willReturn(Optional.of(workshop));
 
-        CompleteWorkshopCommand.Result result = handler.handle(
+        handler.handle(
                 new CompleteWorkshopCommand(WORKSHOP_ID));
 
-        assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-        assertThat(result.completedAt()).isEqualTo(END);
-        assertThat(result.state()).isEqualTo("COMPLETED");
         assertThat(workshop.state()).isEqualTo(WorkshopState.COMPLETED);
 
         verify(workshopRepository).save(workshop);

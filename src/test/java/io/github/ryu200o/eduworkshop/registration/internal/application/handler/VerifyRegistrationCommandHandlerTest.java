@@ -20,6 +20,7 @@ import io.github.ryu200o.eduworkshop.workshop.contract.WorkshopStateContract;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -88,13 +89,14 @@ class VerifyRegistrationCommandHandlerTest {
         when(registrationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         stubOpenWorkshop();
 
-        VerifyRegistrationCommand.Result result = handler().handle(
-                new VerifyRegistrationCommand(id.value(), VERIFIER_ID, VERIFIER_ROLE));
+        handler().handle(new VerifyRegistrationCommand(id.value(), VERIFIER_ID, VERIFIER_ROLE));
 
-        assertThat(result.registrationId()).isEqualTo(id.value());
-        assertThat(result.verifiedAt()).isEqualTo(NOW);
+        ArgumentCaptor<Registration> savedCaptor = ArgumentCaptor.forClass(Registration.class);
+        verify(registrationRepository).save(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().id()).isEqualTo(id);
+        assertThat(savedCaptor.getValue().state()).isEqualTo(RegistrationState.VERIFIED);
+        assertThat(savedCaptor.getValue().verifiedAt()).isEqualTo(NOW);
 
-        verify(registrationRepository).save(argThat(r -> r.state() == RegistrationState.VERIFIED));
         verify(registrationDomainEventPublisher).publish(argThat(events -> events.size() == 2
                 && events.get(1) instanceof RegistrationVerified));
     }
@@ -106,10 +108,11 @@ class VerifyRegistrationCommandHandlerTest {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID))
                 .thenReturn(Optional.of(workshop(WorkshopStateContract.IN_PROGRESS)));
 
-        VerifyRegistrationCommand.Result result = handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE));
+        handler().handle(new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE));
 
-        assertThat(result.verifiedAt()).isEqualTo(NOW);
+        ArgumentCaptor<Registration> savedCaptor = ArgumentCaptor.forClass(Registration.class);
+        verify(registrationRepository).save(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().verifiedAt()).isEqualTo(NOW);
         verify(registrationDomainEventPublisher).publish(any());
     }
 
@@ -224,10 +227,11 @@ class VerifyRegistrationCommandHandlerTest {
         when(registrationRepository.loadById(registration.id())).thenReturn(Optional.of(registration));
         stubOpenWorkshop();
 
-        VerifyRegistrationCommand.Result result = handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE));
+        handler().handle(new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE));
 
-        assertThat(result.verifiedAt()).isEqualTo(NOW.minusSeconds(300));
+        ArgumentCaptor<Registration> savedCaptor = ArgumentCaptor.forClass(Registration.class);
+        verify(registrationRepository).save(savedCaptor.capture());
+        assertThat(savedCaptor.getValue().verifiedAt()).isEqualTo(NOW.minusSeconds(300));
         verify(registrationDomainEventPublisher).publish(argThat(events -> events.isEmpty()));
     }
 }

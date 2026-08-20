@@ -28,7 +28,7 @@ import java.util.List;
  */
 @Component
 class UpdateWorkshopScheduleCommandHandler
-        implements CommandHandler<UpdateWorkshopScheduleCommand, UpdateWorkshopScheduleCommand.Result> {
+        implements CommandHandler<UpdateWorkshopScheduleCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -47,7 +47,7 @@ class UpdateWorkshopScheduleCommandHandler
 
     @Override
     @Transactional
-    public UpdateWorkshopScheduleCommand.Result handle(UpdateWorkshopScheduleCommand command) {
+    public void handle(UpdateWorkshopScheduleCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -63,11 +63,5 @@ class UpdateWorkshopScheduleCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new UpdateWorkshopScheduleCommand.Result(
-                workshop.id().value(),
-                workshop.startTime(),
-                workshop.endTime(),
-                workshop.updatedAt());
     }
 }

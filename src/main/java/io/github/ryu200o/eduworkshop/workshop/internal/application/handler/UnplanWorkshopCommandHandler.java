@@ -23,7 +23,7 @@ import java.time.Instant;
  */
 @Component
 class UnplanWorkshopCommandHandler
-        implements CommandHandler<UnplanWorkshopCommand, UnplanWorkshopCommand.Result> {
+        implements CommandHandler<UnplanWorkshopCommand> {
 
     private final WorkshopRepository workshopRepository;
     private final WorkshopDomainEventPublisher workshopDomainEventPublisher;
@@ -39,7 +39,7 @@ class UnplanWorkshopCommandHandler
 
     @Override
     @Transactional
-    public UnplanWorkshopCommand.Result handle(UnplanWorkshopCommand command) {
+    public void handle(UnplanWorkshopCommand command) {
         Instant now = Instant.now(clock);
         WorkshopId workshopId = WorkshopId.of(command.workshopId());
 
@@ -52,7 +52,5 @@ class UnplanWorkshopCommandHandler
 
         workshopDomainEventPublisher.publish(workshop.recordedEvents());
         workshop.clearDomainEvents();
-
-        return new UnplanWorkshopCommand.Result(workshop.id().value(), workshop.updatedAt());
     }
 }

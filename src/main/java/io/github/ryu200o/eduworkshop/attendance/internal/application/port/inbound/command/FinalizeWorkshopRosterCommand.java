@@ -3,7 +3,6 @@ package io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbou
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -14,13 +13,5 @@ import java.util.UUID;
 public record FinalizeWorkshopRosterCommand(
         UUID workshopId,
         Actor actor
-) implements Command<FinalizeWorkshopRosterCommand.Result> {
-
-    public record Result(
-            UUID workshopId,
-            int finalizedRecordsCount,
-            String state,
-            Instant finalizedAt
-    ) {
-    }
+) implements Command {
 }

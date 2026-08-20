@@ -28,7 +28,7 @@ public record MarkAttendanceCommand(
         UUID workshopId,
         List<MarkItem> items,
         Actor actor
-) implements Command<MarkAttendanceCommand.Result> {
+) implements Command {
 
     public MarkAttendanceCommand {
         if (workshopId == null) {
@@ -57,8 +57,5 @@ public record MarkAttendanceCommand(
             AttendanceResult status,
             String note
     ) {
-    }
-
-    public record Result(int processedCount) {
     }
 }

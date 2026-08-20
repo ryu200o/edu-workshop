@@ -43,8 +43,8 @@ class IamSelfController {
     }
 
     @PutMapping("/profile")
-    ResponseEntity<MeView> updateProfile(@AuthenticationPrincipal AuthenticatedPrincipal principal,
-                                         @RequestBody Map<String, Object> body) {
+    ResponseEntity<Void> updateProfile(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                       @RequestBody Map<String, Object> body) {
         if (body.containsKey("email") || body.containsKey("password")) {
             throw new IllegalArgumentException(
                     "email and password are not editable here; change the password via "
@@ -56,23 +56,22 @@ class IamSelfController {
                 asString(body.get("phoneNumber")),
                 asString(body.get("studentCode")),
                 asString(body.get("avatarUrl"))));
-        return ResponseEntity.ok(queryBus.execute(new GetMeQuery(principal.userId())));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/change-password")
-    ResponseEntity<ChangePasswordCommand.Result> changePassword(
+    ResponseEntity<Void> changePassword(
             @AuthenticationPrincipal AuthenticatedPrincipal principal,
             @RequestBody ChangePasswordRequest request) {
-        ChangePasswordCommand.Result result = commandBus.execute(new ChangePasswordCommand(
+        commandBus.execute(new ChangePasswordCommand(
                 principal.userId(), request.currentPassword(), request.newPassword()));
-        return ResponseEntity.ok(result);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/logout-all")
-    ResponseEntity<LogoutAllCommand.Result> logoutAll(
-            @AuthenticationPrincipal AuthenticatedPrincipal principal) {
-        LogoutAllCommand.Result result = commandBus.execute(new LogoutAllCommand(principal.userId()));
-        return ResponseEntity.ok(result);
+    ResponseEntity<Void> logoutAll(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        commandBus.execute(new LogoutAllCommand(principal.userId()));
+        return ResponseEntity.noContent().build();
     }
 
     private static String asString(Object value) {

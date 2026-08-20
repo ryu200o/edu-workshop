@@ -20,7 +20,7 @@ import java.time.Instant;
  * Profile changes are silent — the domain records no event (ADR 0020: profile is not security state).
  */
 @Component
-class UpdateProfileCommandHandler implements CommandHandler<UpdateProfileCommand, UpdateProfileCommand.Result> {
+class UpdateProfileCommandHandler implements CommandHandler<UpdateProfileCommand> {
 
     private final UserRepository userRepository;
     private final Clock clock;
@@ -32,7 +32,7 @@ class UpdateProfileCommandHandler implements CommandHandler<UpdateProfileCommand
 
     @Override
     @Transactional
-    public UpdateProfileCommand.Result handle(UpdateProfileCommand command) {
+    public void handle(UpdateProfileCommand command) {
         Instant now = Instant.now(clock);
         UserId userId = UserId.of(command.userId());
         User user = userRepository.loadById(userId)
@@ -40,6 +40,5 @@ class UpdateProfileCommandHandler implements CommandHandler<UpdateProfileCommand
         user.updateProfile(command.fullName(), command.phoneNumber(),
                 command.studentCode(), command.avatarUrl(), now);
         userRepository.save(user);
-        return new UpdateProfileCommand.Result();
     }
 }

@@ -11,8 +11,5 @@ import java.util.UUID;
  *
  * @param userId the authenticated caller
  */
-public record LogoutAllCommand(UUID userId) implements Command<LogoutAllCommand.Result> {
-
-    public record Result() {
-    }
+public record LogoutAllCommand(UUID userId) implements Command {
 }

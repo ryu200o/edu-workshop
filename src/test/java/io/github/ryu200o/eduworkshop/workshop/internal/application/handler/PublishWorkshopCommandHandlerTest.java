@@ -128,11 +128,9 @@ class PublishWorkshopCommandHandlerTest {
             given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(ROOM_ID), any(Instant.class), any(Instant.class)))
                     .willReturn(List.of(workshop));
 
-            PublishWorkshopCommand.Result result = handler.handle(
+            handler.handle(
                     new PublishWorkshopCommand(WORKSHOP_ID));
 
-            assertThat(result.id()).isEqualTo(WORKSHOP_ID);
-            assertThat(result.updatedAt()).isEqualTo(NOW);
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
 
             verify(workshopRepository).save(workshop);
@@ -186,10 +184,9 @@ class PublishWorkshopCommandHandlerTest {
             given(workshopRepository.loadPublishedAndPlannedOverlappingWithLock(eq(ROOM_ID), any(Instant.class), any(Instant.class)))
                     .willReturn(List.of(workshop, planned));
 
-            PublishWorkshopCommand.Result result = handler.handle(
+            handler.handle(
                     new PublishWorkshopCommand(WORKSHOP_ID));
 
-            assertThat(result.id()).isEqualTo(WORKSHOP_ID);
             assertThat(workshop.state()).isEqualTo(WorkshopState.PUBLISHED);
             // Overlapping PLANNED workshop was evicted back to DRAFT (keeps its room — UX upgrade).
             assertThat(planned.state()).isEqualTo(WorkshopState.DRAFT);
