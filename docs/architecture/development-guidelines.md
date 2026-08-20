@@ -54,39 +54,44 @@
 ## 2. Luồng Ghi (Command) — Command/Write Side
 
 ### 2.1 Shared contract (dùng chung, nằm trong Shared Kernel)
+> **Strict CQS (ADR 0021):** `Command` là **Marker Interface** (không generic), `CommandHandler.handle`
+> trả về **`void`**. Không có `Result` trả về từ command.
+
 ```java
-public interface Command<R> {}
-public interface CommandHandler<C extends Command<R>, R> {
-    R handle(C command);
+public interface Command {}                    // Marker interface, không generic
+public interface CommandHandler<C extends Command> {
+    void handle(C command);                    // void — không trả dữ liệu
+}
+public interface CommandBus {
+    void execute(Command command);            // void
 }
 ```
 
-### 2.2 Command DTO = record + nested `Result` (Hybrid CQS — ADR 0004)
-> **Pattern thực chiến:** `Result` là `public static record` **nested trong** Command (không tạo file
-> `*Result.java` riêng). Một Command ↔ một Result (1-1), giữ contract trong cùng 1 file.
+### 2.2 Command DTO = record chứa raw input (Strict CQS — ADR 0021)
+> **Không còn nested `Result`.** Command chỉ mang **raw input**; validation/normalization do Domain VO
+> thực hiện bên trong handler. Handler `void` — Client không nhận payload, tự query (GET) theo `Location`
+> khi cần. Với các lệnh tạo mới, id là **Caller-Generated** (adapter sinh `UUID` đẩy vào command).
 
 ```java
-// port.inbound.command.RenameRoomCommand — chỉ chứa raw input, validation để ở domain VO bên trong handler
+// port.inbound.command.RenameRoomCommand — chỉ raw input, KHÔNG Result
 public record RenameRoomCommand(
         UUID roomId,
         String newName
-) implements Command<RenameRoomCommand.Result> {
+) implements Command {}
 
-    // Kết quả ghi nhẹ: chỉ mang trường bị ảnh hưởng trực tiếp (id, old/new name, thời điểm)
-    public record Result(UUID id, String oldName, String newName, Instant updatedAt) {}
-}
-
-// port.inbound.command.CreateRoomCommand — lưu ý có trường capacity + code (int) + name (free-form)
-public record CreateRoomCommand(String building, int floor, int code, String name, int capacity)
-        implements Command<CreateRoomCommand.Result> {
-    public record Result(UUID id, String name) {}
-}
+// port.inbound.command.CreateRoomCommand — có trường capacity + code (int) + name (free-form);
+// roomId là caller-generated (ADR 0021 Caller-Generated ID)
+public record CreateRoomCommand(
+        UUID roomId,
+        String building,
+        int floor,
+        int code,
+        String name,
+        int capacity
+) implements Command {}
 
 // port.inbound.command.ChangeRoomCodeCommand — đổi code (int) SILENT, không event
-public record ChangeRoomCodeCommand(UUID roomId, int newCode)
-        implements Command<ChangeRoomCodeCommand.Result> {
-    public record Result(UUID id, int oldCode, int newCode, Instant updatedAt) {}
-}
+public record ChangeRoomCodeCommand(UUID roomId, int newCode) implements Command {}
 ```
 
 ### 2.3 Out Port — ghi (RoomRepository)
@@ -102,15 +107,17 @@ public interface RoomRepository {
 ```
 
 ### 2.4 Handler (package-private, nằm trong `application/handler`)
+> Handler luôn **`void`** (Strict CQS). Không `return` Result — Client query lại nếu cần đọc (OQ-8).
+
 ```java
 @Transactional
 @Component
-class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, RenameRoomCommand.Result> {
+class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand> {
 
     private final RoomRepository roomRepository;
 
     @Override
-    public RenameRoomCommand.Result handle(RenameRoomCommand command) {
+    public void handle(RenameRoomCommand command) {
         // 1. Load aggregate (write repository)
         Room room = roomRepository.loadById(command.roomId())
                 .orElseThrow(() -> new RoomNotFoundException(command.roomId().toString()));
@@ -120,20 +127,13 @@ class RenameRoomCommandHandler implements CommandHandler<RenameRoomCommand, Rena
 
         // 3. Idempotency: cùng name => no-op, không gate/persist
         if (candidate.equals(room.name())) {
-            return toResult(room, room.name().asString());
+            return;
         }
 
         // 4. Domain mutation (changeName ghi RoomRenamedEvent) rồi persist.
         //    Tính duy nhất name do AGGREGATE tự check qua uniquenessPolicy (ADR 0005) + race gate ở adapter.
-        String oldName = room.name().asString();
         room.changeName(command.newName(), uniquenessPolicy);
-        Room saved = roomRepository.save(room);
-        return toResult(saved, oldName);
-    }
-
-    private static RenameRoomCommand.Result toResult(Room room, String oldName) {
-        return new RenameRoomCommand.Result(
-                room.id(), oldName, room.name().asString(), room.updatedAt());
+        roomRepository.save(room);
     }
 }
 ```
@@ -197,19 +197,21 @@ never evaluates the invariant itself, never calls `exists*`:
 ```java
 @Transactional
 @Component
-class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand, CreateRoomCommand.Result> {
+class CreateRoomCommandHandler implements CommandHandler<CreateRoomCommand> {
     private final RoomRepository roomRepository;
     private final RoomUniquenessPolicy uniquenessPolicy;
 
     @Override
-    public CreateRoomCommand.Result handle(CreateRoomCommand c) {
+    public void handle(CreateRoomCommand c) {
         RoomName name = RoomName.of(c.name());              // VO self-defense (local invariant)
         RoomLocation location = RoomLocation.of(c.building(), c.floor());
         if (c.code() <= 0) throw new RoomDomainException("code must be > 0");
 
-        Room room = Room.create(name, location, c.code(), c.capacity(), uniquenessPolicy); // Domain owns invariant
-        Room saved = roomRepository.save(room);
-        return new CreateRoomCommand.Result(saved.id().value(), saved.name().asString());
+        // roomId là caller-generated (ADR 0021): adapter sinh UUID đẩy vào command
+        Room room = Room.create(RoomId.of(c.roomId()), name, location, c.code(), c.capacity(),
+                uniquenessPolicy); // Domain owns invariant
+        roomRepository.save(room);
+        // void — controller trả 201 + Location: /api/v1/rooms/{c.roomId()}
     }
 }
 ```
@@ -424,21 +426,24 @@ RoomReference roomRef = RoomReference.of(snapshot.roomId(), snapshot.name(), loc
 class RoomCommandController {
     private final CommandBus commandBus;                 // CHỈ CommandBus
     @PostMapping
-    ResponseEntity<CreateRoomCommand.Result> create(@RequestBody CreateRoomRequest request) {
+    ResponseEntity<Void> create(@RequestBody CreateRoomRequest request) {
+        UUID roomId = UUID.randomUUID();               // Caller-Generated ID (ADR 0021)
         var command = new CreateRoomCommand(            // var RÕ RÀNG, không new() trong execute()
-                request.building(), request.floor(), request.code(), request.name(), request.capacity());
-        CreateRoomCommand.Result result = commandBus.execute(command);
-        return ResponseEntity.ok(result);
+                roomId, request.building(), request.floor(), request.code(), request.name(), request.capacity());
+        commandBus.execute(command);                    // void — KHÔNG nhận Result
+        return ResponseEntity.created(URI.create("/api/v1/rooms/" + roomId)).build(); // 201 + Location
     }
     @PutMapping("/{id}/rename")
-    ResponseEntity<RenameRoomCommand.Result> rename(@PathVariable UUID id, @RequestBody RenameRoomRequest request) {
+    ResponseEntity<Void> rename(@PathVariable UUID id, @RequestBody RenameRoomRequest request) {
         var command = new RenameRoomCommand(id, request.newName());
-        return ResponseEntity.ok(commandBus.execute(command));
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();       // 204 — mutation
     }
     @PutMapping("/{id}/code")
-    ResponseEntity<ChangeRoomCodeCommand.Result> changeCode(@PathVariable UUID id, @RequestBody ChangeRoomCodeRequest request) {
+    ResponseEntity<Void> changeCode(@PathVariable UUID id, @RequestBody ChangeRoomCodeRequest request) {
         var command = new ChangeRoomCodeCommand(id, request.newCode());
-        return ResponseEntity.ok(commandBus.execute(command));
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
     }
     record CreateRoomRequest(String building, int floor, int code, String name, int capacity) {}
     record RenameRoomRequest(String newName) {}
@@ -515,7 +520,7 @@ class RoomExceptionAdvice {
 - [ ] Mọi class trong `internal/` là package-private (handler, port impl, mapper, facade impl...), chỉ API công khai (`*ExposeAPI`, `contract/*`) là `public`.
 - [ ] Contract DTO dùng chung giữa các module nằm ở `contract/` (module root), **không** trong `internal/` (ADR 0010).
 - [ ] Module Facade (`internal/facade/`): implementation package-private, gọi trực tiếp Application Ports, không qua Command/Query Bus (ADR 0010).
-- [ ] Command có nested `Result`; Query View nằm trong `port.inbound.query.view`. **Không còn** `XResponse` chung.
+- [ ] Command là `Marker Interface` (không generic), handler `void handle(C command)`; **không** nested `Result`. Query View nằm trong `port.inbound.query.view`. **Không còn** `XResponse` chung. Tạo mới trả `201 + Location` (Caller-Generated ID); mutation trả `204`.
 - [ ] Driving adapter: `RoomCommandController` (CommandBus) + `RoomQueryController` (QueryBus) tách rõ;
       `var x = new XCommand(...)` trước `execute`; request body qua nested `XxxRequest`.
 - [ ] Exception nghiệp vụ tập trung ở `*ExceptionAdvice` scoped `assignableTypes`, nằm trong module.

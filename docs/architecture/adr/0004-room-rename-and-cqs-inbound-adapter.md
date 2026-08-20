@@ -1,10 +1,12 @@
 # ADR 0004: Room Rename Use Case & CQS Driving-Adapter Hardening (Hybrid CQS)
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0021 (Strict CQS)
 - **Date:** 2026-07-13
 - **Deciders:** Lead Engineer / Architecture Guild
 - **Related:** ADR 0001, ADR 0002, ADR 0003, `AGENTS.md`, `docs/architecture/development-guidelines.md`,
   `docs/db/database.md`
+- **Superseded by:** [ADR 0021 — Strict Command-Query Separation (CQS) Architecture](./0021-strict-command-query-separation.md)
+  (toàn bộ Domain Command chuyển `void`; Hybrid CQS / nested `Result` không còn là chuẩn).
 
 ## Context
 
