@@ -79,6 +79,7 @@ class RegistrationCapacityConcurrencyIntegrationTest {
                 .POST(body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body));
         withAuth(headers).forEach(builder::header);
+        builder.header("Idempotency-Key", UUID.randomUUID().toString());
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 

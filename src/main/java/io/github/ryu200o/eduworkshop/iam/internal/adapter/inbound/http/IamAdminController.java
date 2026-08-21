@@ -13,6 +13,7 @@ import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.query
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.query.view.UserSummaryView;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.IdempotentCommand;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -47,6 +48,7 @@ class IamAdminController {
         this.queryBus = queryBus;
     }
 
+    @IdempotentCommand
     @PostMapping
     ResponseEntity<Void> createUser(@RequestBody CreateUserRequest request) {
         UUID userId = UUID.randomUUID();

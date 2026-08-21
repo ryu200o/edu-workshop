@@ -60,6 +60,7 @@ class IamAuthControllerE2ETest {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -70,6 +71,7 @@ class IamAuthControllerE2ETest {
                 .uri(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + bearerToken)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());

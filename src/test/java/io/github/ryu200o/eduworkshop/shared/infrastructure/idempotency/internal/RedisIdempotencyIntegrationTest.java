@@ -27,10 +27,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.IdempotentCommand;
-import io.github.ryu200o.eduworkshop.shared.test.EmbeddedRedisConfiguration;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({EmbeddedRedisConfiguration.class, RedisIdempotencyIntegrationTest.IdempotencyTestConfig.class})
+@Import({RedisIdempotencyIntegrationTest.IdempotencyTestConfig.class})
 class RedisIdempotencyIntegrationTest {
 
     private static final String BASE = "/test/idempotent";
@@ -49,8 +48,6 @@ class RedisIdempotencyIntegrationTest {
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.data.redis.host", () -> "localhost");
-        registry.add("spring.data.redis.port", () -> String.valueOf(EmbeddedRedisConfiguration.getPort()));
         registry.add("app.iam.security.enabled", () -> "false");
         registry.add("app.iam.security-enabled", () -> "false");
     }

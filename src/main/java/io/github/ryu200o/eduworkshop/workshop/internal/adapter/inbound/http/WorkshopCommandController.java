@@ -14,6 +14,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopInfoCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopLatePolicyCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.UpdateWorkshopScheduleCommand;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.IdempotentCommand;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,6 +45,7 @@ class WorkshopCommandController {
         this.commandBus = commandBus;
     }
 
+    @IdempotentCommand
     @PostMapping
     ResponseEntity<Void> create(@RequestBody CreateWorkshopRequest request) {
         UUID workshopId = UUID.randomUUID();

@@ -92,6 +92,7 @@ class FacilityOpsQueryControllerE2ETest {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/rooms"))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + bearer)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .POST(HttpRequest.BodyPublishers.ofString(
                         "{\"building\": \"%s\", \"floor\": %d, \"code\": %d, \"name\": \"%s\", \"capacity\": %d}"
                                 .formatted(room.get("building"), room.get("floor"), room.get("code"),
