@@ -11,7 +11,7 @@ import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceResult;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.shared.security.AuthenticatedPrincipal;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.IdempotentCommand;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.Idempotent;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -56,7 +56,7 @@ class AttendanceCommandController {
         return ResponseEntity.noContent().build();
     }
 
-    @IdempotentCommand
+    @Idempotent
     @PostMapping("/workshops/{workshopId}/attendance/check-in")
     ResponseEntity<Void> selfCheckIn(@PathVariable UUID workshopId,
                                      @AuthenticationPrincipal AuthenticatedPrincipal principal,
@@ -70,7 +70,7 @@ class AttendanceCommandController {
         return ResponseEntity.noContent().build();
     }
 
-    @IdempotentCommand
+    @Idempotent
     @PostMapping("/attendance-records/{recordId}/appeal")
     ResponseEntity<Void> submitAppeal(@PathVariable UUID recordId,
                                       @AuthenticationPrincipal AuthenticatedPrincipal principal,

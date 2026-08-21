@@ -17,33 +17,33 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.IdempotentCommand;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.Idempotent;
 import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.internal.exception.ConcurrentIdempotencyException;
 import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.internal.exception.MissingIdempotencyKeyException;
 import io.github.ryu200o.eduworkshop.shared.security.AuthenticatedPrincipal;
 
 /**
- * Ingress idempotency guard (ADR 0022). Intercepts every {@code @IdempotentCommand} controller
+ * Ingress idempotency guard (ADR 0022). Intercepts every {@code @Idempotent} controller
  * method: reserves a Redis key, executes once, replays on duplicate keys, and removes the key on
  * failure so clients can retry safely.
  */
 @Aspect
 @Component
 @Order(1)
-class IdempotentCommandAspect {
+class IdempotentAspect {
 
-    private static final Logger log = LoggerFactory.getLogger(IdempotentCommandAspect.class);
+    private static final Logger log = LoggerFactory.getLogger(IdempotentAspect.class);
     private static final UUID NIL_PRINCIPAL = new UUID(0L, 0L);
     private static final int MAX_KEY_LENGTH = 64;
 
     private final RedisIdempotencyStorageService storageService;
 
-    IdempotentCommandAspect(RedisIdempotencyStorageService storageService) {
+    IdempotentAspect(RedisIdempotencyStorageService storageService) {
         this.storageService = storageService;
     }
 
     @Around("@annotation(cmd)")
-    public Object guard(ProceedingJoinPoint pjp, IdempotentCommand cmd) throws Throwable {
+    public Object guard(ProceedingJoinPoint pjp, Idempotent cmd) throws Throwable {
         HttpServletRequest request = currentRequest();
         String idempotencyKey = request.getHeader("Idempotency-Key");
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > MAX_KEY_LENGTH) {

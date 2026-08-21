@@ -8,11 +8,11 @@ import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.comma
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.ResetPasswordCommand;
 import io.github.ryu200o.eduworkshop.iam.internal.application.port.inbound.command.VerifyEmailCommand;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
-import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.IdempotentCommand;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.Idempotent;
 
 import java.net.URI;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -38,7 +38,7 @@ class IamAuthController {
         this.authTokenUseCase = authTokenUseCase;
     }
 
-    @IdempotentCommand
+    @Idempotent
     @PostMapping("/register")
     ResponseEntity<Void> register(@RequestBody RegisterRequest request) {
         UUID userId = UUID.randomUUID();

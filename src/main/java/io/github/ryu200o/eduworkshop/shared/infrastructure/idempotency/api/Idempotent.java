@@ -13,6 +13,6 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface IdempotentCommand {
+public @interface Idempotent {
     long ttlMinutes() default 1440;
 }

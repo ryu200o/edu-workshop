@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.IdempotentCommand;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.Idempotent;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import({RedisIdempotencyIntegrationTest.IdempotencyTestConfig.class})
@@ -141,7 +141,7 @@ class RedisIdempotencyIntegrationTest {
             this.createCounter = createCounter;
         }
 
-        @IdempotentCommand
+        @Idempotent
         @PostMapping("/create")
         ResponseEntity<Void> create() {
             createCounter.incrementAndGet();
@@ -149,13 +149,13 @@ class RedisIdempotencyIntegrationTest {
             return ResponseEntity.created(location).build();
         }
 
-        @IdempotentCommand
+        @Idempotent
         @PostMapping("/nocontent")
         ResponseEntity<Void> noContent() {
             return ResponseEntity.noContent().build();
         }
 
-        @IdempotentCommand
+        @Idempotent
         @PostMapping("/fail")
         ResponseEntity<Void> fail() {
             throw new IllegalStateException("boom");

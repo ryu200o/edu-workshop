@@ -51,7 +51,7 @@ import java.lang.annotation.Target;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface IdempotentCommand {
+public @interface Idempotent {
     long ttlMinutes() default 1440; // Mặc định 24 giờ (1440 phút)
 }
 
@@ -157,9 +157,9 @@ Toàn bộ triển khai được đóng gói gọn trong module `shared`, giữ 
 ```
 shared/infrastructure/idempotency/
 ├── api/
-│   └── IdempotentCommand.java              # [PUBLIC] Annotation cho Controller
+│   └── Idempotent.java              # [PUBLIC] Annotation cho Controller
 └── internal/
-    ├── IdempotentCommandAspect.java        # [PACKAGE-PRIVATE] Spring AOP Aspect
+    ├── IdempotentAspect.java        # [PACKAGE-PRIVATE] Spring AOP Aspect
     ├── RedisIdempotencyStorageService.java # [PACKAGE-PRIVATE] Thao tác StringRedisTemplate
     ├── IdempotencyMetadata.java            # [PACKAGE-PRIVATE] Record đóng gói JSON status/location
     └── exception/
