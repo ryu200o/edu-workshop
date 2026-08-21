@@ -12,6 +12,7 @@ import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -44,7 +45,12 @@ import java.util.List;
  * — it never reaches into an outbound port directly. Every per-workshop failure is caught and logged so
  * a single bad row never interrupts the {@code @Scheduled} run. Multi-instance deployment (ShedLock /
  * advisory lock) is out of scope for Epic 1 — single-instance assumption only.</p>
+ *
+ * <p>The bean is gated by {@code app.workshop.lifecycle.enabled} so deployments (and the test suite,
+ * which sets it to {@code false}) can disable the periodic scanner entirely — when the property is
+ * absent or {@code true} the bean is created and the {@code @Scheduled} scan runs.</p>
  */
+@ConditionalOnProperty(name = "app.workshop.lifecycle.enabled", havingValue = "true", matchIfMissing = true)
 @Component
 class WorkshopLifecycleJob {
 
