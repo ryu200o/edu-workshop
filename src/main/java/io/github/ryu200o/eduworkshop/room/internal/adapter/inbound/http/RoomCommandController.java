@@ -10,7 +10,7 @@ import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.comm
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.RelocateRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.RenameRoomCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.ScheduleRoomMaintenanceCommand;
-import org.springframework.http.HttpStatus;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.Idempotent;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,6 +39,7 @@ class RoomCommandController {
         this.commandBus = commandBus;
     }
 
+    @Idempotent
     @PostMapping
     ResponseEntity<Void> create(@RequestBody CreateRoomRequest request) {
         UUID roomId = UUID.randomUUID();
@@ -96,6 +97,7 @@ class RoomCommandController {
         return ResponseEntity.noContent().build();
     }
 
+    @Idempotent
     @PostMapping("/{id}/maintenance-schedules")
     ResponseEntity<Void> scheduleMaintenance(
             @PathVariable UUID id, @RequestBody ScheduleMaintenanceRequest request) {

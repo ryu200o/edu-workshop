@@ -182,6 +182,9 @@ public final class IamE2eTestSupport {
         } else {
             builder.method(method, HttpRequest.BodyPublishers.noBody());
         }
+        if (!"GET".equals(method) && !"HEAD".equals(method)) {
+            builder.header("Idempotency-Key", UUID.randomUUID().toString());
+        }
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 

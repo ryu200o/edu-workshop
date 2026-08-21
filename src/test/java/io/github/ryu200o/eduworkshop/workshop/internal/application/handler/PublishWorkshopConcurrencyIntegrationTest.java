@@ -74,6 +74,7 @@ class PublishWorkshopConcurrencyIntegrationTest {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + operatorBearer)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
                 .POST(body == null ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(body))
                 .build();

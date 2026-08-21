@@ -5,8 +5,8 @@ import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbo
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.VerifyRegistrationCommand;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.shared.security.AuthenticatedPrincipal;
+import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.Idempotent;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,6 +40,7 @@ class RegistrationCommandController {
         this.qrResolver = qrResolver;
     }
 
+    @Idempotent
     @PostMapping
     ResponseEntity<Void> register(@AuthenticationPrincipal AuthenticatedPrincipal principal,
                                   @RequestBody RegisterWorkshopRequest request) {
