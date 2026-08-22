@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceResult;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
@@ -27,15 +26,15 @@ import java.util.UUID;
 public record MarkAttendanceCommand(
         UUID workshopId,
         List<MarkItem> items,
-        Actor actor
+        UUID actorId
 ) implements Command {
 
     public MarkAttendanceCommand {
         if (workshopId == null) {
             throw new IllegalArgumentException("workshopId must not be null.");
         }
-        if (actor == null) {
-            throw new IllegalArgumentException("actor must not be null.");
+        if (actorId == null) {
+            throw new IllegalArgumentException("actorId must not be null.");
         }
         if (items == null) {
             throw new IllegalArgumentException("items must not be null.");

@@ -1,12 +1,13 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.RegistrationNotVerifiedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotInSessionException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.MarkAttendanceCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceRecordRepository;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecordId;
@@ -74,9 +75,7 @@ class MarkAttendanceCommandHandler implements CommandHandler<MarkAttendanceComma
         if (workshop.state() != WorkshopStateContract.IN_PROGRESS) {
             throw new WorkshopNotInSessionException(workshopId, workshop.state().name());
         }
-        if (command.actor().role() != ActorRole.TRAINER) {
-            throw new AttendanceRoleViolationException(command.actor().role().name(), "mark attendance");
-        }
+        Actor actor = new Actor(new ActorId(command.actorId()), ActorRole.TRAINER);
 
         List<UUID> unverified = command.items().stream()
                 .map(MarkAttendanceCommand.MarkItem::studentId)
@@ -91,7 +90,7 @@ class MarkAttendanceCommandHandler implements CommandHandler<MarkAttendanceComma
             AttendanceRecord record = attendanceRecordRepository
                     .loadByWorkshopAndStudent(workshopId, item.studentId())
                     .map(existing -> {
-                        existing.markAttendance(item.status(), item.note(), command.actor(), now);
+                        existing.markAttendance(item.status(), item.note(), actor, now);
                         return existing;
                     })
                     .orElseGet(() -> AttendanceRecord.create(
@@ -100,7 +99,7 @@ class MarkAttendanceCommandHandler implements CommandHandler<MarkAttendanceComma
                             workshopId,
                             item.status(),
                             item.note(),
-                            command.actor(),
+                            actor,
                             now));
             allEvents.addAll(record.recordedEvents());
             record.clearDomainEvents();

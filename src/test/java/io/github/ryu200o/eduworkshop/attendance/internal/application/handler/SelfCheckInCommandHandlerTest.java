@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.DuplicateAttendanceException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.RegistrationNotVerifiedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
@@ -63,6 +62,7 @@ class SelfCheckInCommandHandlerTest {
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final UUID STUDENT = UUID.randomUUID();
     private static final Actor STUDENT_ACTOR = new Actor(ActorId.of(STUDENT), ActorRole.STUDENT);
+    private static final UUID STUDENT_ID = STUDENT_ACTOR.id().value();
     private static final String QR_REFERENCE = "QR-REF-2026-09-01-ws";
 
     private Clock clock;
@@ -82,7 +82,7 @@ class SelfCheckInCommandHandlerTest {
     }
 
     private SelfCheckInCommand command() {
-        return new SelfCheckInCommand(WORKSHOP_ID, QR_REFERENCE, STUDENT_ACTOR);
+        return new SelfCheckInCommand(WORKSHOP_ID, QR_REFERENCE, STUDENT_ID);
     }
 
     private void stubGates() {
@@ -178,14 +178,22 @@ class SelfCheckInCommandHandlerTest {
     }
 
     @Test
-    void nonStudentActor_isRejectedWith403() {
+    void handlerAssignsStudentRole_regardlessOfPrincipal_andAllowsSelfCheckIn() {
         Actor trainer = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER);
+        UUID trainerId = trainer.id().value();
         when(workshopExposeApi.getScheduling(WORKSHOP_ID)).thenReturn(Optional.of(inProgressWorkshop()));
+        when(registrationExposeApi.isVerified(WORKSHOP_ID, trainerId)).thenReturn(true);
+        when(attendanceRecordRepository.loadByWorkshopAndStudent(WORKSHOP_ID, trainerId))
+                .thenReturn(Optional.empty());
+        when(workshopExposeApi.evaluateCheckIn(WORKSHOP_ID, NOW)).thenReturn(Optional.of(AttendanceStatusContract.ATTENDED));
+        when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> handler().handle(new SelfCheckInCommand(WORKSHOP_ID, QR_REFERENCE, trainer)))
-                .isInstanceOf(AttendanceRoleViolationException.class);
+        // Any principal maps to STUDENT for self check-in; the role is a use-case concern, not the
+        // caller's identity (ADR 0023). Eligibility is still proven downstream via the verified seat.
+        handler().handle(new SelfCheckInCommand(WORKSHOP_ID, QR_REFERENCE, trainerId));
 
-        verifyNoInteractions(registrationExposeApi, attendanceRecordRepository, attendanceDomainEventPublisher);
+        verify(attendanceRecordRepository).save(argThat(record ->
+                record.entries().get(0).actor().role() == ActorRole.STUDENT));
     }
 
     @Test
@@ -206,7 +214,7 @@ class SelfCheckInCommandHandlerTest {
 
     @Test
     void blankQrReference_isRejectedAsMalformed() {
-        assertThatThrownBy(() -> new SelfCheckInCommand(WORKSHOP_ID, "  ", STUDENT_ACTOR))
+        assertThatThrownBy(() -> new SelfCheckInCommand(WORKSHOP_ID, "  ", STUDENT_ID))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

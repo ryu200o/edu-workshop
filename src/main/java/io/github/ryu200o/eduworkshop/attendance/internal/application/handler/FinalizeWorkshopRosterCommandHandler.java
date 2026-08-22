@@ -1,12 +1,13 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotCompletedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.FinalizeWorkshopRosterCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.parameter.AttendanceReconciliationParameters;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceRecordRepository;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceState;
@@ -64,10 +65,9 @@ class FinalizeWorkshopRosterCommandHandler
     public void handle(FinalizeWorkshopRosterCommand command) {
         Instant now = Instant.now(clock);
         UUID workshopId = command.workshopId();
-
-        if (command.actor().role() != ActorRole.SYSTEM) {
-            throw new AttendanceRoleViolationException(command.actor().role().name(), "finalize the workshop roster");
-        }
+        ActorRole role = command.actorId().equals(FinalizeWorkshopRosterCommand.SYSTEM_ACTOR_ID)
+                ? ActorRole.SYSTEM : ActorRole.AUDITOR;
+        Actor actor = new Actor(new ActorId(command.actorId()), role);
 
         WorkshopSchedulingContract workshop = workshopExposeApi.getScheduling(workshopId)
                 .orElseThrow(() -> new ReferencedWorkshopNotFoundException(workshopId));
@@ -99,7 +99,7 @@ class FinalizeWorkshopRosterCommandHandler
                 throw new MissingReconciliationAnchorException(record.id());
             }
             Instant deadline = startedAt.plus(Duration.ofMinutes(reconciliationParameters.windowMinutes()));
-            record.finalizeRecord(command.actor(), now, deadline);
+            record.finalizeRecord(actor, now, deadline);
 
             allEvents.addAll(record.recordedEvents());
             record.clearDomainEvents();

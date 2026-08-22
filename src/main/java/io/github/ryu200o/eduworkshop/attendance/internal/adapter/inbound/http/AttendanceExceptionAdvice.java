@@ -1,10 +1,11 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.adapter.inbound.http;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.RegistrationNotVerifiedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotCompletedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotInSessionException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceDomainException;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceRecordOwnershipViolationException;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.InvalidActorRoleException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowExceededException;
 import io.github.ryu200o.eduworkshop.shared.application.exception.ResourceNotFoundException;
 
@@ -67,9 +68,15 @@ class AttendanceExceptionAdvice {
                 "Concurrent modification detected — the attendance record was changed by another request. Reload and retry.");
     }
 
-    @ExceptionHandler(AttendanceRoleViolationException.class)
+    @ExceptionHandler(InvalidActorRoleException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
-    ProblemDetail handleRoleViolation(AttendanceRoleViolationException ex) {
+    ProblemDetail handleInvalidActorRole(InvalidActorRoleException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
+    @ExceptionHandler(AttendanceRecordOwnershipViolationException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    ProblemDetail handleOwnershipViolation(AttendanceRecordOwnershipViolationException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 

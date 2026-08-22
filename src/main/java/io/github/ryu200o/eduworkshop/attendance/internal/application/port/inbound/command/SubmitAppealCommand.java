@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
 import java.util.UUID;
@@ -18,6 +17,12 @@ public record SubmitAppealCommand(
         UUID recordId,
         String reason,
         String evidenceReference,
-        Actor actor
+        UUID actorId
 ) implements Command {
+
+    public SubmitAppealCommand {
+        if (actorId == null) {
+            throw new IllegalArgumentException("actorId must not be null.");
+        }
+    }
 }

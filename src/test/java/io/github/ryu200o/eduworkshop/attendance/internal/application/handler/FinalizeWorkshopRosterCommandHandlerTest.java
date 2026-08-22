@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotCompletedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.FinalizeWorkshopRosterCommand;
@@ -62,6 +61,7 @@ class FinalizeWorkshopRosterCommandHandlerTest {
     private static final int WINDOW_MINUTES = 1440;
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final Actor SYSTEM = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.SYSTEM);
+    private static final UUID SYSTEM_ID = SYSTEM.id().value();
 
     private final AttendanceReconciliationParameters parameters =
             new AttendanceReconciliationParameters(WINDOW_MINUTES);
@@ -80,7 +80,8 @@ class FinalizeWorkshopRosterCommandHandlerTest {
 
     private AttendanceRecord openRecord(UUID id, Instant createdAt) {
         AttendanceRecord record = AttendanceRecord.create(AttendanceRecordId.of(id), StudentId.of(UUID.randomUUID()),
-                WORKSHOP_ID, AttendanceResult.PRESENT, null, SYSTEM, createdAt);
+                WORKSHOP_ID, AttendanceResult.PRESENT, null,
+                new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER), createdAt);
         record.clearDomainEvents();
         return record;
     }
@@ -100,7 +101,7 @@ class FinalizeWorkshopRosterCommandHandlerTest {
                 .thenReturn(Optional.of(new WorkshopSchedulingContract(WORKSHOP_ID, WorkshopStateContract.COMPLETED, completedAt)));
         when(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).thenReturn(List.of(record1, record2));
 
-        handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM));
+        handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM_ID));
 
         assertThat(record1.state()).isEqualTo(AttendanceState.FINALIZED);
         assertThat(record2.state()).isEqualTo(AttendanceState.FINALIZED);
@@ -117,7 +118,7 @@ class FinalizeWorkshopRosterCommandHandlerTest {
                 .thenReturn(Optional.of(new WorkshopSchedulingContract(WORKSHOP_ID, WorkshopStateContract.COMPLETED, completedAt)));
         when(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).thenReturn(List.of(staleOpen));
 
-        handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM));
+        handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM_ID));
 
         assertThat(staleOpen.state()).isEqualTo(AttendanceState.FINALIZED);
         assertThat(staleOpen.reconciliationStartedAt()).isEqualTo(completedAt);
@@ -131,7 +132,7 @@ class FinalizeWorkshopRosterCommandHandlerTest {
                 .thenReturn(Optional.of(new WorkshopSchedulingContract(WORKSHOP_ID, WorkshopStateContract.COMPLETED, completedAt)));
         when(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).thenReturn(List.of(record));
 
-        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM)))
+        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM_ID)))
                 .isInstanceOf(ReconciliationWindowNotElapsedException.class);
 
         verify(attendanceRecordRepository, never()).saveAll(any());
@@ -141,7 +142,7 @@ class FinalizeWorkshopRosterCommandHandlerTest {
     void rejectsWhenWorkshopNotFound() {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM)))
+        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM_ID)))
                 .isInstanceOf(ReferencedWorkshopNotFoundException.class);
 
         verifyNoInteractions(attendanceRecordRepository, attendanceDomainEventPublisher);
@@ -154,7 +155,7 @@ class FinalizeWorkshopRosterCommandHandlerTest {
                 .thenReturn(Optional.of(new WorkshopSchedulingContract(
                         WORKSHOP_ID, WorkshopStateContract.PUBLISHED, scheduled)));
 
-        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM)))
+        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM_ID)))
                 .isInstanceOf(WorkshopNotCompletedException.class)
                 .hasMessageContaining("not completed");
 
@@ -175,19 +176,26 @@ class FinalizeWorkshopRosterCommandHandlerTest {
                         WORKSHOP_ID, WorkshopStateContract.COMPLETED, completedAt)));
         when(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).thenReturn(List.of(corrupted));
 
-        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM)))
+        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, SYSTEM_ID)))
                 .isInstanceOf(MissingReconciliationAnchorException.class);
 
         verify(attendanceRecordRepository, never()).saveAll(any());
     }
 
     @Test
-    void rejectsNonSystemActor() {
-        Actor trainer = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER);
+    void auditorActor_isAlsoAccepted_forManualFinalize() {
+        // Dual-trigger (ADR 0019 §4): finalize is accepted for both the SYSTEM actor (scheduler)
+        // and an AUDITOR actor (manual API). The handler maps any non-system actorId to AUDITOR.
+        Instant completedAt = NOW.minusSeconds(25 * 3600);
+        AttendanceRecord record1 = reconcilingRecord(UUID.randomUUID(), completedAt);
+        when(workshopExposeApi.getScheduling(WORKSHOP_ID))
+                .thenReturn(Optional.of(new WorkshopSchedulingContract(WORKSHOP_ID, WorkshopStateContract.COMPLETED, completedAt)));
+        when(attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID)).thenReturn(List.of(record1));
 
-        assertThatThrownBy(() -> handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, trainer)))
-                .isInstanceOf(AttendanceRoleViolationException.class);
+        Actor auditor = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.AUDITOR);
+        handler().handle(new FinalizeWorkshopRosterCommand(WORKSHOP_ID, auditor.id().value()));
 
-        verifyNoInteractions(workshopExposeApi, attendanceRecordRepository, attendanceDomainEventPublisher);
+        assertThat(record1.state()).isEqualTo(AttendanceState.FINALIZED);
+        verify(attendanceRecordRepository).saveAll(any());
     }
 }

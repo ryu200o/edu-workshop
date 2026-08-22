@@ -6,7 +6,9 @@ import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.Atte
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AttendanceRecordFinalized;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AuditorAdjustedAttendance;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceRecordFinalizedException;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceRecordOwnershipViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceStateException;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.InvalidActorRoleException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowExceededException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowNotElapsedException;
 
@@ -92,6 +94,11 @@ public class AttendanceRecord {
         requireNonNull(firstResult, "firstResult cannot be null");
         requireNonNull(actor, "actor cannot be null");
         requireNonNull(now, "now cannot be null");
+        // Only a TRAINER (marking) or STUDENT (self check-in) may open the record's first entry.
+        if (actor.role() != ActorRole.TRAINER && actor.role() != ActorRole.STUDENT) {
+            throw new InvalidActorRoleException(
+                    "Only a TRAINER or STUDENT may open an attendance record; found " + actor.role());
+        }
 
         AttendanceRecord record = new AttendanceRecord(id, studentId, workshopId, null, firstResult,
                 AttendanceState.OPEN, now, now);
@@ -138,6 +145,7 @@ public class AttendanceRecord {
     public void markAttendance(AttendanceResult result, String note, Actor actor, Instant now) {
         guardFinalized();
         requireState(AttendanceState.OPEN, "mark attendance");
+        requireActorRole(actor, ActorRole.TRAINER);
 
         appendEntry(AttendanceAction.MARK, result, note, null, actor, now);
         this.currentResult = result;
@@ -169,6 +177,8 @@ public class AttendanceRecord {
         requireNonNull(actor, "actor cannot be null");
         requireNonNull(reconciliationDeadline, "reconciliationDeadline cannot be null");
         requireNonNull(now, "now cannot be null");
+        requireActorRole(actor, ActorRole.STUDENT);
+        requireOwner(actor);
 
         if (now.isAfter(reconciliationDeadline)) {
             throw new ReconciliationWindowExceededException(id, reconciliationDeadline, now);
@@ -198,6 +208,7 @@ public class AttendanceRecord {
         requireNonNull(result, "result cannot be null");
         requireNonNull(actor, "actor cannot be null");
         requireNonNull(now, "now cannot be null");
+        requireActorRole(actor, ActorRole.AUDITOR);
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("reason is mandatory for an auditor adjustment");
         }
@@ -244,6 +255,10 @@ public class AttendanceRecord {
         requireNonNull(actor, "actor cannot be null");
         requireNonNull(reconciliationDeadline, "reconciliationDeadline cannot be null");
         requireNonNull(now, "now cannot be null");
+        if (actor.role() != ActorRole.SYSTEM && actor.role() != ActorRole.AUDITOR) {
+            throw new InvalidActorRoleException(
+                    "Only a SYSTEM or AUDITOR may finalize an attendance record; found " + actor.role());
+        }
 
         if (now.isBefore(reconciliationDeadline)) {
             throw new ReconciliationWindowNotElapsedException(id, reconciliationDeadline, now);
@@ -269,6 +284,18 @@ public class AttendanceRecord {
     private void requireState(AttendanceState expected, String operation) {
         if (state != expected) {
             throw new AttendanceStateException(id, state, expected);
+        }
+    }
+
+    private void requireActorRole(Actor actor, ActorRole expected) {
+        if (actor.role() != expected) {
+            throw new InvalidActorRoleException(actor.role(), expected);
+        }
+    }
+
+    private void requireOwner(Actor actor) {
+        if (!studentId.value().equals(actor.id().value())) {
+            throw new AttendanceRecordOwnershipViolationException();
         }
     }
 

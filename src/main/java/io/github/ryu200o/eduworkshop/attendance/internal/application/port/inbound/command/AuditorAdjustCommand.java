@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceResult;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.Command;
 
@@ -17,6 +16,12 @@ public record AuditorAdjustCommand(
         AttendanceResult newStatus,
         String reason,
         String evidenceReference,
-        Actor actor
+        UUID actorId
 ) implements Command {
+
+    public AuditorAdjustCommand {
+        if (actorId == null) {
+            throw new IllegalArgumentException("actorId must not be null.");
+        }
+    }
 }
