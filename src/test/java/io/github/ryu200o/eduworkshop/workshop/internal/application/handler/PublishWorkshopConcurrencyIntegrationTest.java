@@ -57,12 +57,14 @@ class PublishWorkshopConcurrencyIntegrationTest {
 
     private IamE2eTestSupport iam;
     private String operatorBearer;
+    private String facilityManagerBearer;
 
     @BeforeEach
     void setUp() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
+        facilityManagerBearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
     }
 
     @AfterEach
@@ -82,12 +84,23 @@ class PublishWorkshopConcurrencyIntegrationTest {
     }
 
     private UUID createRoom(String prefix) throws Exception {
-        HttpResponse<String> response = post("/api/v1/rooms",
+        HttpResponse<String> response = postAs("/api/v1/rooms",
                 """
                 {"building": "%s", "floor": 1, "code": 5, "name": "%s-CONC", "capacity": 50}
-                """.formatted(prefix, prefix));
+                """.formatted(prefix, prefix), facilityManagerBearer);
         assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
         return IamE2eTestSupport.idFromLocation(response);
+    }
+
+    private HttpResponse<String> postAs(String path, String body, String bearer) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + bearer)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .POST(body == null ? HttpRequest.BodyPublishers.noBody()
+                        : HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private UUID createWorkshop(String title, String start, String end) throws Exception {

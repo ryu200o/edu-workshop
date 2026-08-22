@@ -56,12 +56,14 @@ class WorkshopCommandControllerE2ETest {
 
     private IamE2eTestSupport iam;
     private String operatorBearer;
+    private String facilityManagerBearer;
 
     @BeforeEach
     void setUp() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
         operatorBearer = iam.registerAndLogin().accessToken();
+        facilityManagerBearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
     }
 
     private HttpResponse<String> post(String path, String body, Map<String, String> headers) throws Exception {
@@ -104,7 +106,8 @@ class WorkshopCommandControllerE2ETest {
         HttpResponse<String> response = post("/api/v1/rooms",
                 """
                 {"building": "%s", "floor": 1, "code": 1, "name": "%s-ROOM", "capacity": %d}
-                """.formatted(building, building, capacity), Map.of());
+                """.formatted(building, building, capacity),
+                Map.of("Authorization", "Bearer " + facilityManagerBearer));
         assertThat(response.statusCode()).as("create room: %s", response.body())
                 .isEqualTo(HttpStatus.CREATED.value());
         return IamE2eTestSupport.idFromLocation(response);
@@ -136,7 +139,8 @@ class WorkshopCommandControllerE2ETest {
     }
 
     private void placeUnderMaintenance(UUID roomId) throws Exception {
-        HttpResponse<String> response = post("/api/v1/rooms/" + roomId + "/maintenance", null, Map.of());
+        HttpResponse<String> response = post("/api/v1/rooms/" + roomId + "/maintenance", null,
+                Map.of("Authorization", "Bearer " + facilityManagerBearer));
         assertThat(response.statusCode()).as("maintenance: %s", response.body()).isEqualTo(HttpStatus.NO_CONTENT.value());
     }
 

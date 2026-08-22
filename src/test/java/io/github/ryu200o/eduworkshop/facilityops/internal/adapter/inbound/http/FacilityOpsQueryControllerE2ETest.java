@@ -50,12 +50,14 @@ class FacilityOpsQueryControllerE2ETest {
 
     private IamE2eTestSupport iam;
     private String bearer;
+    private String userBearer;
 
     @BeforeEach
     void setUp() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
-        bearer = iam.registerAndLogin().accessToken();
+        bearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
+        userBearer = iam.registerAndLogin().accessToken();
     }
 
     @Test
@@ -86,6 +88,21 @@ class FacilityOpsQueryControllerE2ETest {
                 .as("content-type: %s", response.body())
                 .contains("application/problem+json");
         assertThat(response.body()).contains("\"status\":404").contains("\"detail\":");
+    }
+
+    @Test
+    void previewImpact_withoutFacilityManagerRole_returns403() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(
+                        "http://localhost:" + port + "/api/v1/facility-ops/rooms/" + UUID.randomUUID()
+                                + "/maintenance-impact-preview?startTime=2026-09-01T08:00:00Z"))
+                .header("Authorization", "Bearer " + userBearer)
+                .GET()
+                .build();
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).as("preview: %s", response.body())
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
+        assertThat(response.body()).contains("\"code\":\"ACCESS_DENIED\"");
     }
 
     private HttpResponse<String> createRoom(Map<String, Object> room) throws Exception {
