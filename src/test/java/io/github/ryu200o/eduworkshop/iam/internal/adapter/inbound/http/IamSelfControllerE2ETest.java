@@ -141,9 +141,9 @@ class IamSelfControllerE2ETest {
     }
 
     @Test
-    void getMe_unauthenticated_returns403() throws Exception {
+    void getMe_unauthenticated_returns401() throws Exception {
         HttpResponse<String> response = request("GET", "/api/v1/iam/me", null, null);
-        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.statusCode()).isEqualTo(401);
     }
 
     @Test

@@ -221,7 +221,7 @@ class RegistrationCommandControllerE2ETest {
     }
 
     @Test
-    void unauthenticatedRegister_returnsForbidden() throws Exception {
+    void unauthenticatedRegister_returnsUnauthorized() throws Exception {
         UUID roomId = createRoom("NOUSER");
         UUID workshopId = publishWorkshop(roomId);
 
@@ -230,7 +230,7 @@ class RegistrationCommandControllerE2ETest {
                 {"workshopId": "%s"}
                 """.formatted(workshopId));
         assertThat(response.statusCode()).as("register without token: %s", response.body())
-                .isEqualTo(HttpStatus.FORBIDDEN.value());
+                .isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
 
     private HttpResponse<String> postUnauthenticated(String path, String body) throws Exception {

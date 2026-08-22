@@ -23,5 +23,8 @@ public enum GlobalRole {
     AUDITOR,
 
     /** Registrar; may verify registration tickets (Epic 3C). */
-    VERIFIER
+    VERIFIER,
+
+    /** Physical facility & infrastructure manager; manages rooms, maintenance schedules, and facility-ops data (ADR 0023). */
+    FACILITY_MANAGER
 }
