@@ -10,12 +10,12 @@ import java.util.UUID;
  *
  * <p>The {@code registrationId} is resolved from the scanned {@code qrReference} by the thin QR
  * seam (fixture in Slice A, real resolver in Slice B — OQ-3C-6); the handler never sees the QR
- * itself. {@code verifierId} is the authenticated principal's userId and {@code role} is derived
- * from its global roles (only {@code VERIFIER} passes the role gate, OQ-3C-1).</p>
+ * itself. {@code verifierId} is the authenticated principal's userId. The caller must hold the
+ * {@code VERIFIER} global role — this is enforced declaratively by {@code @CanVerifyRegistrations}
+ * on the inbound controller (ADR 0023), so the command no longer carries a derived role.</p>
  */
 public record VerifyRegistrationCommand(
         UUID registrationId,
-        UUID verifierId,
-        String role
+        UUID verifierId
 ) implements Command {
 }

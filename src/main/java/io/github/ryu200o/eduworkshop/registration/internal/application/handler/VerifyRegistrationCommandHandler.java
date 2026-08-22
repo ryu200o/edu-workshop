@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.registration.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotFoundException;
-import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationRoleViolationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotVerifiableException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.VerifyRegistrationCommand;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationDomainEventPublisher;
@@ -34,8 +33,6 @@ import java.time.Instant;
 class VerifyRegistrationCommandHandler
         implements CommandHandler<VerifyRegistrationCommand> {
 
-    private static final String VERIFIER_ROLE = "VERIFIER";
-
     private final WorkshopExposeAPI workshopExposeApi;
     private final RegistrationRepository registrationRepository;
     private final RegistrationDomainEventPublisher registrationDomainEventPublisher;
@@ -55,10 +52,6 @@ class VerifyRegistrationCommandHandler
     @Transactional
     public void handle(VerifyRegistrationCommand command) {
         Instant now = Instant.now(clock);
-
-        if (!VERIFIER_ROLE.equals(command.role())) {
-            throw new RegistrationRoleViolationException(command.role(), "verify a ticket");
-        }
 
         Registration registration = registrationRepository.loadById(RegistrationId.of(command.registrationId()))
                 .orElseThrow(() -> new RegistrationNotFoundException("id", command.registrationId()));

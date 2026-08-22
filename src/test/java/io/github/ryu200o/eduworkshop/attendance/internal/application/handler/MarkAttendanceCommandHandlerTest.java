@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.RegistrationNotVerifiedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotInSessionException;
@@ -39,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -61,6 +61,7 @@ class MarkAttendanceCommandHandlerTest {
     private static final Instant NOW = Instant.parse("2026-09-01T10:00:00Z");
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final Actor TRAINER = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER);
+    private static final UUID TRAINER_ID = TRAINER.id().value();
     private static final UUID STUDENT_1 = UUID.randomUUID();
     private static final UUID STUDENT_2 = UUID.randomUUID();
 
@@ -80,10 +81,10 @@ class MarkAttendanceCommandHandlerTest {
         return new WorkshopSchedulingContract(WORKSHOP_ID, WorkshopStateContract.IN_PROGRESS, null);
     }
 
-    private MarkAttendanceCommand command(Actor actor) {
+    private MarkAttendanceCommand command(UUID actorId) {
         return new MarkAttendanceCommand(WORKSHOP_ID, List.of(
                 new MarkAttendanceCommand.MarkItem(STUDENT_1, AttendanceResult.PRESENT, null),
-                new MarkAttendanceCommand.MarkItem(STUDENT_2, AttendanceResult.LATE, "arrived 10:20")), actor);
+                new MarkAttendanceCommand.MarkItem(STUDENT_2, AttendanceResult.LATE, "arrived 10:20")), actorId);
     }
 
     @Test
@@ -97,7 +98,7 @@ class MarkAttendanceCommandHandlerTest {
                 .thenReturn(Optional.empty());
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        handler().handle(command(TRAINER));
+        handler().handle(command(TRAINER_ID));
 
         verify(attendanceRecordRepository).save(argThat(r ->
                 r.state() == AttendanceState.OPEN && r.studentId().value().equals(STUDENT_1)));
@@ -119,7 +120,7 @@ class MarkAttendanceCommandHandlerTest {
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(new MarkAttendanceCommand(WORKSHOP_ID, List.of(
-                new MarkAttendanceCommand.MarkItem(STUDENT_1, AttendanceResult.ABSENT, "left early")), TRAINER));
+                new MarkAttendanceCommand.MarkItem(STUDENT_1, AttendanceResult.ABSENT, "left early")), TRAINER_ID));
 
         assertThat(existing.currentResult()).isEqualTo(AttendanceResult.ABSENT);
         assertThat(existing.entries()).hasSize(2);
@@ -132,7 +133,7 @@ class MarkAttendanceCommandHandlerTest {
         when(registrationExposeApi.isVerified(WORKSHOP_ID, STUDENT_1)).thenReturn(true);
         when(registrationExposeApi.isVerified(WORKSHOP_ID, STUDENT_2)).thenReturn(false);
 
-        assertThatThrownBy(() -> handler().handle(command(TRAINER)))
+        assertThatThrownBy(() -> handler().handle(command(TRAINER_ID)))
                 .isInstanceOf(RegistrationNotVerifiedException.class)
                 .satisfies(ex -> assertThat(((RegistrationNotVerifiedException) ex).studentIds())
                         .containsExactly(STUDENT_2));
@@ -151,7 +152,7 @@ class MarkAttendanceCommandHandlerTest {
         when(attendanceRecordRepository.save(any()))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("boom"));
 
-        assertThatThrownBy(() -> handler().handle(command(TRAINER)))
+        assertThatThrownBy(() -> handler().handle(command(TRAINER_ID)))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
 
         // Nothing was published — the whole batch rolled back (ADR 0019 §4 atomicity).
@@ -162,7 +163,7 @@ class MarkAttendanceCommandHandlerTest {
     void rejectsWhenWorkshopNotFound() {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(command(TRAINER)))
+        assertThatThrownBy(() -> handler().handle(command(TRAINER_ID)))
                 .isInstanceOf(ReferencedWorkshopNotFoundException.class);
 
         verifyNoInteractions(registrationExposeApi, attendanceRecordRepository, attendanceDomainEventPublisher);
@@ -173,20 +174,29 @@ class MarkAttendanceCommandHandlerTest {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID))
                 .thenReturn(Optional.of(new WorkshopSchedulingContract(WORKSHOP_ID, WorkshopStateContract.PUBLISHED, null)));
 
-        assertThatThrownBy(() -> handler().handle(command(TRAINER)))
+        assertThatThrownBy(() -> handler().handle(command(TRAINER_ID)))
                 .isInstanceOf(WorkshopNotInSessionException.class);
 
         verifyNoInteractions(registrationExposeApi, attendanceRecordRepository, attendanceDomainEventPublisher);
     }
 
     @Test
-    void rejectsNonTrainerActor() {
-        Actor student = new Actor(ActorId.of(STUDENT_1), ActorRole.STUDENT);
+    void handlerAssignsTrainerRole_regardlessOfPrincipal() {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID)).thenReturn(Optional.of(inProgressWorkshop()));
+        when(registrationExposeApi.isVerified(WORKSHOP_ID, STUDENT_1)).thenReturn(true);
+        when(registrationExposeApi.isVerified(WORKSHOP_ID, STUDENT_2)).thenReturn(true);
+        when(attendanceRecordRepository.loadByWorkshopAndStudent(WORKSHOP_ID, STUDENT_1))
+                .thenReturn(Optional.empty());
+        when(attendanceRecordRepository.loadByWorkshopAndStudent(WORKSHOP_ID, STUDENT_2))
+                .thenReturn(Optional.empty());
+        when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> handler().handle(command(student)))
-                .isInstanceOf(AttendanceRoleViolationException.class);
+        // A non-TRAINER principal (e.g. a PLANNER/ADMIN who passed @CanMarkAttendance) is assigned
+        // the contextual TRAINER role by the handler — the role is a use-case concern, not the
+        // caller's identity (ADR 0023).
+        handler().handle(command(STUDENT_1));
 
-        verifyNoInteractions(registrationExposeApi, attendanceRecordRepository, attendanceDomainEventPublisher);
+        verify(attendanceRecordRepository, times(2)).save(argThat(r ->
+                r.entries().get(0).actor().role() == ActorRole.TRAINER));
     }
 }

@@ -54,7 +54,7 @@ class RoomExceptionAdviceE2ETest {
     void setUp() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
-        bearer = iam.registerAndLogin().accessToken();
+        bearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
     }
 
     private HttpResponse<String> createRoom(Map<String, Object> room) throws Exception {

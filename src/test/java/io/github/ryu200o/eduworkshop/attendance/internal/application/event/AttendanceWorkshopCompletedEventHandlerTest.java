@@ -63,7 +63,8 @@ class AttendanceWorkshopCompletedEventHandlerTest {
 
     private AttendanceRecord openRecord(UUID id, UUID studentId) {
         return AttendanceRecord.create(AttendanceRecordId.of(id), StudentId.of(studentId),
-                WORKSHOP_ID, AttendanceResult.PRESENT, null, SYSTEM, NOW);
+                WORKSHOP_ID, AttendanceResult.PRESENT, null,
+                new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER), NOW);
     }
 
     @Test

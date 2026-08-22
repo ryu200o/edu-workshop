@@ -51,4 +51,11 @@ public interface AttendanceRecordRepository {
     List<AttendanceRecord> loadNonFinalizedByWorkshop(UUID workshopId);
 
     List<AttendanceRecord> loadByWorkshopId(UUID workshopId);
+
+    /**
+     * Lists the distinct workshop ids that still hold at least one non-finalized attendance record.
+     * Used by the auto-finalize scheduler to discover workshops whose Reconciliation Window has
+     * elapsed and that are safe to finalize.
+     */
+    List<UUID> getWorkshopIdsWithNonFinalizedRecords();
 }

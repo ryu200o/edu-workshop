@@ -68,12 +68,17 @@ class AttendanceCommandControllerE2ETest {
 
     private IamE2eTestSupport iam;
     private String operatorBearer;
+    private String facilityManagerBearer;
+    // USER bearer for ledger reads; the ledger endpoint is restricted to USER/AUDITOR/ADMIN (OQ-7).
+    private String userBearer;
 
     @BeforeEach
     void cleanSchema() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
-        operatorBearer = iam.registerAndLogin().accessToken();
+        operatorBearer = iam.registerAndLoginWithRoles("PLANNER").accessToken();
+        facilityManagerBearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
+        userBearer = iam.registerAndLogin().accessToken();
         jdbcTemplate.update("DELETE FROM attendance_entries");
         jdbcTemplate.update("DELETE FROM attendance_records");
         jdbcTemplate.update("DELETE FROM registrations");
@@ -97,6 +102,14 @@ class AttendanceCommandControllerE2ETest {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> get(String path, String bearer) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Authorization", "Bearer " + bearer)
+                .GET()
+                .build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     private Map<String, String> withAuth(Map<String, String> headers) {
         if (headers.containsKey("Authorization")) {
             return headers;
@@ -110,7 +123,8 @@ class AttendanceCommandControllerE2ETest {
         HttpResponse<String> response = post("/api/v1/rooms",
                 """
                 {"building": "%s", "floor": 1, "code": 1, "name": "%s-ROOM-1", "capacity": 50}
-                """.formatted(building, building), Map.of());
+                """.formatted(building, building),
+                Map.of("Authorization", "Bearer " + facilityManagerBearer));
         assertThat(response.statusCode()).as("create room: %s", response.body()).isEqualTo(HttpStatus.CREATED.value());
         return IamE2eTestSupport.idFromLocation(response);
     }
@@ -338,8 +352,21 @@ class AttendanceCommandControllerE2ETest {
 
     @Test
     void ledger_missingRecord_returnsNotFound() throws Exception {
-        HttpResponse<String> response = get("/api/v1/attendance-records/" + UUID.randomUUID());
+        HttpResponse<String> response = get("/api/v1/attendance-records/" + UUID.randomUUID(), userBearer);
         assertThat(response.statusCode()).isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
+
+    @Test
+    void adjust_nonAuditorRole_returnsForbidden() throws Exception {
+        IamE2eTestSupport.TestUser student = iam.registerAndLogin();
+        // Auditor adjustment requires AUDITOR/ADMIN; a USER principal has neither (OQ-2) → 403.
+        HttpResponse<String> adjusted = post("/api/v1/attendance-records/" + UUID.randomUUID() + "/adjust",
+                """
+                {"newStatus": "PRESENT", "reason": "r", "evidenceReference": "e"}
+                """,
+                student.bearer());
+        assertThat(adjusted.statusCode()).as("adjust by student: %s", adjusted.body())
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test
@@ -358,7 +385,7 @@ class AttendanceCommandControllerE2ETest {
         String recordId = readField(
                 get("/api/v1/workshops/" + workshopId + "/attendance").body(), "recordId");
 
-        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
+        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId, userBearer);
         assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
         assertThat(ledger.body()).contains("\"action\":\"MARK\"").contains("\"actorRole\":\"STUDENT\"")
                 .contains("\"result\":\"LATE\"").contains("\"state\":\"OPEN\"");
@@ -399,7 +426,7 @@ class AttendanceCommandControllerE2ETest {
         assertThat(readField(get("/api/v1/workshops/" + workshopId + "/attendance").body(), "recordId"))
                 .isEqualTo(recordId);
 
-        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
+        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId, userBearer);
         assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
         assertThat(countOccurrences(ledger.body(), "\"action\":\"MARK\"")).isEqualTo(1);
         assertThat(ledger.body()).contains("\"currentResult\":\"LATE\"");
@@ -473,7 +500,7 @@ class AttendanceCommandControllerE2ETest {
         // Trainer corrects the LATE scan to PRESENT — authoritative (append MARK, role TRAINER).
         mark(workshopId, student, trainer);
 
-        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId);
+        HttpResponse<String> ledger = get("/api/v1/attendance-records/" + recordId, userBearer);
         assertThat(ledger.statusCode()).isEqualTo(HttpStatus.OK.value());
         assertThat(countOccurrences(ledger.body(), "\"action\":\"MARK\"")).isEqualTo(2);
         assertThat(ledger.body()).contains("\"currentResult\":\"PRESENT\"");

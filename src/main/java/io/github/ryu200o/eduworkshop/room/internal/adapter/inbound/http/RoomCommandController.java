@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.room.internal.adapter.inbound.http;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.shared.security.api.policy.CanManageRooms;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.ChangeRoomCapacityCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.ChangeRoomCodeCommand;
 import io.github.ryu200o.eduworkshop.room.internal.application.port.inbound.command.CreateRoomCommand;
@@ -31,6 +32,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/rooms")
+@CanManageRooms
 class RoomCommandController {
 
     private final CommandBus commandBus;

@@ -1,6 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.RegistrationNotVerifiedException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.ReferencedWorkshopNotFoundException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.WorkshopNotInSessionException;
@@ -8,6 +7,8 @@ import io.github.ryu200o.eduworkshop.attendance.internal.application.mapper.Atte
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.SelfCheckInCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceRecordRepository;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecordId;
@@ -78,15 +79,13 @@ class SelfCheckInCommandHandler implements CommandHandler<SelfCheckInCommand> {
     public void handle(SelfCheckInCommand command) {
         Instant now = Instant.now(clock);
         UUID workshopId = command.workshopId();
-        UUID studentId = command.actor().id().value();
+        UUID studentId = command.actorId();
+        Actor actor = new Actor(new ActorId(studentId), ActorRole.STUDENT);
 
         WorkshopSchedulingContract workshop = workshopExposeApi.getScheduling(workshopId)
                 .orElseThrow(() -> new ReferencedWorkshopNotFoundException(workshopId));
         if (workshop.state() != WorkshopStateContract.IN_PROGRESS) {
             throw new WorkshopNotInSessionException(workshopId, workshop.state().name());
-        }
-        if (command.actor().role() != ActorRole.STUDENT) {
-            throw new AttendanceRoleViolationException(command.actor().role().name(), "QR self check-in");
         }
         if (!registrationExposeApi.isVerified(workshopId, studentId)) {
             throw new RegistrationNotVerifiedException(workshopId, List.of(studentId));
@@ -107,7 +106,7 @@ class SelfCheckInCommandHandler implements CommandHandler<SelfCheckInCommand> {
                 workshopId,
                 AttendanceMapper.toResult(status),
                 null,
-                command.actor(),
+                actor,
                 now);
         attendanceRecordRepository.save(record);
         attendanceDomainEventPublisher.publish(record.recordedEvents());

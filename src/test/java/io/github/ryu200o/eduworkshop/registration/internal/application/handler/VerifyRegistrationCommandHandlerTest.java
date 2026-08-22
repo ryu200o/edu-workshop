@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.registration.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotFoundException;
-import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationRoleViolationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotVerifiableException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.VerifyRegistrationCommand;
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.outbound.RegistrationDomainEventPublisher;
@@ -54,7 +53,6 @@ class VerifyRegistrationCommandHandlerTest {
     private static final Instant START = Instant.parse("2026-09-01T09:00:00Z");
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final UUID VERIFIER_ID = UUID.randomUUID();
-    private static final String VERIFIER_ROLE = "VERIFIER";
 
     private Clock clock;
 
@@ -89,7 +87,7 @@ class VerifyRegistrationCommandHandlerTest {
         when(registrationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         stubOpenWorkshop();
 
-        handler().handle(new VerifyRegistrationCommand(id.value(), VERIFIER_ID, VERIFIER_ROLE));
+        handler().handle(new VerifyRegistrationCommand(id.value(), VERIFIER_ID));
 
         ArgumentCaptor<Registration> savedCaptor = ArgumentCaptor.forClass(Registration.class);
         verify(registrationRepository).save(savedCaptor.capture());
@@ -108,7 +106,7 @@ class VerifyRegistrationCommandHandlerTest {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID))
                 .thenReturn(Optional.of(workshop(WorkshopStateContract.IN_PROGRESS)));
 
-        handler().handle(new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE));
+        handler().handle(new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID));
 
         ArgumentCaptor<Registration> savedCaptor = ArgumentCaptor.forClass(Registration.class);
         verify(registrationRepository).save(savedCaptor.capture());
@@ -117,20 +115,11 @@ class VerifyRegistrationCommandHandlerTest {
     }
 
     @Test
-    void rejectsNonVerifierRole() {
-        assertThatThrownBy(() -> handler().handle(
-                new VerifyRegistrationCommand(UUID.randomUUID(), VERIFIER_ID, "TRAINER")))
-                .isInstanceOf(RegistrationRoleViolationException.class);
-
-        verifyNoInteractions(registrationDomainEventPublisher);
-    }
-
-    @Test
     void rejectsWhenRegistrationNotFound() {
         UUID id = UUID.randomUUID();
         when(registrationRepository.loadById(RegistrationId.of(id))).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> handler().handle(new VerifyRegistrationCommand(id, VERIFIER_ID, VERIFIER_ROLE)))
+        assertThatThrownBy(() -> handler().handle(new VerifyRegistrationCommand(id, VERIFIER_ID)))
                 .isInstanceOf(RegistrationNotFoundException.class);
 
         verifyNoInteractions(registrationDomainEventPublisher);
@@ -143,7 +132,7 @@ class VerifyRegistrationCommandHandlerTest {
         when(workshopExposeApi.getScheduling(WORKSHOP_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE)))
+                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID)))
                 .isInstanceOf(RegistrationNotFoundException.class);
 
         verifyNoInteractions(registrationDomainEventPublisher);
@@ -157,7 +146,7 @@ class VerifyRegistrationCommandHandlerTest {
                 .thenReturn(Optional.of(workshop(WorkshopStateContract.DRAFT)));
 
         assertThatThrownBy(() -> handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE)))
+                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID)))
                 .isInstanceOf(WorkshopNotVerifiableException.class);
 
         verifyNoInteractions(registrationDomainEventPublisher);
@@ -171,7 +160,7 @@ class VerifyRegistrationCommandHandlerTest {
                 .thenReturn(Optional.of(workshop(WorkshopStateContract.PLANNED)));
 
         assertThatThrownBy(() -> handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE)))
+                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID)))
                 .isInstanceOf(WorkshopNotVerifiableException.class);
 
         verifyNoInteractions(registrationDomainEventPublisher);
@@ -185,7 +174,7 @@ class VerifyRegistrationCommandHandlerTest {
                 .thenReturn(Optional.of(workshop(WorkshopStateContract.COMPLETED)));
 
         assertThatThrownBy(() -> handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE)))
+                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID)))
                 .isInstanceOf(WorkshopNotVerifiableException.class);
 
         verifyNoInteractions(registrationDomainEventPublisher);
@@ -199,7 +188,7 @@ class VerifyRegistrationCommandHandlerTest {
                 .thenReturn(Optional.of(workshop(WorkshopStateContract.CANCELLED)));
 
         assertThatThrownBy(() -> handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE)))
+                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID)))
                 .isInstanceOf(WorkshopNotVerifiableException.class);
 
         verifyNoInteractions(registrationDomainEventPublisher);
@@ -213,7 +202,7 @@ class VerifyRegistrationCommandHandlerTest {
         stubOpenWorkshop();
 
         assertThatThrownBy(() -> handler().handle(
-                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE)))
+                new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID)))
                 .isInstanceOf(InvalidRegistrationStateException.class);
 
         verifyNoInteractions(registrationDomainEventPublisher);
@@ -227,7 +216,7 @@ class VerifyRegistrationCommandHandlerTest {
         when(registrationRepository.loadById(registration.id())).thenReturn(Optional.of(registration));
         stubOpenWorkshop();
 
-        handler().handle(new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID, VERIFIER_ROLE));
+        handler().handle(new VerifyRegistrationCommand(registration.id().value(), VERIFIER_ID));
 
         ArgumentCaptor<Registration> savedCaptor = ArgumentCaptor.forClass(Registration.class);
         verify(registrationRepository).save(savedCaptor.capture());

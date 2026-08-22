@@ -1,8 +1,5 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command;
 
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
-import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceResult;
 
 import org.junit.jupiter.api.Test;
@@ -22,13 +19,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class MarkAttendanceCommandTest {
 
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
-    private static final Actor TRAINER = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER);
+    private static final UUID TRAINER_ID = UUID.randomUUID();
 
     @Test
     void acceptsDistinctStudentIds() {
         assertThatCode(() -> new MarkAttendanceCommand(WORKSHOP_ID, List.of(
                 new MarkAttendanceCommand.MarkItem(UUID.randomUUID(), AttendanceResult.PRESENT, null),
-                new MarkAttendanceCommand.MarkItem(UUID.randomUUID(), AttendanceResult.LATE, "late")), TRAINER))
+                new MarkAttendanceCommand.MarkItem(UUID.randomUUID(), AttendanceResult.LATE, "late")), TRAINER_ID))
                 .doesNotThrowAnyException();
     }
 
@@ -38,7 +35,7 @@ class MarkAttendanceCommandTest {
 
         assertThatThrownBy(() -> new MarkAttendanceCommand(WORKSHOP_ID, List.of(
                 new MarkAttendanceCommand.MarkItem(studentId, AttendanceResult.PRESENT, null),
-                new MarkAttendanceCommand.MarkItem(studentId, AttendanceResult.LATE, "contradicts previous")), TRAINER))
+                new MarkAttendanceCommand.MarkItem(studentId, AttendanceResult.LATE, "contradicts previous")), TRAINER_ID))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Duplicate studentId");
     }
@@ -46,13 +43,13 @@ class MarkAttendanceCommandTest {
     @Test
     void rejectsNullWorkshopId() {
         assertThatThrownBy(() -> new MarkAttendanceCommand(null, List.of(
-                new MarkAttendanceCommand.MarkItem(UUID.randomUUID(), AttendanceResult.PRESENT, null)), TRAINER))
+                new MarkAttendanceCommand.MarkItem(UUID.randomUUID(), AttendanceResult.PRESENT, null)), TRAINER_ID))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsNullItems() {
-        assertThatThrownBy(() -> new MarkAttendanceCommand(WORKSHOP_ID, null, TRAINER))
+        assertThatThrownBy(() -> new MarkAttendanceCommand(WORKSHOP_ID, null, TRAINER_ID))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

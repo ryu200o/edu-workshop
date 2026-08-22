@@ -1,11 +1,12 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceNotFoundException;
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.SubmitAppealCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.parameter.AttendanceReconciliationParameters;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceRecordRepository;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecordId;
@@ -54,10 +55,7 @@ class SubmitAppealCommandHandler implements CommandHandler<SubmitAppealCommand> 
     public void handle(SubmitAppealCommand command) {
         Instant now = Instant.now(clock);
         AttendanceRecordId recordId = AttendanceRecordId.of(command.recordId());
-
-        if (command.actor().role() != ActorRole.STUDENT) {
-            throw new AttendanceRoleViolationException(command.actor().role().name(), "submit an appeal");
-        }
+        Actor actor = new Actor(new ActorId(command.actorId()), ActorRole.STUDENT);
 
         AttendanceRecord record = attendanceRecordRepository.loadById(recordId)
                 .orElseThrow(() -> new AttendanceNotFoundException(command.recordId()));
@@ -76,7 +74,7 @@ class SubmitAppealCommandHandler implements CommandHandler<SubmitAppealCommand> 
         Instant deadline = startedAt != null
                 ? startedAt.plus(Duration.ofMinutes(reconciliationParameters.windowMinutes()))
                 : null;
-        record.submitAppeal(command.reason(), command.evidenceReference(), command.actor(), deadline, now);
+        record.submitAppeal(command.reason(), command.evidenceReference(), actor, deadline, now);
 
         List<AttendanceDomainEvent> events = List.copyOf(record.recordedEvents());
         record.clearDomainEvents();

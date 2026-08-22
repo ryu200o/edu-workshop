@@ -117,7 +117,7 @@ class JpaAttendanceWriteAdapterTest {
 
         AttendanceRecord finalized = newRecord(UUID.randomUUID());
         finalized.beginReconciliation(NOW, NOW);
-        finalized.finalizeRecord(TEACHER, NOW.plusSeconds(7200), NOW.minusSeconds(1));
+        finalized.finalizeRecord(new Actor(ActorId.of(UUID.randomUUID()), ActorRole.SYSTEM), NOW.plusSeconds(7200), NOW.minusSeconds(1));
         attendanceRecordRepository.save(finalized);
 
         List<AttendanceRecord> openRecords = attendanceRecordRepository.loadOpenByWorkshop(WORKSHOP_ID);
@@ -134,7 +134,7 @@ class JpaAttendanceWriteAdapterTest {
 
         AttendanceRecord finalized = newRecord(UUID.randomUUID());
         finalized.beginReconciliation(NOW, NOW);
-        finalized.finalizeRecord(TEACHER, NOW.plusSeconds(7200), NOW.minusSeconds(1));
+        finalized.finalizeRecord(new Actor(ActorId.of(UUID.randomUUID()), ActorRole.SYSTEM), NOW.plusSeconds(7200), NOW.minusSeconds(1));
         attendanceRecordRepository.save(finalized);
 
         List<AttendanceRecord> nonFinalized = attendanceRecordRepository.loadNonFinalizedByWorkshop(WORKSHOP_ID);

@@ -28,8 +28,8 @@ import io.github.ryu200o.eduworkshop.shared.security.AuthenticatedPrincipal;
  * failure so clients can retry safely.
  */
 @Aspect
-@Component
 @Order(1)
+@Component
 class IdempotentAspect {
 
     private static final Logger log = LoggerFactory.getLogger(IdempotentAspect.class);

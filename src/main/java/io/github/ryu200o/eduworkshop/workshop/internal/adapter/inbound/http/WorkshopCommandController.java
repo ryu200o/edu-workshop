@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.workshop.internal.adapter.inbound.http;
 
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
+import io.github.ryu200o.eduworkshop.shared.security.api.policy.CanManageWorkshops;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.AdjustWorkshopCapacityCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.CancelWorkshopCommand;
 import io.github.ryu200o.eduworkshop.workshop.internal.application.port.inbound.command.ChangeWorkshopRoomCommand;
@@ -36,6 +37,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/workshops")
+@CanManageWorkshops
 class WorkshopCommandController {
 
     private final CommandBus commandBus;

@@ -3,6 +3,7 @@ package io.github.ryu200o.eduworkshop.facilityops.internal.adapter.inbound.http;
 import io.github.ryu200o.eduworkshop.facilityops.internal.application.port.inbound.query.PreviewRoomMaintenanceImpactQuery;
 import io.github.ryu200o.eduworkshop.facilityops.internal.application.port.inbound.query.view.RoomMaintenanceImpactView;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.QueryBus;
+import io.github.ryu200o.eduworkshop.shared.security.api.policy.CanManageRooms;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +22,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/facility-ops")
+@CanManageRooms
 class FacilityOpsQueryController {
 
     private final QueryBus queryBus;

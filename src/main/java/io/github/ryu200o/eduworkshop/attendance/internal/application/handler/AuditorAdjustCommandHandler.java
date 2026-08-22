@@ -1,10 +1,11 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceNotFoundException;
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.AuditorAdjustCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceRecordRepository;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.Actor;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorId;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.ActorRole;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecord;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.AttendanceRecordId;
@@ -46,16 +47,13 @@ class AuditorAdjustCommandHandler implements CommandHandler<AuditorAdjustCommand
     public void handle(AuditorAdjustCommand command) {
         Instant now = Instant.now(clock);
         AttendanceRecordId recordId = AttendanceRecordId.of(command.recordId());
-
-        if (command.actor().role() != ActorRole.AUDITOR) {
-            throw new AttendanceRoleViolationException(command.actor().role().name(), "adjust attendance");
-        }
+        Actor actor = new Actor(new ActorId(command.actorId()), ActorRole.AUDITOR);
 
         AttendanceRecord record = attendanceRecordRepository.loadById(recordId)
                 .orElseThrow(() -> new AttendanceNotFoundException(command.recordId()));
 
         record.auditorAdjust(command.newStatus(), command.reason(), command.evidenceReference(),
-                command.actor(), now);
+                actor, now);
 
         List<AttendanceDomainEvent> events = List.copyOf(record.recordedEvents());
         record.clearDomainEvents();

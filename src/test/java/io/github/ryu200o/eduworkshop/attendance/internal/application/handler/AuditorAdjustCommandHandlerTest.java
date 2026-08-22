@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceNotFoundException;
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.AuditorAdjustCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceRecordRepository;
@@ -48,6 +47,7 @@ class AuditorAdjustCommandHandlerTest {
     private static final UUID RECORD_ID = UUID.randomUUID();
     private static final UUID STUDENT_ID = UUID.randomUUID();
     private static final Actor AUDITOR = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.AUDITOR);
+    private static final UUID AUDITOR_ID = AUDITOR.id().value();
     private static final Actor STUDENT = new Actor(ActorId.of(STUDENT_ID), ActorRole.STUDENT);
 
     private Clock clock;
@@ -63,7 +63,7 @@ class AuditorAdjustCommandHandlerTest {
 
     private AttendanceRecord reconcilingRecord() {
         AttendanceRecord record = AttendanceRecord.create(AttendanceRecordId.of(RECORD_ID),
-                StudentId.of(STUDENT_ID), UUID.randomUUID(), AttendanceResult.PRESENT, null, AUDITOR,
+                StudentId.of(STUDENT_ID), UUID.randomUUID(), AttendanceResult.PRESENT, null, STUDENT,
                 NOW.minusSeconds(7200));
         record.clearDomainEvents();
         record.beginReconciliation(NOW.minusSeconds(3600), NOW.minusSeconds(3600));
@@ -78,7 +78,7 @@ class AuditorAdjustCommandHandlerTest {
 
         handler().handle(
                 new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "student marked absent per CCTV",
-                        "evidence://cam-2", AUDITOR));
+                        "evidence://cam-2", AUDITOR_ID));
 
         assertThat(record.state()).isEqualTo(AttendanceState.RECONCILING);
         assertThat(record.currentResult()).isEqualTo(AttendanceResult.ABSENT);
@@ -93,7 +93,7 @@ class AuditorAdjustCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> handler().handle(
-                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "  ", null, AUDITOR)))
+                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "  ", null, AUDITOR_ID)))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(attendanceRecordRepository, never()).save(any());
@@ -105,7 +105,7 @@ class AuditorAdjustCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> handler().handle(
-                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "reason", null, AUDITOR)))
+                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "reason", null, AUDITOR_ID)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("evidenceReference");
 
@@ -117,16 +117,23 @@ class AuditorAdjustCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(
-                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "reason", null, AUDITOR)))
+                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "reason", null, AUDITOR_ID)))
                 .isInstanceOf(AttendanceNotFoundException.class);
     }
 
     @Test
-    void rejectsNonAuditorActor() {
-        assertThatThrownBy(() -> handler().handle(
-                new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "reason", null, STUDENT)))
-                .isInstanceOf(AttendanceRoleViolationException.class);
+    void handlerAssignsAuditorRole_regardlessOfPrincipal() {
+        AttendanceRecord record = reconcilingRecord();
+        when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
+        when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        verify(attendanceRecordRepository, never()).loadById(any());
+        // A non-AUDITOR principal (e.g. a STUDENT who passed @CanAuditAttendance via ADMIN) is
+        // assigned the contextual AUDITOR role by the handler — the role is a use-case concern, not
+        // the caller's identity (ADR 0023).
+        handler().handle(new AuditorAdjustCommand(RECORD_ID, AttendanceResult.ABSENT, "reason", "evidence://cam-9",
+                STUDENT.id().value()));
+
+        assertThat(record.entries()).hasSize(2);
+        assertThat(record.entries().get(1).actor().role()).isEqualTo(ActorRole.AUDITOR);
     }
 }

@@ -15,7 +15,9 @@ import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.Atte
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AttendanceRecordFinalized;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.event.AuditorAdjustedAttendance;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceRecordFinalizedException;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceRecordOwnershipViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.AttendanceStateException;
+import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.InvalidActorRoleException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowExceededException;
 import io.github.ryu200o.eduworkshop.attendance.internal.domain.model.exception.ReconciliationWindowNotElapsedException;
 
@@ -35,7 +37,7 @@ class AttendanceRecordTest {
     private static final UUID WORKSHOP_ID = UUID.randomUUID();
     private static final StudentId STUDENT = StudentId.of(UUID.randomUUID());
     private static final Actor TRAINER = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER);
-    private static final Actor STUDENT_ACTOR = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.STUDENT);
+    private static final Actor STUDENT_ACTOR = new Actor(ActorId.of(STUDENT.value()), ActorRole.STUDENT);
     private static final Actor AUDITOR = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.AUDITOR);
     private static final Actor SYSTEM = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.SYSTEM);
     private static final Duration WINDOW = Duration.ofHours(24);
@@ -155,6 +157,14 @@ class AttendanceRecordTest {
                 .isInstanceOf(AttendanceStateException.class);
     }
 
+    @Test
+    void markAttendance_byNonTrainerActor_isRejected() {
+        AttendanceRecord record = openedRecord();
+
+        assertThatThrownBy(() -> record.markAttendance(AttendanceResult.PRESENT, null, STUDENT_ACTOR, NOW))
+                .isInstanceOf(InvalidActorRoleException.class);
+    }
+
     // ----------------------------------------------------------------
     // submitAppeal (RECONCILING only — never mutates currentResult)
     // ----------------------------------------------------------------
@@ -187,6 +197,25 @@ class AttendanceRecordTest {
         assertThatThrownBy(() -> record.submitAppeal("appeal", null, STUDENT_ACTOR,
                 NOW.plus(WINDOW), NOW))
                 .isInstanceOf(AttendanceStateException.class);
+    }
+
+    @Test
+    void submitAppeal_byNonStudentActor_isRejected() {
+        AttendanceRecord record = reconcilingRecord(NOW, NOW);
+
+        assertThatThrownBy(() -> record.submitAppeal("appeal", "evidence://img-1", TRAINER,
+                NOW.plus(WINDOW), NOW))
+                .isInstanceOf(InvalidActorRoleException.class);
+    }
+
+    @Test
+    void submitAppeal_byDifferentStudent_isRejectedAsOwnershipViolation() {
+        AttendanceRecord record = reconcilingRecord(NOW, NOW);
+        Actor otherStudent = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.STUDENT);
+
+        assertThatThrownBy(() -> record.submitAppeal("appeal", "evidence://img-1", otherStudent,
+                NOW.plus(WINDOW), NOW))
+                .isInstanceOf(AttendanceRecordOwnershipViolationException.class);
     }
 
     @Test
@@ -243,6 +272,15 @@ class AttendanceRecordTest {
         assertThat(record.recordedEvents())
                 .hasSize(2)
                 .hasExactlyElementsOfTypes(AttendanceMarked.class, AuditorAdjustedAttendance.class);
+    }
+
+    @Test
+    void auditorAdjust_byNonAuditorActor_isRejected() {
+        AttendanceRecord record = reconcilingRecord(NOW, NOW);
+
+        assertThatThrownBy(() -> record.auditorAdjust(AttendanceResult.PRESENT, "reason",
+                "evidence://img-1", TRAINER, NOW))
+                .isInstanceOf(InvalidActorRoleException.class);
     }
 
     @Test
@@ -352,6 +390,15 @@ class AttendanceRecordTest {
 
         assertThatThrownBy(() -> record.finalizeRecord(SYSTEM, NOW, NOW))
                 .isInstanceOf(AttendanceStateException.class);
+    }
+
+    @Test
+    void finalizeRecord_byNonSystemOrAuditorActor_isRejected() {
+        AttendanceRecord record = reconcilingRecord(NOW, NOW);
+        Instant deadline = NOW.plus(WINDOW);
+
+        assertThatThrownBy(() -> record.finalizeRecord(TRAINER, deadline, deadline))
+                .isInstanceOf(InvalidActorRoleException.class);
     }
 
     // ----------------------------------------------------------------

@@ -1,7 +1,6 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.application.handler;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceNotFoundException;
-import io.github.ryu200o.eduworkshop.attendance.internal.application.exception.AttendanceRoleViolationException;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.SubmitAppealCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.parameter.AttendanceReconciliationParameters;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.outbound.AttendanceDomainEventPublisher;
@@ -84,7 +83,7 @@ class SubmitAppealCommandHandlerTest {
         when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         handler().handle(
-                new SubmitAppealCommand(RECORD_ID, "I was actually present", "evidence://img-1", STUDENT));
+                new SubmitAppealCommand(RECORD_ID, "I was actually present", "evidence://img-1", STUDENT_ID));
 
         assertThat(record.state()).isEqualTo(AttendanceState.RECONCILING);
         assertThat(record.currentResult()).isEqualTo(AttendanceResult.PRESENT);
@@ -102,7 +101,7 @@ class SubmitAppealCommandHandlerTest {
         clock = Clock.fixed(late, ZoneOffset.UTC);
 
         assertThatThrownBy(() -> handler().handle(
-                new SubmitAppealCommand(RECORD_ID, "late appeal", "evidence://img-2", STUDENT)))
+                new SubmitAppealCommand(RECORD_ID, "late appeal", "evidence://img-2", STUDENT_ID)))
                 .isInstanceOf(ReconciliationWindowExceededException.class);
 
         verify(attendanceRecordRepository, never()).save(any());
@@ -114,7 +113,7 @@ class SubmitAppealCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> handler().handle(
-                new SubmitAppealCommand(RECORD_ID, "reason without evidence", null, STUDENT)))
+                new SubmitAppealCommand(RECORD_ID, "reason without evidence", null, STUDENT_ID)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("evidenceReference");
 
@@ -133,7 +132,7 @@ class SubmitAppealCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> handler().handle(
-                new SubmitAppealCommand(RECORD_ID, "reason", "evidence://img-3", STUDENT)))
+                new SubmitAppealCommand(RECORD_ID, "reason", "evidence://img-3", STUDENT_ID)))
                 .isInstanceOf(MissingReconciliationAnchorException.class);
 
         verify(attendanceRecordRepository, never()).save(any());
@@ -144,18 +143,22 @@ class SubmitAppealCommandHandlerTest {
         when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler().handle(
-                new SubmitAppealCommand(RECORD_ID, "reason", null, STUDENT)))
+                new SubmitAppealCommand(RECORD_ID, "reason", null, STUDENT_ID)))
                 .isInstanceOf(AttendanceNotFoundException.class);
     }
 
     @Test
-    void rejectsNonStudentActor() {
-        Actor trainer = new Actor(ActorId.of(UUID.randomUUID()), ActorRole.TRAINER);
+    void handlerAssignsStudentRole_forAppeal() {
+        AttendanceRecord record = reconcilingRecord(NOW.minusSeconds(3600));
+        when(attendanceRecordRepository.loadById(any())).thenReturn(Optional.of(record));
+        when(attendanceRecordRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> handler().handle(
-                new SubmitAppealCommand(RECORD_ID, "reason", null, trainer)))
-                .isInstanceOf(AttendanceRoleViolationException.class);
+        // The handler assigns the contextual STUDENT role to the appealing actor — the role is a
+        // use-case concern, not the caller's identity (ADR 0023). Ownership (actor id == record
+        // student id) is still enforced by the aggregate; here the owner submits.
+        handler().handle(new SubmitAppealCommand(RECORD_ID, "reason", "evidence://img-9", STUDENT_ID));
 
-        verify(attendanceRecordRepository, never()).loadById(any());
+        assertThat(record.entries()).hasSize(2);
+        assertThat(record.entries().get(1).actor().role()).isEqualTo(ActorRole.STUDENT);
     }
 }
