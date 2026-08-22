@@ -63,7 +63,7 @@ class PublishWorkshopConcurrencyIntegrationTest {
     void setUp() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
-        operatorBearer = iam.registerAndLogin().accessToken();
+        operatorBearer = iam.registerAndLoginWithRoles("PLANNER").accessToken();
         facilityManagerBearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
     }
 

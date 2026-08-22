@@ -74,7 +74,7 @@ class AttendanceCommandControllerE2ETest {
     void cleanSchema() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
-        operatorBearer = iam.registerAndLogin().accessToken();
+        operatorBearer = iam.registerAndLoginWithRoles("PLANNER").accessToken();
         facilityManagerBearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
         jdbcTemplate.update("DELETE FROM attendance_entries");
         jdbcTemplate.update("DELETE FROM attendance_records");

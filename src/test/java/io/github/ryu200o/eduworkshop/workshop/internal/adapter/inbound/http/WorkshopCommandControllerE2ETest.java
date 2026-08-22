@@ -57,13 +57,15 @@ class WorkshopCommandControllerE2ETest {
     private IamE2eTestSupport iam;
     private String operatorBearer;
     private String facilityManagerBearer;
+    private String userBearer;
 
     @BeforeEach
     void setUp() throws Exception {
         iam = new IamE2eTestSupport(port, client, objectMapper, jdbcTemplate);
         iam.seedAdmin(jdbcTemplate, passwordEncoder);
-        operatorBearer = iam.registerAndLogin().accessToken();
+        operatorBearer = iam.registerAndLoginWithRoles("PLANNER").accessToken();
         facilityManagerBearer = iam.registerAndLoginWithRoles("FACILITY_MANAGER").accessToken();
+        userBearer = iam.registerAndLogin().accessToken();
     }
 
     private HttpResponse<String> post(String path, String body, Map<String, String> headers) throws Exception {
@@ -706,5 +708,18 @@ class WorkshopCommandControllerE2ETest {
 
         assertThat(response.statusCode()).as("updateLatePolicy not found: %s", response.body())
                 .isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
+
+    @Test
+    void user_cannotCreateWorkshop_returns403() throws Exception {
+        HttpResponse<String> response = post("/api/v1/workshops",
+                """
+                {"title": "WS", "description": "E2E workshop", "startTime": "%s", "endTime": "%s", "capacity": 30}
+                """.formatted(START, END),
+                Map.of("Authorization", "Bearer " + userBearer));
+
+        assertThat(response.statusCode()).as("create workshop as USER: %s", response.body())
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
+        assertThat(response.body()).contains("\"code\":\"ACCESS_DENIED\"");
     }
 }
