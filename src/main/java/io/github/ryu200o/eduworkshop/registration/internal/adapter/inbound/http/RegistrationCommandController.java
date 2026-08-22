@@ -5,6 +5,7 @@ import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbo
 import io.github.ryu200o.eduworkshop.registration.internal.application.port.inbound.command.VerifyRegistrationCommand;
 import io.github.ryu200o.eduworkshop.shared.application.cqs.api.CommandBus;
 import io.github.ryu200o.eduworkshop.shared.security.AuthenticatedPrincipal;
+import io.github.ryu200o.eduworkshop.shared.security.api.policy.CanVerifyRegistrations;
 import io.github.ryu200o.eduworkshop.shared.infrastructure.idempotency.api.Idempotent;
 
 import org.springframework.http.ResponseEntity;
@@ -29,8 +30,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/registrations")
 class RegistrationCommandController {
-
-    private static final String VERIFIER_ROLE = "VERIFIER";
 
     private final CommandBus commandBus;
     private final RegistrationQrResolver qrResolver;
@@ -58,14 +57,14 @@ class RegistrationCommandController {
         return ResponseEntity.noContent().build();
     }
 
+    @CanVerifyRegistrations
     @PostMapping("/verify")
     ResponseEntity<Void> verify(@AuthenticationPrincipal AuthenticatedPrincipal principal,
                                 @RequestBody VerifyRegistrationRequest request) {
         // Thin QR seam (Epic 3C, Slice A — fixture): the qrReference is opaque input resolved here to
         // a registrationId; the handler never sees the QR itself. Real resolver → Slice B (OQ-3C-6).
         UUID registrationId = qrResolver.resolveRegistrationId(request.qrReference());
-        String role = principal.hasRole(VERIFIER_ROLE) ? VERIFIER_ROLE : "NONE";
-        var command = new VerifyRegistrationCommand(registrationId, principal.userId(), role);
+        var command = new VerifyRegistrationCommand(registrationId, principal.userId());
         commandBus.execute(command);
         return ResponseEntity.noContent().build();
     }

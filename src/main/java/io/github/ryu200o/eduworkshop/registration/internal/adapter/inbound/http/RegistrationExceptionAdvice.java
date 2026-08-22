@@ -2,7 +2,6 @@ package io.github.ryu200o.eduworkshop.registration.internal.adapter.inbound.http
 
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.DuplicateRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationNotOwnedByUserException;
-import io.github.ryu200o.eduworkshop.registration.internal.application.exception.RegistrationRoleViolationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopCapacityExceededException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotOpenForRegistrationException;
 import io.github.ryu200o.eduworkshop.registration.internal.application.exception.WorkshopNotVerifiableException;
@@ -62,12 +61,6 @@ class RegistrationExceptionAdvice {
     @ExceptionHandler(RegistrationNotOwnedByUserException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     ProblemDetail handleNotOwned(RegistrationNotOwnedByUserException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
-    }
-
-    @ExceptionHandler(RegistrationRoleViolationException.class)
-    @ResponseStatus(HttpStatus.FORBIDDEN)
-    ProblemDetail handleRoleViolation(RegistrationRoleViolationException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
