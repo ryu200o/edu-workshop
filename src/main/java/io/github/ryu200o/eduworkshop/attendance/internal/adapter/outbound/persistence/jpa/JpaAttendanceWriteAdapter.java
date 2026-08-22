@@ -112,6 +112,11 @@ class JpaAttendanceWriteAdapter implements AttendanceRecordRepository {
                 .toList();
     }
 
+    @Override
+    public List<UUID> getWorkshopIdsWithNonFinalizedRecords() {
+        return repository.findDistinctWorkshopIdByStateNot(AttendanceState.FINALIZED.name());
+    }
+
     // ====================== MAPPER ======================
 
     private static AttendanceRecordJpaEntity toEntity(AttendanceRecord record) {

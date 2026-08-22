@@ -1,6 +1,7 @@
 package io.github.ryu200o.eduworkshop.attendance.internal.adapter.inbound.http;
 
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.AuditorAdjustCommand;
+import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.FinalizeWorkshopRosterCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.MarkAttendanceCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.SelfCheckInCommand;
 import io.github.ryu200o.eduworkshop.attendance.internal.application.port.inbound.command.SubmitAppealCommand;
@@ -87,6 +88,18 @@ class AttendanceCommandController {
                                        @RequestBody AuditorAdjustRequest request) {
         var command = new AuditorAdjustCommand(recordId, request.newStatus(), request.reason(),
                 request.evidenceReference(), principal.userId());
+        commandBus.execute(command);
+        return ResponseEntity.noContent().build();
+    }
+
+    @CanAuditAttendance
+    @Idempotent
+    @PostMapping("/workshops/{workshopId}/attendance/finalize")
+    ResponseEntity<Void> finalizeRoster(@PathVariable UUID workshopId,
+                                        @AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        // Manual dual-trigger for roster finalization (ADR 0019 §4). The AUDITOR actor is assigned
+        // by the handler; the system scheduler uses the SYSTEM actor via the auto-finalize job.
+        var command = new FinalizeWorkshopRosterCommand(workshopId, principal.userId());
         commandBus.execute(command);
         return ResponseEntity.noContent().build();
     }
